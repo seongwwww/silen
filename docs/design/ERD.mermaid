@@ -47,6 +47,7 @@ erDiagram
         text display_name
         jsonb style_profile "기본 톤 프리셋"
         time diary_time "일기 생성 시각"
+        text timezone "하루 경계 기준(backend.md)"
         timestamptz created_at
     }
 
@@ -121,7 +122,7 @@ erDiagram
         uuid user_id FK
         text dimension "퇴근시간|걸음|외식빈도|요일기분"
         jsonb stat "mean/std/ma/seasonality"
-        text window "7d|28d|dow"
+        text window_spec "7d|28d|dow — window는 PostgreSQL 예약어"
         timestamptz updated_at
     }
 
