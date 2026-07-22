@@ -42,6 +42,7 @@
 - `.claude/rules/privacy.md` — 동의·삭제·RAG·민감 데이터
 - `.claude/rules/ai-evals.md` — 탐지/서술 분리·골든셋·프롬프트 회귀
 - `.claude/rules/testing.md` — 테스트 전략·커버리지 기준
+- `.claude/rules/git.md` — 커밋 단위·메시지 규약·브랜치·히스토리 프라이버시
 
 ## 표준 개발 루프 (기능 단위)
 
