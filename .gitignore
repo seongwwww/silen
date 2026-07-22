@@ -1,0 +1,49 @@
+# dependencies
+node_modules/
+.pnp/
+.pnp.js
+.yarn/
+
+# next.js
+.next/
+out/
+build/
+dist/
+
+# python worker
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+.qodo/
+
+# supabase / db
+supabase/.branches/
+supabase/.temp/
+*.dump
+
+# testing / coverage
+coverage/
+.nyc_output/
+eval-results/
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# logs
+*.log
+npm-debug.log*
+logs/

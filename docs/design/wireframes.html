@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>실은 — 화면 와이어프레임</title>
+<style>
+  :root{
+    --ink:#1c1c1e; --sub:#6b6b70; --line:#d9d9de; --soft:#f2f2f4;
+    --card:#ffffff; --bg:#e9e9ec; --accent:#3a3a3c; --hi:#eae3d6; --hiline:#cbb994;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.5; padding:32px 16px 80px}
+  header.top{max-width:1200px; margin:0 auto 8px}
+  header.top h1{font-size:26px; letter-spacing:-.5px}
+  header.top p{color:var(--sub); font-size:14px; margin-top:4px}
+  .legend{max-width:1200px; margin:16px auto 28px; font-size:12px; color:var(--sub);
+    display:flex; gap:16px; flex-wrap:wrap; border-top:1px solid var(--line); padding-top:14px}
+  .legend b{color:var(--ink)}
+  .grid{max-width:1200px; margin:0 auto; display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:34px 26px}
+  .frame{display:flex; flex-direction:column}
+  .phone{background:var(--card); border:1px solid var(--line); border-radius:26px;
+    overflow:hidden; box-shadow:0 6px 20px rgba(0,0,0,.06); display:flex; flex-direction:column; height:560px}
+  .status{display:flex; justify-content:space-between; align-items:center; padding:10px 16px 4px;
+    font-size:11px; color:var(--sub)}
+  .screen{flex:1; padding:8px 16px 0; overflow:hidden; display:flex; flex-direction:column}
+  .scr-title{font-size:17px; font-weight:600; margin:6px 0 2px; letter-spacing:-.3px}
+  .scr-sub{font-size:12px; color:var(--sub); margin-bottom:12px}
+  .card{background:var(--soft); border:1px solid var(--line); border-radius:14px; padding:12px 13px; margin-bottom:10px}
+  .card.hi{background:var(--hi); border-color:var(--hiline)}
+  .card h4{font-size:13px; font-weight:600; margin-bottom:5px}
+  .card p{font-size:12px; color:var(--sub)}
+  .muted{color:var(--sub)}
+  .chips{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px}
+  .chip{font-size:11px; border:1px solid var(--line); border-radius:20px; padding:4px 10px; background:#fff; color:var(--accent)}
+  .chip.on{background:var(--accent); color:#fff; border-color:var(--accent)}
+  .btn{background:var(--accent); color:#fff; text-align:center; font-size:13px; font-weight:600;
+    border-radius:12px; padding:11px; margin-top:auto}
+  .btn.ghost{background:#fff; color:var(--accent); border:1px solid var(--line)}
+  .row{display:flex; gap:8px}
+  .row>.btn{flex:1; margin-top:0}
+  .field{border:1px dashed var(--line); border-radius:12px; padding:14px 13px; font-size:13px; color:var(--sub); background:#fff}
+  .tabbar{display:flex; border-top:1px solid var(--line); padding:8px 0 10px}
+  .tabbar div{flex:1; text-align:center; font-size:10px; color:var(--sub)}
+  .tabbar div.act{color:var(--ink); font-weight:600}
+  .tabbar .ic{font-size:16px; display:block; margin-bottom:2px}
+  .big{font-size:15px; font-weight:600; letter-spacing:-.3px; margin-bottom:2px}
+  .note{margin-top:12px; font-size:12px; color:var(--sub)}
+  .note b{color:var(--ink); font-weight:600}
+  .tag{display:inline-block; font-size:10px; background:var(--accent); color:#fff; border-radius:5px; padding:1px 6px; margin-right:6px; vertical-align:middle}
+  .bars{display:flex; align-items:flex-end; gap:6px; height:64px; margin:6px 0}
+  .bars span{flex:1; background:var(--hiline); border-radius:3px 3px 0 0; opacity:.55}
+  .bars span.hot{opacity:1; background:var(--accent)}
+  .searchbar{border:1px solid var(--line); border-radius:12px; padding:10px 12px; font-size:12px; color:var(--sub); background:#fff; margin-bottom:10px}
+  .toggle{display:flex; justify-content:space-between; align-items:center; padding:11px 0; border-bottom:1px solid var(--line); font-size:13px}
+  .sw{width:38px; height:22px; border-radius:20px; background:var(--line); position:relative; flex:none}
+  .sw.on{background:var(--accent)}
+  .sw i{position:absolute; top:2px; width:18px; height:18px; border-radius:50%; background:#fff; transition:.2s}
+  .sw i{left:2px}
+  .sw.on i{left:18px}
+  .toggle small{display:block; color:var(--sub); font-size:11px; font-weight:400; margin-top:2px; max-width:200px}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>실은 — 화면 와이어프레임</h1>
+  <p>모바일 우선 저해상도 와이어프레임 · 핵심 7화면 (MVP)</p>
+</header>
+<div class="legend">
+  <span><b>강조 카드</b> = 차이 발견/aha 지점</span>
+  <span><b>점선 필드</b> = 입력 영역</span>
+  <span><b>회색 카드</b> = 콘텐츠·정보</span>
+  <span>각 화면 아래 <b>설계 노트</b>로 의도 표시</span>
+</div>
+
+<div class="grid">
+
+  <!-- 1. 오늘(홈) -->
+  <div class="frame">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>실은</span><span>●●●</span></div>
+      <div class="screen">
+        <div class="scr-title">오늘</div>
+        <div class="scr-sub">7월 22일 화요일</div>
+        <div class="card hi">
+          <h4>오늘의 다른 점</h4>
+          <p>평소보다 40분 일찍 퇴근했어요. 이번 주 처음이에요.</p>
+          <div class="chips"><span class="chip">맞아요</span><span class="chip">아니에요</span></div>
+        </div>
+        <div class="card">
+          <h4>오늘의 메모 · 2개</h4>
+          <p class="muted">점심 김밥 / 저녁에 그 노래 또 들음</p>
+        </div>
+        <div class="card">
+          <h4 class="muted">오늘 밤 9시</h4>
+          <p>메모를 하루 이야기로 묶어드릴게요.</p>
+        </div>
+        <div class="btn">+ 지금 남기기</div>
+      </div>
+      <div class="tabbar">
+        <div class="act"><span class="ic">◉</span>오늘</div>
+        <div><span class="ic">✎</span>일기</div>
+        <div><span class="ic">⌕</span>회고</div>
+        <div><span class="ic">☰</span>설정</div>
+      </div>
+    </div>
+    <div class="note"><b>홈 = 발견 우선.</b> 입력 요구가 아니라 오늘 찾아낸 "다른 점"을 맨 위에. 한 번 터치로 확인/기각(=라벨 학습).</div>
+  </div>
+
+  <!-- 2. 기록(5초) -->
+  <div class="frame">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>남기기</span><span>✕</span></div>
+      <div class="screen">
+        <div class="scr-title">뭐든 남겨요</div>
+        <div class="scr-sub">분류도 태그도 필요 없어요</div>
+        <div class="field" style="min-height:120px">저녁에 어제 그 노래 또 들음. 이상하게 계속 손이 감…</div>
+        <div class="chips">
+          <span class="chip">🙂 좋음</span><span class="chip on">😐 그냥</span><span class="chip">😔 별로</span>
+        </div>
+        <div class="row" style="margin:12px 0">
+          <div class="btn ghost">📷 사진</div>
+          <div class="btn ghost">🎙 음성</div>
+          <div class="btn ghost">📍 위치</div>
+        </div>
+        <div class="btn">남기기 (5초면 끝)</div>
+      </div>
+    </div>
+    <div class="note"><b>마찰 최소화.</b> 텍스트 기본, 감정은 선택 한 탭. 사진·음성·위치는 옵션. 저장 즉시 끝 — 후속 질문은 조건 충족 시에만.</div>
+  </div>
+
+  <!-- 3. 밤 일기 초안 + 톤 -->
+  <div class="frame">
+    <div class="phone">
+      <div class="status"><span>21:00</span><span>오늘의 일기</span><span>⋯</span></div>
+      <div class="screen">
+        <div class="scr-title">초안이 나왔어요</div>
+        <div class="scr-sub">7월 22일 · 메모 2개로 엮음</div>
+        <div class="card">
+          <p style="font-size:12.5px;color:var(--ink)">비슷한 하루였다. 점심은 늘 먹던 김밥. 그래도 저녁엔 어제 들었던 노래에 또 손이 갔다. 별건 아니지만, 요즘 이 곡이 마음에 남는 모양이다.</p>
+        </div>
+        <div class="big">톤 바꾸기</div>
+        <div class="chips">
+          <span class="chip on">담백</span><span class="chip">따뜻</span><span class="chip">짧게</span><span class="chip">유머</span>
+        </div>
+        <div class="field" style="margin-top:10px">더 짧고 건조하게 다시 써줘…</div>
+        <div class="row" style="margin-top:12px">
+          <div class="btn ghost">다시 만들기</div>
+          <div class="btn">이대로 확정</div>
+        </div>
+      </div>
+    </div>
+    <div class="note"><b>톤 3층.</b> ①기본 프리셋 자동 적용 → ②칩으로 즉시 조정 → ③자유 문장 주문. 사실은 고정, 문체만 변함. 안 건드리면 draft 보존.</div>
+  </div>
+
+  <!-- 4. 차이 후보 확인 -->
+  <div class="frame">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>오늘의 다른 점</span><span>?</span></div>
+      <div class="screen">
+        <div class="scr-title">이런 게 달랐어요</div>
+        <div class="scr-sub">평소와 비교해서 찾은 것들</div>
+        <div class="card hi">
+          <h4><span class="tag">퇴근</span>평소보다 일찍</h4>
+          <p>최근 2주 평균 19:20 → 오늘 18:40. 왜 찾았나: 이동평균 이탈.</p>
+          <div class="chips"><span class="chip">맞아요</span><span class="chip">그냥 우연</span></div>
+        </div>
+        <div class="card hi">
+          <h4><span class="tag">처음</span>새 노래 반복</h4>
+          <p>지난 기록에 없던 곡을 이틀째 언급. 왜: first-occurrence.</p>
+          <div class="chips"><span class="chip">맞아요</span><span class="chip">아니에요</span></div>
+        </div>
+        <div class="card">
+          <h4 class="muted">별거 아닌 성취</h4>
+          <p>미뤄둔 "은행 서류" 메모가 오늘 닫혔어요.</p>
+        </div>
+      </div>
+    </div>
+    <div class="note"><b>탐지=통계, 근거 노출.</b> 각 카드에 "왜 이걸 찾았는지" 방법을 표시. 확인/기각이 baseline·의미필터를 개인화(피드백 루프).</div>
+  </div>
+
+  <!-- 5. 7일 리포트 -->
+  <div class="frame">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>7일 리포트</span><span>↗</span></div>
+      <div class="screen">
+        <div class="scr-title">당신이 몰랐던<br>이번 주</div>
+        <div class="scr-sub">7일간의 첫 baseline 리포트</div>
+        <div class="bars"><span></span><span class="hot"></span><span></span><span></span><span class="hot"></span><span></span><span></span></div>
+        <div class="card hi">
+          <h4>패턴 하나</h4>
+          <p>친구를 만난 날엔 저녁 기분이 더 빨리 좋아졌어요.</p>
+        </div>
+        <div class="card">
+          <h4>이번 주의 나</h4>
+          <p>가장 많이 · 김밥 3회 / 처음 · 새 노래 / 성취 · 서류 마감</p>
+        </div>
+        <div class="card">
+          <p class="muted">7일간 이만큼 찾았어요. 다음 주엔 더 정확해져요 →</p>
+        </div>
+        <div class="btn">공유 카드 만들기</div>
+      </div>
+    </div>
+    <div class="note"><b>aha + 연결.</b> Day7는 끝이 아니라 시작 — "다음 주엔 더 정확". 시간 가로지른 패턴(몰랐던 나)이 하이라이트. 공유는 다음 화면.</div>
+  </div>
+
+  <!-- 6. 회고 검색/대화 -->
+  <div class="frame">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>회고</span><span>⌕</span></div>
+      <div class="screen">
+        <div class="scr-title">그거 뭐였지</div>
+        <div class="scr-sub">기록에게 물어보세요</div>
+        <div class="searchbar">🔎 작년 이맘때 내가 고민하던 거…</div>
+        <div class="card">
+          <p style="font-size:12.5px;color:var(--ink)">작년 7월엔 이직을 두고 고민했었어요. 3주간 관련 메모가 6개 있었고, 대부분 밤에 남겼네요.</p>
+          <p class="muted" style="margin-top:8px">— 관찰이에요. 단정은 아니고요.</p>
+        </div>
+        <div class="big" style="font-size:12px">근거</div>
+        <div class="card">
+          <p class="muted"><span class="tag">7.14</span>“연봉보다 사람인가” · <span class="tag">7.21</span>“그냥 다닐까”</p>
+        </div>
+        <div class="chips"><span class="chip">날짜</span><span class="chip">장소</span><span class="chip">사람</span><span class="chip on">밤</span></div>
+      </div>
+    </div>
+    <div class="note"><b>RAG + 근거 카드.</b> 실제 기록만 인용, 관찰형(단정 X). 벡터+키워드 하이브리드에 필터 재정렬. 회고형은 baseline 지으면 공짜로 딸려옴.</div>
+  </div>
+
+  <!-- 7. 동의/프라이버시 -->
+  <div class="frame">
+    <div class="phone">
+      <div class="status"><span>9:41</span><span>데이터 & 동의</span><span>←</span></div>
+      <div class="screen">
+        <div class="scr-title">무엇을 읽을지<br>당신이 정해요</div>
+        <div class="scr-sub">전부 기본 꺼짐 · 켜기 전엔 안 읽어요</div>
+        <div class="toggle">
+          <div>걸음<small>배터리 무해. "많이 걸은 날"을 차이로.</small></div>
+          <div class="sw on"><i></i></div>
+        </div>
+        <div class="toggle">
+          <div>방문 장소<small>파생 라벨만 저장(연속 위치 X). 확장 예정.</small></div>
+          <div class="sw"><i></i></div>
+        </div>
+        <div class="toggle">
+          <div>민감 기록 검색 제외<small>잠근 기억은 검색·일기·탐지에서 빠져요.</small></div>
+          <div class="sw on"><i></i></div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div class="btn ghost">내보내기</div>
+          <div class="btn ghost">전체 삭제</div>
+        </div>
+      </div>
+    </div>
+    <div class="note"><b>소스별 개별 토글.</b> 각 토글이 "무엇을 읽고/만들고/저장하는지" 설명. 파생 신호만 저장. 해제 시 파생 삭제, 삭제 시 원본+임베딩+색인 함께.</div>
+  </div>
+
+</div>
+</body>
+</html>

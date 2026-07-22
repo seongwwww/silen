@@ -1,0 +1,171 @@
+%% 실은 — 상세 ERD (기획서 섹션 10 기반)
+%% 원본(memories/assets) ↔ AI 생성물(differences/diaries) 분리로 근거 추적 가능
+erDiagram
+    USERS ||--o{ MEMORIES : "기록"
+    USERS ||--o{ ENTITIES : "소유"
+    USERS ||--o{ SIGNALS : "신호"
+    USERS ||--o{ BASELINES : "평소모델"
+    USERS ||--o{ DIFFERENCES : "차이"
+    USERS ||--o{ DIARIES : "일기"
+    USERS ||--o{ CONSENTS : "동의"
+    USERS ||--o{ WEEKLY_REPORTS : "리포트"
+
+    MEMORIES ||--o{ ASSETS : "첨부"
+    MEMORIES ||--o{ EMOTIONS : "감정"
+    MEMORIES ||--o{ MEMORY_ENTITIES : "언급"
+    ENTITIES ||--o{ MEMORY_ENTITIES : "등장"
+    ENTITIES ||--o{ RELATIONS : "출발"
+    ENTITIES ||--o{ RELATIONS : "도착"
+    MEMORIES ||--o{ RELATIONS : "근거"
+
+    SIGNALS }o--|| BASELINES : "집계"
+    BASELINES ||--o{ DIFFERENCES : "이탈판정"
+    MEMORIES ||--o{ DIFFERENCES : "근거메모"
+
+    DIARIES ||--o{ DIARY_SECTIONS : "구성"
+    MEMORIES ||--o{ DIARIES : "source_memory_ids"
+    DIFFERENCES ||--o{ DIARY_SECTIONS : "반영"
+
+    MEMORIES ||--o| EMBEDDINGS : "임베딩"
+    DIARIES ||--o| EMBEDDINGS : "임베딩"
+    ASSETS ||--o| EMBEDDINGS : "임베딩(OCR/STT)"
+
+    WEEKLY_REPORTS }o--o{ DIFFERENCES : "하이라이트"
+
+    USERS {
+        uuid id PK
+        text email
+        text display_name
+        jsonb style_profile "기본 톤 프리셋"
+        time diary_time "일기 생성 시각"
+        timestamptz created_at
+    }
+
+    MEMORIES {
+        uuid id PK
+        uuid user_id FK
+        timestamptz captured_at "기록한 시각"
+        timestamptz occurred_at "실제 일어난 시각(선택)"
+        text raw_text "원본 메모(불변)"
+        text source_type "manual|share|sensor|ocr|stt"
+        text memory_type "moment|thought|event"
+        jsonb metadata "위치라벨·출처앱 등"
+        bool is_locked "검색/일기/탐지 제외"
+        timestamptz deleted_at "soft delete"
+    }
+
+    ASSETS {
+        uuid id PK
+        uuid memory_id FK
+        text asset_type "photo|voice|link"
+        text file_url
+        text extracted_text "한국어 OCR"
+        text transcription "STT"
+        text mime_type
+    }
+
+    EMOTIONS {
+        uuid id PK
+        uuid memory_id FK
+        float valence "-1..+1"
+        text tags "가벼운 감정 태그(배열)"
+        float confidence
+        bool confirmed_by_user "유저 보정"
+    }
+
+    ENTITIES {
+        uuid id PK
+        uuid user_id FK
+        text entity_type "person|place|activity|thing"
+        text name
+        text normalized_name "보수적 병합 키"
+    }
+
+    MEMORY_ENTITIES {
+        uuid memory_id FK
+        uuid entity_id FK
+        text relation_type "met|visited|did"
+        float confidence
+        bool confirmed_by_user
+    }
+
+    RELATIONS {
+        uuid id PK
+        uuid source_entity_id FK
+        uuid target_entity_id FK
+        text relation_type
+        float confidence
+        uuid source_memory_id FK "근거 메모"
+    }
+
+    SIGNALS {
+        uuid id PK
+        uuid user_id FK
+        text signal_type "steps|sleep|screen|checkin"
+        float value
+        timestamptz observed_at
+        text source "sensor|derived"
+    }
+
+    BASELINES {
+        uuid id PK
+        uuid user_id FK
+        text dimension "퇴근시간|걸음|외식빈도|요일기분"
+        jsonb stat "mean/std/ma/seasonality"
+        text window "7d|28d|dow"
+        timestamptz updated_at
+    }
+
+    DIFFERENCES {
+        uuid id PK
+        uuid user_id FK
+        date date
+        text dimension
+        text description "탐지 근거(사람용 아님)"
+        text detection_method "zscore|first_occurrence|freq_shift|pattern"
+        float confidence
+        text status "candidate|confirmed|dismissed"
+        text category "오늘의다른점|성취|감정전환|패턴"
+    }
+
+    DIARIES {
+        uuid id PK
+        uuid user_id FK
+        date date
+        text status "draft|edited|confirmed"
+        jsonb style_profile "그날 적용 톤"
+        text generated_text "AI 초안(불변)"
+        text edited_text "유저 확정본"
+        uuid source_memory_ids "근거 메모 배열"
+    }
+
+    DIARY_SECTIONS {
+        uuid id PK
+        uuid diary_id FK
+        text section_type "오늘의한문장|본문|다른점|성취"
+        text content
+    }
+
+    EMBEDDINGS {
+        uuid id PK
+        text target_type "memory|diary|asset"
+        uuid target_id
+        vector vector "pgvector"
+        text model
+    }
+
+    CONSENTS {
+        uuid id PK
+        uuid user_id FK
+        text source "steps|location|music|..."
+        text scope "읽기/파생저장 범위"
+        timestamptz granted_at
+        timestamptz revoked_at "해제 시 파생 삭제"
+    }
+
+    WEEKLY_REPORTS {
+        uuid id PK
+        uuid user_id FK
+        text week "ISO week"
+        jsonb highlights "가장많이한것·처음한것·감정순간"
+    }
