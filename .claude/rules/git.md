@@ -28,11 +28,33 @@
 
 안티패턴: `WIP` · 하루치 몰아서 한 커밋 · `fix typo` 연발 · 무관한 파일 동반 스테이징.
 
-## 브랜치
+## 브랜치 전략
 
-- 기본 브랜치 `main`. 기능 작업은 worktree로 분리(ADR-0001).
-- 네이밍: `feat/<topic>` `fix/<topic>` `docs/<topic>` — 영문 kebab-case.
+**trunk-based.** 장기 브랜치를 두지 않는다. `main`은 항상 배포 가능한 상태를 유지한다. git-flow(develop·release 브랜치)는 이 규모에 과하므로 쓰지 않는다.
+
+### main 직접 커밋 허용 범위
+
+- **허용** — 문서·설정만: `docs/`, `.claude/`, `README.md`, `.gitignore`, ADR, 스펙.
+- **금지** — 앱·워커·마이그레이션 등 **모든 코드**. 반드시 브랜치를 거친다.
+- 경계가 애매하면 브랜치를 쓴다. 문서 한 줄 고치자고 worktree를 만드는 마찰은 없애되, 코드 리뷰 게이트는 우회할 수 없다.
+
+### 기능 브랜치
+
+- `main`에서 분기, worktree로 분리(ADR-0001, `/superpowers:using-git-worktrees`).
+- 네이밍: `feat/<topic>` `fix/<topic>` `docs/<topic>` `refactor/<topic>` — 영문 kebab-case.
+- **수명은 짧게(수일 이내).** 길어지면 쪼갠다. 오래된 브랜치는 `main`을 주기적으로 rebase해 따라잡는다.
+- 리뷰 게이트는 병합 **전에** 통과: `/code-review high` → Auth·삭제·RAG 변경 시 `/security-review` → `/simplify`(CLAUDE.md 표준 루프).
 - 종료는 `/superpowers:finishing-a-development-branch`.
+
+### 병합 방식
+
+- **`main` 위로 rebase → `merge --no-ff`.** 히스토리는 선형이되 기능 경계는 머지 커밋으로 남는다.
+- **squash merge 금지.** TDD 사이클마다 쌓은 작은 커밋이 기능당 1개로 뭉개지면, 위에서 정한 "detector와 프롬프트를 분리 커밋" 원칙의 이득이 사라진다. eval 회귀가 터졌을 때 `git bisect`가 "이 기능 어딘가"까지만 짚고 멈춘다. 분리해 두고 병합에서 되붙이는 것은 앞뒤가 맞지 않는다.
+- 병합 전 `main` 기준으로 테스트가 통과해야 한다(Definition of Done).
+
+### 릴리스
+
+- MVP 베타(W8) 전까지는 태그를 쓰지 않는다. 베타 시점에 semver 태그를 도입하고 이 절을 갱신한다.
 
 ## 금지
 
