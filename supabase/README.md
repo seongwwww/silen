@@ -9,6 +9,11 @@
 
 로컬 DB URL: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
 
+**`db reset` 뒤 auth 요청이 502를 내면** Kong↔GoTrue 라우팅이 컨테이너
+재시작으로 깨진 것이다. `npx supabase stop && npx supabase start`로 전체를
+다시 띄우면 복구된다. 통합 테스트가 `signInAnonymously`에서 502로 무더기
+실패하면 이 경우다.
+
 ## down 스크립트 규약
 
 Supabase CLI에는 down 마이그레이션 개념이 없다. `database.md`가 요구하는
