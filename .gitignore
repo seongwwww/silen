@@ -47,3 +47,6 @@ Thumbs.db
 *.log
 npm-debug.log*
 logs/
+
+# 세션 작업 메모 (버전 관리 대상 아님)
+memo.md

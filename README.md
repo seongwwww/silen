@@ -52,7 +52,7 @@ pip install numpy scipy pandas
 4. `/superpowers:requesting-code-review` → `/code-review high` → `/security-review`(Auth·삭제·RAG 변경 시) → `/simplify`
 5. `/superpowers:receiving-code-review` — 피드백을 Accept/Reject/Defer/Experiment로 분류
 6. 중요 결정은 `docs/decisions/ADR-xxxx.md`
-7. `finishing-a-development-branch` — merge/PR/keep/discard
+7. `/superpowers:finishing-a-development-branch` — merge/PR/keep/discard
 
 버그: `/superpowers:systematic-debugging` (재현→증거→단일 가설→최소 수정→회귀 테스트→전체 검사).
 

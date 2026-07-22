@@ -51,7 +51,7 @@
 4. 리뷰: `/superpowers:requesting-code-review` → `/code-review high` → `/security-review`(Auth·삭제·RAG 변경 시) → `/simplify`
 5. 피드백: `/superpowers:receiving-code-review` 로 각 항목 Accept/Reject/Defer/Experiment 분류
 6. 중요 결정은 `docs/decisions/ADR-xxxx.md` 로 남긴다
-7. 종료: `finishing-a-development-branch` 로 merge/PR/keep/discard
+7. 종료: `/superpowers:finishing-a-development-branch` 로 merge/PR/keep/discard
 
 ## 안전 가드 (Claude 자동 실행 금지)
 
