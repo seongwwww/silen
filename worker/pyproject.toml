@@ -1,0 +1,23 @@
+[project]
+name = "silen-worker"
+version = "0.0.0"
+description = "실은 차이 탐지·서술 워커"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "scipy",
+    "pandas",
+    # Windows에는 시스템 tz 데이터베이스가 없다. 이것이 없으면
+    # ZoneInfo("Asia/Seoul")이 ZoneInfoNotFoundError로 죽는다.
+    "tzdata",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100

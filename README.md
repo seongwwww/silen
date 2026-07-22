@@ -8,13 +8,23 @@
 
 ```
 CLAUDE.md               # 항상 적용되는 개발 원칙 (200줄 이하)
-.claude/rules/          # 도메인별 규칙 (프론트/백엔드/DB/프라이버시/AI-eval/테스트)
+AGENTS.md               # Next.js 16 버전 고지 (코드 작성 전 필독)
+.claude/rules/          # 도메인별 규칙 (프론트/백엔드/DB/프라이버시/AI-eval/테스트/git)
+app/                    # 경계 계층 — Route Handler·페이지
+lib/time/               # "하루" 경계 단일 유틸
+lib/services/           # 서비스 계층 (프레임워크 타입을 모름)
+lib/repositories/       # 저장소 계층 (쿼리·user 스코프 강제)
+components/ui|common/   # 공통 컴포넌트 (frontend.md)
+worker/                 # Python 워커 (차이 탐지·AI 잡)
+fixtures/               # 두 자산이 공유하는 골든 케이스
+supabase/migrations/    # 마이그레이션 (down/ 에 보상 스크립트)
 docs/
   planning/서비스_기획서.md   # 제품 기획 (단일 출처)
   design/ERD.mermaid         # 데이터 모델
   design/wireframes.html     # 화면 와이어프레임
   design/prompts-draft.md    # 탐지→서술 프롬프트 초안
   decisions/                 # ADR (중요 결정 기록)
+  superpowers/               # 스펙·구현 계획
 ```
 
 ## 개발 환경 세팅
@@ -30,19 +40,33 @@ docs/
 - **frontend-design** — 타이포·색·레이아웃·반응형·접근성 점검(화면 구현/리뷰 시).
 - ECC는 전체 설치하지 않고 PostgreSQL·Python·eval·security 부분만 참고. Ralph는 완료 조건이 기계적으로 확인되는 좁은 작업에만 제한적으로.
 
-### 2. 앱 스캐폴딩 (아직 미생성)
+### 2. 로컬 개발
 
-```
-# 프론트/API
-npx create-next-app@latest . --typescript --tailwind --app --eslint
-# shadcn/ui
-npx shadcn@latest init
-# Python 워커 (별도 디렉터리, 예: worker/)
-python3 -m venv .venv && source .venv/bin/activate
-pip install numpy scipy pandas
+전제: Node 20+, **Python 3.11+**, Docker Desktop 실행.
+
+```powershell
+# 앱 (저장소 루트)
+npm install
+
+# Python 워커 — `python`이 다른 버전을 가리킬 수 있으므로 py launcher 사용
+py -3.12 -m venv worker\.venv
+worker\.venv\Scripts\python.exe -m pip install -e "worker[dev]"
+
+# 로컬 DB (Supabase 스택 — Docker 필요)
+npx supabase start
+npx supabase db reset
 ```
 
-> DB(Supabase/Postgres+pgvector+PostGIS), 큐, 워커 배선은 ADR-0002(설계 리뷰 게이트) 이후 착수.
+### 3. 검사
+
+```powershell
+npm run check              # lint + typecheck + unit
+npm run test:integration   # 통합 (Supabase 스택 기동 필요)
+worker\.venv\Scripts\python.exe -m ruff check worker
+worker\.venv\Scripts\python.exe -m pytest worker
+```
+
+> 큐·워커 배선과 ADR-0002 실제 스키마는 후속 작업. shadcn/ui는 첫 화면 작업 시 도입.
 
 ## 표준 개발 루프 (기능 단위)
 

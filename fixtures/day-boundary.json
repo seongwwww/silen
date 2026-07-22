@@ -1,0 +1,47 @@
+{
+  "description": "사용자 로컬 자정 기준 '하루' 경계. Next.js(lib/time)와 Python 워커가 동일한 결과를 내야 한다.",
+  "cases": [
+    {
+      "name": "seoul-one-second-before-local-midnight",
+      "timezone": "Asia/Seoul",
+      "instant": "2026-03-01T14:59:59Z",
+      "expectedLocalDate": "2026-03-01"
+    },
+    {
+      "name": "seoul-exactly-local-midnight",
+      "timezone": "Asia/Seoul",
+      "instant": "2026-03-01T15:00:00Z",
+      "expectedLocalDate": "2026-03-02"
+    },
+    {
+      "name": "utc-noon-stays-same-day",
+      "timezone": "UTC",
+      "instant": "2026-03-01T12:00:00Z",
+      "expectedLocalDate": "2026-03-01"
+    },
+    {
+      "name": "new-york-before-dst-start-boundary",
+      "timezone": "America/New_York",
+      "instant": "2026-03-08T04:59:59Z",
+      "expectedLocalDate": "2026-03-07"
+    },
+    {
+      "name": "new-york-at-dst-start-boundary",
+      "timezone": "America/New_York",
+      "instant": "2026-03-08T05:00:00Z",
+      "expectedLocalDate": "2026-03-08"
+    },
+    {
+      "name": "new-york-day-after-dst-shifts-utc-offset",
+      "timezone": "America/New_York",
+      "instant": "2026-03-09T03:59:59Z",
+      "expectedLocalDate": "2026-03-08"
+    },
+    {
+      "name": "new-york-day-after-dst-crosses-at-0400z",
+      "timezone": "America/New_York",
+      "instant": "2026-03-09T04:00:00Z",
+      "expectedLocalDate": "2026-03-09"
+    }
+  ]
+}

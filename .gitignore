@@ -9,6 +9,7 @@ node_modules/
 out/
 build/
 dist/
+*.tsbuildinfo
 
 # python worker
 __pycache__/
@@ -18,6 +19,7 @@ venv/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+*.egg-info/
 
 # env & secrets
 .env
