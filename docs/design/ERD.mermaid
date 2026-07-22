@@ -1,5 +1,6 @@
 %% 실은 — 상세 ERD (기획서 섹션 10 기반)
 %% 원본(memories/assets) ↔ AI 생성물(differences/diaries) 분리로 근거 추적 가능
+%% ADR-0002 반영: 근거 조인 테이블 · 타입별 임베딩 · deletion ledger
 erDiagram
     USERS ||--o{ MEMORIES : "기록"
     USERS ||--o{ ENTITIES : "소유"
@@ -9,6 +10,7 @@ erDiagram
     USERS ||--o{ DIARIES : "일기"
     USERS ||--o{ CONSENTS : "동의"
     USERS ||--o{ WEEKLY_REPORTS : "리포트"
+    USERS ||..o{ DELETIONS : "삭제요청(FK 없음)"
 
     MEMORIES ||--o{ ASSETS : "첨부"
     MEMORIES ||--o{ EMOTIONS : "감정"
@@ -20,17 +22,24 @@ erDiagram
 
     SIGNALS }o--|| BASELINES : "집계"
     BASELINES ||--o{ DIFFERENCES : "이탈판정"
-    MEMORIES ||--o{ DIFFERENCES : "근거메모"
+
+    %% ADR-0002 ①② 근거·출처는 배열이 아니라 조인 테이블 (다대다·삭제 역추적)
+    DIFFERENCES ||--o{ DIFFERENCE_EVIDENCE : "근거"
+    MEMORIES ||--o{ DIFFERENCE_EVIDENCE : "근거로쓰임"
+    DIARIES ||--o{ DIARY_SOURCES : "출처"
+    MEMORIES ||--o{ DIARY_SOURCES : "출처로쓰임"
 
     DIARIES ||--o{ DIARY_SECTIONS : "구성"
-    MEMORIES ||--o{ DIARIES : "source_memory_ids"
     DIFFERENCES ||--o{ DIARY_SECTIONS : "반영"
 
-    MEMORIES ||--o| EMBEDDINGS : "임베딩"
-    DIARIES ||--o| EMBEDDINGS : "임베딩"
-    ASSETS ||--o| EMBEDDINGS : "임베딩(OCR/STT)"
+    %% ADR-0002 ③ 폴리모픽 대신 타입별 분리 (FK CASCADE로 고아 벡터 차단)
+    MEMORIES ||--o| MEMORY_EMBEDDINGS : "임베딩"
+    ASSETS ||--o| ASSET_EMBEDDINGS : "임베딩(OCR/STT)"
+    DIARIES ||--o| DIARY_EMBEDDINGS : "임베딩"
 
-    WEEKLY_REPORTS }o--o{ DIFFERENCES : "하이라이트"
+    %% ADR-0002 highlights 스냅샷 대신 참조 (삭제 방어선 안으로)
+    WEEKLY_REPORTS ||--o{ WEEKLY_REPORT_HIGHLIGHTS : "하이라이트"
+    DIFFERENCES ||--o{ WEEKLY_REPORT_HIGHLIGHTS : "선정됨"
 
     USERS {
         uuid id PK
@@ -126,6 +135,13 @@ erDiagram
         float confidence
         text status "candidate|confirmed|dismissed"
         text category "오늘의다른점|성취|감정전환|패턴"
+        text evidence_state "intact|stale — 근거 훼손 시 stale, description 파기"
+        timestamptz staled_at
+    }
+
+    DIFFERENCE_EVIDENCE {
+        uuid difference_id FK "PK, ON DELETE CASCADE"
+        uuid memory_id FK "PK, ON DELETE CASCADE"
     }
 
     DIARIES {
@@ -136,7 +152,11 @@ erDiagram
         jsonb style_profile "그날 적용 톤"
         text generated_text "AI 초안(불변)"
         text edited_text "유저 확정본"
-        uuid source_memory_ids "근거 메모 배열"
+    }
+
+    DIARY_SOURCES {
+        uuid diary_id FK "PK, ON DELETE CASCADE"
+        uuid memory_id FK "PK, ON DELETE CASCADE"
     }
 
     DIARY_SECTIONS {
@@ -146,12 +166,31 @@ erDiagram
         text content
     }
 
-    EMBEDDINGS {
+    MEMORY_EMBEDDINGS {
         uuid id PK
-        text target_type "memory|diary|asset"
-        uuid target_id
-        vector vector "pgvector"
+        uuid user_id FK "비정규화 — 벡터 질의 선필터"
+        uuid memory_id FK "UNIQUE NOT NULL, ON DELETE CASCADE"
+        vector embedding "pgvector, HNSW"
         text model
+        bool is_searchable "비정규화 — is_locked/deleted_at 반영, 트리거 동기화"
+    }
+
+    ASSET_EMBEDDINGS {
+        uuid id PK
+        uuid user_id FK "비정규화"
+        uuid asset_id FK "UNIQUE NOT NULL, ON DELETE CASCADE"
+        vector embedding "memory_embeddings와 동일 모델·차원(UNION 비교)"
+        text model
+        bool is_searchable "부모 memory의 잠금까지 연쇄"
+    }
+
+    DIARY_EMBEDDINGS {
+        uuid id PK
+        uuid user_id FK "비정규화"
+        uuid diary_id FK "UNIQUE NOT NULL, ON DELETE CASCADE"
+        vector embedding "검색 뷰 밖 — 회고는 원본만 인용"
+        text model
+        bool is_searchable
     }
 
     CONSENTS {
@@ -167,5 +206,25 @@ erDiagram
         uuid id PK
         uuid user_id FK
         text week "ISO week"
-        jsonb highlights "가장많이한것·처음한것·감정순간"
+    }
+
+    WEEKLY_REPORT_HIGHLIGHTS {
+        uuid report_id FK "PK, ON DELETE CASCADE"
+        uuid difference_id FK "PK, ON DELETE CASCADE"
+        text slot "가장많이한것|처음한것|감정순간"
+        int rank
+    }
+
+    DELETIONS {
+        uuid id PK
+        uuid user_id "users FK 없음 — 대상보다 오래 살아야 재개 가능"
+        text trigger "memory|consent_revoke|account"
+        text target_type
+        uuid target_id
+        bool cascade_diaries "사용자 응답. NULL=미응답"
+        text status "awaiting_user|running|completed|failed"
+        text steps_done "완료 단계 배열 — 재개 지점"
+        int attempts
+        text last_error
+        timestamptz completed_at
     }
