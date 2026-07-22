@@ -43,6 +43,7 @@
 - `.claude/rules/ai-evals.md` — 탐지/서술 분리·골든셋·프롬프트 회귀
 - `.claude/rules/testing.md` — 테스트 전략·커버리지 기준
 - `.claude/rules/git.md` — 커밋 단위·메시지 규약·브랜치·히스토리 프라이버시
+- `AGENTS.md` — Next.js 16 버전 고지. **앱 코드 작성 전 `node_modules/next/dist/docs/`의 해당 문서를 먼저 읽는다.** 이 버전은 학습 데이터와 API·관례가 다르다.
 
 ## 표준 개발 루프 (기능 단위)
 
