@@ -1,0 +1,42 @@
+{
+  "cases": [
+    {
+      "name": "hallucination-expansion",
+      "text": "스벅에서 커피",
+      "must_not_contain": ["스타벅스"],
+      "reason": "확장은 원문에 없어 폐기"
+    },
+    {
+      "name": "empty-no-entities",
+      "text": "그냥 그런 하루",
+      "expected_count_max": 0,
+      "reason": "억지 생성 X"
+    },
+    {
+      "name": "korean-particle",
+      "text": "민수랑 점심 먹음",
+      "must_contain": [{"type": "person", "name": "민수"}],
+      "reason": "조사 제거"
+    },
+    {
+      "name": "conservative-merge",
+      "text": "김민수랑 민수는 다른 사람",
+      "distinct_names": [
+        {"type": "person", "name": "김민수"},
+        {"type": "person", "name": "민수"}
+      ],
+      "reason": "과병합 X (타입까지 일치해야 통과)"
+    },
+    {
+      "name": "four-types",
+      "text": "카페에서 요가하고 김밥 먹고 지은이 만남",
+      "must_contain": [
+        {"type": "place", "name": "카페"},
+        {"type": "activity", "name": "요가"},
+        {"type": "thing", "name": "김밥"},
+        {"type": "person", "name": "지은"}
+      ],
+      "reason": "4종 분류"
+    }
+  ]
+}
