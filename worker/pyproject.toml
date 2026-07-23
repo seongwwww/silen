@@ -10,14 +10,20 @@ dependencies = [
     # Windows에는 시스템 tz 데이터베이스가 없다. 이것이 없으면
     # ZoneInfo("Asia/Seoul")이 ZoneInfoNotFoundError로 죽는다.
     "tzdata",
+    "psycopg[binary]",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+# "."(워커 루트)을 넣어 `from tests.conftest import ...`가 해석되게 한다.
+# tests/__init__.py와 함께 tests를 패키지로 만든다.
+pythonpath = ["src", "."]
 testpaths = ["tests"]
+markers = [
+    "integration: 로컬 Supabase 스택이 떠 있어야 하는 테스트",
+]
 
 [tool.ruff]
 line-length = 100
