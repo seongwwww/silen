@@ -16,15 +16,28 @@
 - 타임스탬프는 `npx supabase migration new <name>` 생성값. `<ts1>`을 그 값으로 대체.
 - 로컬 Supabase 스택 필요. **`db reset` 후 auth 502는 `supabase stop && start`로 복구.**
 - 워커는 특권 역할로 psycopg 직접 접속. **모든 쿼리에 user_id 필터를 코드로 강제.**
-- **프라이버시 필수(privacy.md·기획서):** Gemini는 **무학습 구성(유료 API/Vertex)**만. 무료 티어 금지. API 키는 환경변수(`GEMINI_API_KEY`), 코드·로그·커밋·큐 메시지에 안 실림. 기록 본문을 로그·APM에 안 남김(memory_id·카운트만).
+- **프라이버시 필수(privacy.md·기획서):** LLM은 **Vertex AI Gemini + ADC**로만 호출한다(조직 정책이 API 키 금지). Vertex는 데이터를 학습에 쓰지 않는다 — 이 무학습 보장이 협상 불가 조건이며 Task 4 첫 스텝에서 Google 문서로 재확인. **비밀 키 문자열이 없다** — ADC가 환경 신원으로 인증, 자격증명은 레포 밖(`%APPDATA%\gcloud\...`). 환경변수는 비밀 아닌 설정만: `GOOGLE_GENAI_USE_VERTEXAI=true`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`. 기록 본문을 로그·APM에 안 남김(memory_id·카운트만).
 - **환각 0%(ai-evals.md):** 추출된 name이 원문에 실재하는지 후검증. 없으면 폐기.
 - **relation_type은 `'mentioned'`.** met/visited/did로 단정하지 않는다(과잉해석 금지).
 - Python venv `worker\.venv`. 명령은 `worker\.venv\Scripts\python.exe` 직접 호출.
 - 인증·삭제·RAG 변경이므로 병합 전 `/security-review`(privacy.md). 타인 이름 저장·삭제·본문 전송을 중점 점검.
 
-## 전제 조건 — Gemini API 키
+## 전제 조건 — Vertex AI + ADC
 
-**현재 환경에 Gemini 키가 없다.** Task 1–3·6은 스텁으로 키 없이 완성·검증된다. **Task 4(실 Gemini 클라이언트)·5(eval)는 `GEMINI_API_KEY`(무학습 구성)가 있어야** 실행된다. 키가 없으면 Task 3까지 진행해 스텁 파이프라인을 병합하고, 키 확보 후 Task 4–5를 잇는다.
+조직 보안 정책이 API 키를 금지하므로 **Vertex AI + 애플리케이션 기본 사용자 인증 정보(ADC)**를 쓴다. 비밀 키 문자열이 없다.
+
+**확정 값:**
+- 프로젝트: `project-58561b19-fb35-4c01-bb2`
+- 리전: `asia-east2` (홍콩) — ⚠️ Gemini Flash 가용성이 제한적일 수 있어 Task 4 Step 1에서 확인, 없으면 `global` 엔드포인트로 대체
+- 계정: `carmusik2025@gmail.com`의 ADC (billing 활성 가정)
+
+**사람이 미리 해둠(워커 실행 사용자 레벨):**
+```powershell
+gcloud auth application-default login          # ADC 발급(레포 밖 저장)
+gcloud auth application-default set-quota-project project-58561b19-fb35-4c01-bb2
+gcloud services enable aiplatform.googleapis.com --project project-58561b19-fb35-4c01-bb2
+```
+ADC는 Windows 사용자 레벨이라 워커(`worker\.venv`)가 자동으로 찾는다. Task 1–3(스텁 파이프라인, 29 tests)은 이미 완료. Task 4가 Vertex 추출기를 채우면 파이프라인이 프로덕션 실행 가능해지고, Task 5(eval)·6(마무리)로 종료.
 
 ---
 
@@ -35,7 +48,7 @@
 | `supabase/migrations/<ts1>_entity_extraction.sql` | relation_type에 `mentioned` 추가 + 고아 entity 삭제 트리거 |
 | `worker/src/silen_worker/extraction/__init__.py` | |
 | `worker/src/silen_worker/extraction/service.py` | 가드레일·정규화·추출 오케스트레이션(포트 주입) |
-| `worker/src/silen_worker/extraction/gemini.py` | 실 Gemini `LLMExtractor` 구현(키 필요) |
+| `worker/src/silen_worker/extraction/gemini.py` | Vertex AI Gemini `LLMExtractor` 구현(ADC) |
 | `worker/src/silen_worker/db.py`(수정) | entity·memory_entity upsert(스코프) |
 | `worker/src/silen_worker/tasks/process.py`(수정) | 사소한 잡 → 추출 잡 |
 | `worker/tests/test_extraction.py` | 가드레일·정규화 단위(LLM 없음) |
@@ -671,9 +684,9 @@ process_pending의 사소한 잡을 추출 잡으로 교체. 메모 텍스트를
 
 ---
 
-## Task 4: Gemini 클라이언트 (키 필요)
+## Task 4: Vertex AI Gemini 클라이언트 (ADC)
 
-**⚠️ 전제:** `GEMINI_API_KEY`(무학습 구성)가 있어야 한다. 없으면 이 태스크를 건너뛰고 스텁 파이프라인(Task 3)을 병합한 뒤, 키 확보 후 진행한다.
+**⚠️ 전제:** ADC가 발급돼 있고(전제 조건 절 참고) Vertex AI API가 활성화돼 있어야 한다. 프로젝트 `project-58561b19-fb35-4c01-bb2`, 리전 `asia-east2`.
 
 **Files:**
 - Create: `worker/src/silen_worker/extraction/gemini.py`
@@ -681,40 +694,61 @@ process_pending의 사소한 잡을 추출 잡으로 교체. 메모 텍스트를
 
 **Interfaces:**
 - Consumes: Task 2 `LLMExtractor` 포트
-- Produces: `GeminiExtractor` 구현
+- Produces: `GeminiExtractor` 구현(인자 없는 생성자, env에서 Vertex 설정 읽음)
 
-- [ ] **Step 1: SDK API 확인 (드리프트 주의)**
+- [ ] **Step 1: SDK·리전·무학습 확인 (드리프트 주의 — 협상 불가 게이트)**
 
-Gemini SDK·구조화 출력 API는 바뀌었을 수 있다. 구현 전 Google 공식 문서를 확인한다.
+`google-genai` SDK의 Vertex 모드·구조화 출력 API는 바뀌었을 수 있고, `asia-east2`에 Flash가 없을 수도 있다. 코드 작성 전 확인한다.
+
+WebFetch 3건:
+1. `https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference` — "Extract the Python google-genai SDK call to create a Vertex AI client (vertexai=True, project, location) and generate structured JSON output with a response schema."
+2. `https://cloud.google.com/vertex-ai/generative-ai/docs/learn/locations` — "List which locations support Gemini Flash. Does asia-east2 support a Gemini Flash model? Is a 'global' endpoint available?"
+3. `https://cloud.google.com/vertex-ai/generative-ai/docs/data-governance` — "Does Vertex AI use customer prompt/response data to train foundation models? Confirm no-training."
+
+판단:
+- **무학습이 확인 안 되면 중단하고 사람에게 보고.** 협상 불가.
+- `asia-east2`에 Flash가 없으면 `GOOGLE_CLOUD_LOCATION`을 `global`(또는 문서가 지목하는 가장 가까운 지원 리전)로 쓰고, 어느 값을 썼는지 리포트에 남긴다.
+- 확인된 정확한 Flash 모델 ID(예: `gemini-2.0-flash` 계열)를 코드에 쓴다.
+
+- [ ] **Step 2: ADC 연결 스모크 (코드 작성 전 접속부터 확인)**
+
+의존성 없이 순수 SDK로 접속만 먼저 확인해 인증·리전·billing 문제를 코드와 분리한다.
 
 ```powershell
-# google-genai(신규 SDK) 구조화 출력·무학습 구성 문서 확인
+worker\.venv\Scripts\python.exe -m pip install google-genai
+$env:GOOGLE_GENAI_USE_VERTEXAI = "true"
+$env:GOOGLE_CLOUD_PROJECT = "project-58561b19-fb35-4c01-bb2"
+$env:GOOGLE_CLOUD_LOCATION = "asia-east2"   # Step 1에서 global 판정 시 그 값으로
+worker\.venv\Scripts\python.exe -c "from google import genai; c=genai.Client(); r=c.models.generate_content(model='gemini-2.0-flash', contents='한 단어로: 안녕'); print(r.text)"
 ```
 
-WebFetch: `https://ai.google.dev/gemini-api/docs/structured-output` — "Extract the Python google-genai SDK call for JSON structured output with response_schema, and the model id for Gemini Flash". 그리고 데이터 거버넌스(무학습): `https://ai.google.dev/gemini-api/terms` — "Extract whether paid-tier API inputs are used for training and how to ensure no-training".
+Expected: 한국어 응답 한 줄. 인증(ADC)·리전·billing이 모두 붙었다는 뜻. **여기서 실패하면**(권한/리전/billing) 에러 메시지를 사람에게 보고하고 중단 — 코드 문제가 아니라 환경 문제다.
 
-**무학습 구성이 확인 안 되면 중단하고 사람에게 보고한다.** 이건 협상 불가 조건이다.
+- [ ] **Step 3: 의존성 명시**
 
-- [ ] **Step 2: 의존성 추가**
-
-`worker/pyproject.toml`의 `dependencies`에 `google-genai`를 추가(Step 1에서 확인한 정확한 패키지명).
+`worker/pyproject.toml`의 `dependencies`에 `google-genai`(Step 1에서 확인한 정확한 최소 버전)를 추가하고 재설치:
 
 ```powershell
 worker\.venv\Scripts\python.exe -m pip install -e "worker[dev]"
 ```
 
-- [ ] **Step 3: GeminiExtractor 작성**
+- [ ] **Step 4: GeminiExtractor 작성**
 
-`worker/src/silen_worker/extraction/gemini.py` — Step 1에서 확인한 API로 작성. 골격:
+`worker/src/silen_worker/extraction/gemini.py` — Step 1에서 확인한 API로 작성. 골격(정확한 호출은 Step 1 문서 기준):
 
 ```python
-"""실 Gemini Flash 추출기. 무학습 구성(유료 API/Vertex)만 사용한다.
-API 키는 환경변수. 본문은 처리용이며 우리 로그에 남기지 않는다.
+"""Vertex AI Gemini 추출기. ADC로 인증(비밀 키 없음). Vertex는 데이터를
+학습에 쓰지 않는다. 본문은 처리용이며 우리 로그에 남기지 않는다.
+
+env: GOOGLE_GENAI_USE_VERTEXAI=true, GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION.
 """
 
 import os
 
-# from google import genai  # Step 1에서 확인한 정확한 import
+from google import genai
+from google.genai import types
+
+_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")  # Step 1에서 확인한 ID
 
 _PROMPT = (
     "다음 텍스트에 등장하는 사람·장소·활동·사물을 뽑아라. "
@@ -744,39 +778,57 @@ _SCHEMA = {
 
 class GeminiExtractor:
     def __init__(self) -> None:
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            raise RuntimeError("GEMINI_API_KEY가 없다 — 무학습 구성 유료 API 키 필요")
-        # self._client = genai.Client(api_key=api_key)  # Step 1 확인 API
+        # Vertex 설정(GOOGLE_GENAI_USE_VERTEXAI·PROJECT·LOCATION)과 ADC를
+        # env·환경 신원에서 자동 해석한다. 프로젝트 미설정 시 명확히 실패.
+        if not os.environ.get("GOOGLE_CLOUD_PROJECT"):
+            raise RuntimeError("GOOGLE_CLOUD_PROJECT 미설정 — Vertex ADC 구성 필요")
+        self._client = genai.Client()  # Step 1에서 확인한 정확한 생성 방식
 
     def extract(self, text: str) -> list[dict]:
-        # Step 1에서 확인한 구조화 출력 호출.
-        # 응답 JSON의 entities 배열을 그대로 반환(가드레일이 뒤에서 검증).
-        # 타임아웃·재시도(지수 백오프)·비용 상한 인지(backend.md).
-        ...
+        # Step 1에서 확인한 구조화 출력 호출. 응답 JSON의 entities 배열을
+        # 그대로 반환(가드레일이 뒤에서 검증). 타임아웃·재시도(지수 백오프)·
+        # 비용 상한 인지(backend.md). 실패 시 예외를 올려 process_pending이
+        # 메시지를 삭제하지 않게 한다(재시도).
+        resp = self._client.models.generate_content(
+            model=_MODEL,
+            contents=f"{_PROMPT}\n\n---\n{text}",
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=_SCHEMA,
+            ),
+        )
+        import json
+
+        data = json.loads(resp.text)
+        return data.get("entities", [])
 ```
 
-Step 1의 실제 API로 `__init__`·`extract`를 완성한다.
+Step 1의 실제 API로 생성·호출부를 확정한다(위는 현행 google-genai 기준 골격이며, 문서와 다르면 문서를 따른다).
 
-- [ ] **Step 4: 실 Gemini 스모크 (키 있을 때)**
+- [ ] **Step 5: 실 Vertex 스모크 (4종 추출)**
 
 ```powershell
-$env:GEMINI_API_KEY = "<무학습 구성 키>"
+$env:GOOGLE_GENAI_USE_VERTEXAI = "true"
+$env:GOOGLE_CLOUD_PROJECT = "project-58561b19-fb35-4c01-bb2"
+$env:GOOGLE_CLOUD_LOCATION = "asia-east2"   # 또는 Step 1 판정값
 worker\.venv\Scripts\python.exe -c "from silen_worker.extraction.gemini import GeminiExtractor; print(GeminiExtractor().extract('민수랑 김밥 먹고 그 카페 감'))"
 ```
 
-Expected: `[{'type':'person','name':'민수'}, {'type':'thing','name':'김밥'}, {'type':'place','name':'카페'}]` 류. 한국어 4종이 뽑히는지 육안 확인.
+Expected: `[{'type':'person','name':'민수'}, {'type':'thing','name':'김밥'}, {'type':'place','name':'카페'}]` 류. 한국어 4종이 뽑히는지 육안 확인. (추출된 name이 원문에 있으므로 가드레일도 통과할 것.)
 
-- [ ] **Step 5: 커밋**
+- [ ] **Step 6: 커밋**
 
 ```powershell
-git add worker/src/silen_worker/extraction/gemini.py worker/pyproject.toml worker/pyproject... package-lock 등
-git commit -m "feat(worker): Gemini Flash 추출기 (무학습 구성)
+git add worker/src/silen_worker/extraction/gemini.py worker/pyproject.toml
+git commit -m "feat(worker): Vertex AI Gemini 추출기 (ADC)
 
-무학습 유료 API로 4종 엔티티를 구조화 출력으로 받는다. 지어내지
-말라는 프롬프트 + 스키마 강제 + (뒤단) 가드레일로 환각을 막는다.
-API 키는 환경변수, 본문은 로그에 안 남긴다."
+Vertex AI로 4종 엔티티를 구조화 출력으로 받는다. 조직 정책이 API 키를
+금지해 ADC로 인증(비밀 키 없음), Vertex는 데이터를 학습에 안 쓴다.
+지어내지 말라는 프롬프트 + 스키마 강제 + (뒤단) 가드레일로 환각 차단.
+본문은 로그에 안 남긴다."
 ```
+
+**단위 테스트 참고:** Vertex 호출은 네트워크·비용이 있어 CI 단위 테스트에서 실행하지 않는다. 추출 파이프라인의 순수 로직(가드레일·병합)은 Task 2·3에서 이미 스텁으로 검증됨. 이 태스크의 검증은 Step 2·5의 실 스모크다.
 
 ---
 
@@ -821,10 +873,12 @@ API 키는 환경변수, 본문은 로그에 안 남긴다."
 
 (구현: fixtures 로드 → 각 text에 대해 guardrail(extractor.extract(text), text) → must_contain/must_not_contain/count 검사 → 집계 출력.)
 
-- [ ] **Step 3: 실행 (키 있을 때)**
+- [ ] **Step 3: 실행 (ADC 필요)**
 
 ```powershell
-$env:GEMINI_API_KEY = "<키>"
+$env:GOOGLE_GENAI_USE_VERTEXAI = "true"
+$env:GOOGLE_CLOUD_PROJECT = "project-58561b19-fb35-4c01-bb2"
+$env:GOOGLE_CLOUD_LOCATION = "asia-east2"   # 또는 Task 4 Step 1 판정값
 worker\.venv\Scripts\python.exe evals/entities/run.py
 ```
 
@@ -849,11 +903,17 @@ git commit -m "feat(eval): 엔티티 추출 골든셋
 
 - [ ] **Step 1: 환경변수 안내**
 
-`.env.example`에 추가(값 비움):
+`.env.example`에 추가(비밀 아닌 설정만 — ADC엔 넣을 키가 없다):
 
 ```
-# Gemini — 무학습 구성(유료 API/Vertex). 무료 티어 금지.
-GEMINI_API_KEY=
+# Vertex AI Gemini — 조직 정책상 API 키 금지, ADC로 인증한다.
+#   사람이 1회: gcloud auth application-default login
+#   그다음: gcloud auth application-default set-quota-project <PROJECT>
+#           gcloud services enable aiplatform.googleapis.com --project <PROJECT>
+# 아래는 비밀이 아닌 설정값(자격증명은 %APPDATA%\gcloud\, 레포 밖).
+GOOGLE_GENAI_USE_VERTEXAI=true
+GOOGLE_CLOUD_PROJECT=
+GOOGLE_CLOUD_LOCATION=asia-east2
 ```
 
 - [ ] **Step 2: supabase/README에 엔티티 메모**
@@ -886,12 +946,12 @@ Expected: 통과. (pytest는 스텁 통합 포함 — 키 없이 도는 것만)
 
 ```powershell
 git add supabase/README.md README.md .env.example
-git commit -m "docs: 엔티티 추출 안내와 Gemini 무학습 구성 환경변수"
+git commit -m "docs: 엔티티 추출 안내와 Vertex AI ADC 환경변수"
 ```
 
 - [ ] **Step 5: 보안 리뷰**
 
-인증·삭제·본문 전송 변경이므로 `/security-review`(privacy.md). 타인 이름 저장·고아 삭제·본문 로깅·Gemini 전송을 중점 확인.
+인증·삭제·본문 전송 변경이므로 `/security-review`(privacy.md). 타인 이름 저장·고아 삭제·본문 로깅·Vertex 전송(무학습 구성)을 중점 확인.
 
 - [ ] **Step 6: 브랜치 마무리**
 
