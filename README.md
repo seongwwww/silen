@@ -11,6 +11,7 @@ CLAUDE.md               # 항상 적용되는 개발 원칙 (200줄 이하)
 AGENTS.md               # Next.js 16 버전 고지 (코드 작성 전 필독)
 .claude/rules/          # 도메인별 규칙 (프론트/백엔드/DB/프라이버시/AI-eval/테스트/git)
 app/                    # 경계 계층 — Route Handler·페이지
+app/api/memories/       # 기록 생성 API (텍스트·감정·사진)
 lib/time/               # "하루" 경계 단일 유틸
 lib/services/           # 서비스 계층 (프레임워크 타입을 모름)
 lib/repositories/       # 저장소 계층 (쿼리·user 스코프 강제)
