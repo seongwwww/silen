@@ -11,6 +11,9 @@ dependencies = [
     # ZoneInfo("Asia/Seoul")이 ZoneInfoNotFoundError로 죽는다.
     "tzdata",
     "psycopg[binary]",
+    # Vertex AI Gemini (ADC 인증, API 키 미사용). >=2.14.0에서 vertexai=True +
+    # response_schema 구조화 출력 확인됨(Step 1/2 스모크).
+    "google-genai>=2.14.0",
 ]
 
 [project.optional-dependencies]

@@ -37,3 +37,32 @@ def fetch_memory(conn: psycopg.Connection, memory_id: str, user_id: str) -> Memo
     if row is None:
         return None
     return Memory(id=row[0], user_id=row[1], raw_text=row[2])
+
+
+def upsert_entity(
+    conn: psycopg.Connection, user_id: str, entity_type: str, name: str, normalized_name: str
+) -> str:
+    """(user_id, entity_type, normalized_name) 자연키로 upsert. 멱등."""
+    row = conn.execute(
+        """
+        insert into public.entities (user_id, entity_type, name, normalized_name)
+        values (%s, %s, %s, %s)
+        on conflict (user_id, entity_type, normalized_name) do update
+          set normalized_name = excluded.normalized_name
+        returning id::text
+        """,
+        (user_id, entity_type, name, normalized_name),
+    ).fetchone()
+    return row[0]
+
+
+def link_memory_entity(conn: psycopg.Connection, memory_id: str, entity_id: str) -> None:
+    """(memory_id, entity_id, relation_type) PK로 upsert. 재처리해도 중복 없음."""
+    conn.execute(
+        """
+        insert into public.memory_entities (memory_id, entity_id, relation_type)
+        values (%s, %s, 'mentioned')
+        on conflict (memory_id, entity_id, relation_type) do nothing
+        """,
+        (memory_id, entity_id),
+    )

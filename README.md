@@ -17,9 +17,11 @@ lib/services/           # 서비스 계층 (프레임워크 타입을 모름)
 lib/repositories/       # 저장소 계층 (쿼리·user 스코프 강제)
 components/ui|common/   # 공통 컴포넌트 (frontend.md)
 worker/                 # Python 워커 (차이 탐지·AI 잡)
-worker/src/silen_worker/tasks/   # 큐 소비 잡 진입점(process_pending)
-worker/src/silen_worker/db.py    # 워커 DB 접근(user 스코프 강제)
+worker/src/silen_worker/tasks/        # 큐 소비 잡 진입점(process_pending)
+worker/src/silen_worker/extraction/   # 엔티티 추출 (가드레일·정규화·Vertex Gemini)
+worker/src/silen_worker/db.py         # 워커 DB 접근(user 스코프 강제)
 fixtures/               # 두 자산이 공유하는 골든 케이스
+evals/entities/         # 엔티티 추출 골든셋 (환각·빈날·조사·병합·4종)
 supabase/migrations/    # 마이그레이션 (down/ 에 보상 스크립트)
 docs/
   planning/서비스_기획서.md   # 제품 기획 (단일 출처)
@@ -69,6 +71,10 @@ npm run test:integration   # 통합 (Supabase 스택 기동 필요)
 worker\.venv\Scripts\python.exe -m ruff check worker
 worker\.venv\Scripts\python.exe -m pytest worker -m "not integration"   # 단위(DB 불필요)
 worker\.venv\Scripts\python.exe -m pytest worker -m integration          # 통합(Supabase 스택 필요)
+
+# 엔티티 추출 eval — 실 Vertex Gemini 호출(비용 발생), ADC + env 3종 필요
+$env:GOOGLE_GENAI_USE_VERTEXAI="true"; $env:GOOGLE_CLOUD_PROJECT="<PROJECT>"; $env:GOOGLE_CLOUD_LOCATION="global"
+worker\.venv\Scripts\python.exe evals/entities/run.py
 ```
 
 > shadcn/ui는 첫 화면 작업 시 도입.
