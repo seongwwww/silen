@@ -46,6 +46,18 @@ def seed_memory(conn: psycopg.Connection, user_id: str, text: str | None = "메�
     return row[0]
 
 
+def seed_memory_at(
+    conn: psycopg.Connection, user_id: str, captured_at_iso: str, text: str | None = "메모"
+) -> str:
+    """captured_at을 명시해 메모를 시드한다(타임존 경계 테스트용)."""
+    row = conn.execute(
+        "insert into public.memories (user_id, raw_text, source_type, memory_type, captured_at) "
+        "values (%s, %s, 'manual', 'moment', %s) returning id::text",
+        (user_id, text, captured_at_iso),
+    ).fetchone()
+    return row[0]
+
+
 def delete_user(conn: psycopg.Connection, user_id: str) -> None:
     # auth.users 삭제가 CASCADE로 public.users·memories를 지운다.
     conn.execute("delete from auth.users where id = %s", (user_id,))
