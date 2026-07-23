@@ -47,6 +47,7 @@ docs/
 ```powershell
 # 앱 (저장소 루트)
 npm install
+# `.env.local`을 만든다(`.env.example` 참고). 값은 `npx supabase status`로 확인.
 
 # Python 워커 — `python`이 다른 버전을 가리킬 수 있으므로 py launcher 사용
 py -3.12 -m venv worker\.venv

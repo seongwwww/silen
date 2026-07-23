@@ -1,0 +1,20 @@
+-- 정책만 제거한다. RLS 활성화는 유지되므로 되돌린 뒤에도
+-- authenticated는 아무것도 볼 수 없다(안전 방향으로 실패).
+drop policy if exists "본인 삭제 진행만 조회" on public.deletions;
+drop policy if exists "부모 소유자만" on public.weekly_report_highlights;
+drop policy if exists "부모 소유자만" on public.diary_sections;
+drop policy if exists "부모 소유자만" on public.diary_sources;
+drop policy if exists "부모 소유자만" on public.difference_evidence;
+drop policy if exists "부모 소유자만" on public.relations;
+drop policy if exists "부모 소유자만" on public.memory_entities;
+drop policy if exists "부모 소유자만" on public.emotions;
+drop policy if exists "부모 소유자만" on public.assets;
+drop policy if exists "본인 데이터만" on public.consents;
+drop policy if exists "본인 데이터만" on public.weekly_reports;
+drop policy if exists "본인 데이터만" on public.baselines;
+drop policy if exists "본인 데이터만" on public.signals;
+drop policy if exists "본인 데이터만" on public.entities;
+drop policy if exists "본인 데이터만" on public.diaries;
+drop policy if exists "본인 데이터만" on public.differences;
+drop policy if exists "본인 데이터만" on public.memories;
+drop policy if exists "본인 프로필만" on public.users;

@@ -42,8 +42,7 @@ erDiagram
     DIFFERENCES ||--o{ WEEKLY_REPORT_HIGHLIGHTS : "선정됨"
 
     USERS {
-        uuid id PK
-        text email
+        uuid id PK "auth.users(id) 참조. email은 auth.users가 단일 출처"
         text display_name
         jsonb style_profile "기본 톤 프리셋"
         time diary_time "일기 생성 시각"
