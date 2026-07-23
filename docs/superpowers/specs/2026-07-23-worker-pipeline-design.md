@@ -25,7 +25,7 @@
 | 2 | 메시지 단위 | 메모별 `{memory_id, user_id}` (엔티티 추출이 메모 단위) |
 | 3 | 적재 | `memories` insert AFTER 트리거 → `pgmq.send`. 앱은 탐지를 모름 |
 | 4 | 워커 실행 | 일회성 `process_pending(limit)`. 데몬·스케줄은 범위 밖 |
-| 5 | 워커 DB | service_role 접속. **user_id 필터를 코드로 강제**(RLS 밖) |
+| 5 | 워커 DB | 특권 역할(로컬 `postgres`)로 psycopg 직접 접속. RLS 우회 → **user_id 필터를 코드로 강제** |
 | 6 | 사소한 잡 | 스코프 조회 + 메시지 삭제. 도메인 쓰기 없음(B로) |
 | 7 | 멱등성 | pgmq at-least-once + visibility timeout. 멱등 효과는 B |
 
@@ -83,6 +83,10 @@ create trigger on_memory_created
 
 **메시지에 본문(raw_text)을 싣지 않는다** — `memory_id`만. 워커가 필요할 때 DB에서 읽는다. 큐에 기록 본문이 쌓이지 않게 한다(backend.md 로깅 원칙의 연장).
 
+**트랜잭션 결합이 오히려 강점이다.** pgmq는 같은 Postgres 안에 있으므로 `pgmq.send`는 네트워크 홉 없는 로컬 insert다. 메모 insert와 같은 트랜잭션이라 **메모가 커밋되면 메시지도 반드시 들어가고, 롤백되면 둘 다 사라진다**(유령 잡·유실 잡 없음, 트랜잭션 아웃박스가 공짜). 외부 큐였다면 "메모는 저장됐는데 적재 실패"가 생겨 5초 기록을 위협했겠지만, in-DB pgmq에서는 적재 실패 ≡ DB 실패 ≡ insert 실패라 그 창이 없다.
+
+**백필**: 트리거는 AFTER INSERT라 **새 메모만** 적재한다. 기록 백엔드가 이미 병합돼 그전에 만들어진 메모는 큐에 없다. 배포 시 기존 메모를 일회성으로 적재하는 백필(예: `select pgmq.send('memory_jobs', ...) from memories where ...`)이 필요하나, B(엔티티 추출)가 실제로 기존 메모를 처리해야 할 때 다루고 이 스펙 범위 밖으로 둔다 — A는 배관 증명이라 새 메모로 충분하다.
+
 ---
 
 ## 6. Python 워커 (backend.md 2자산 3계층)
@@ -111,9 +115,11 @@ def fetch_memory(memory_id: str, user_id: str) -> Memory | None:
     """메모를 조회한다. user_id로도 필터해 교차 사용자 접근을 코드로 막는다."""
 ```
 
-**service_role은 RLS를 우회한다.** 따라서 워커 쿼리가 user_id 필터를 빠뜨리면 교차 사용자 데이터가 섞인다. 이 저장소가 user 스코프를 강제하는 유일한 지점이며(backend.md), 코드 리뷰·테스트 대상이다.
+**워커는 특권 Postgres 역할로 붙어 RLS를 우회한다.** psycopg로 직접 SQL을 실행하므로 접속 주체는 PostgREST의 `service_role` JWT가 **아니라 실제 Postgres 역할**이다(로컬은 `postgres` 슈퍼유저). RLS는 슈퍼유저·`BYPASSRLS` 역할·테이블 소유자에게 적용되지 않으므로 워커 쿼리에는 RLS가 걸리지 않는다. 반대로 **비특권 역할로 붙이면 RLS가 전면 차단해 워커가 아무것도 못 읽는다** — 그래서 특권 역할이 필수다.
 
-접속은 로컬 DB URL(`postgresql://postgres:postgres@127.0.0.1:54322/postgres`) 또는 환경변수. psycopg로 접근한다(supabase-py는 PostgREST 경유라 워커의 직접 SQL에 부적합).
+RLS가 막아주지 않는 만큼, 워커 쿼리가 user_id 필터를 빠뜨리면 교차 사용자 데이터가 섞인다. 이 저장소가 user 스코프를 강제하는 **유일한 지점**이며(backend.md), 코드 리뷰·테스트 대상이다.
+
+접속은 로컬 DB URL(`postgresql://postgres:postgres@127.0.0.1:54322/postgres`) 또는 환경변수. psycopg로 접근한다(supabase-py는 PostgREST 경유라 워커의 직접 SQL에 부적합). 프로덕션에서 워커가 붙을 역할(전용 `worker` 역할 + `BYPASSRLS`, 또는 소유자 역할)은 배포 시 정하며 범위 밖이다 — 로컬은 `postgres`.
 
 ---
 
@@ -122,13 +128,14 @@ def fetch_memory(memory_id: str, user_id: str) -> Memory | None:
 - **at-least-once**: pgmq는 메시지를 최소 한 번 전달한다. 처리 후 명시적으로 삭제해야 사라진다.
 - **visibility timeout**: 읽은 메시지는 일정 시간 안 보이다가, 삭제 안 하면 다시 보인다(재시도). 처리 중 워커가 죽어도 메시지를 잃지 않는다.
 - **데드레터**: `read_ct`(읽은 횟수)가 상한을 넘으면 `pgmq.archive`로 옮긴다. 무한 재시도를 막는다.
+- **동시 워커 안전**: `pgmq.read`는 읽은 메시지를 visibility timeout 동안 다른 소비자에게 숨긴다. 따라서 워커를 여러 개 돌려도 같은 메시지를 이중 처리하지 않는다(운영 시 처리량 확장이 안전).
 - **멱등 효과**는 이 스펙 범위 밖이다. A의 사소한 잡은 도메인 쓰기가 없어 재처리해도 부작용이 없다. B에서 엔티티를 upsert할 때 자연키 멱등성을 실제로 설계한다.
 
 ---
 
 ## 8. 보안 — 워커는 RLS 밖
 
-Python 워커는 `service_role`로 접속해 RLS를 우회한다. 이는 워커가 모든 사용자의 데이터를 처리해야 하기 때문이다(탐지·추출은 전역 잡). 대가로 **RLS가 막아주지 않으므로 워커 저장소 계층이 user_id 필터를 코드로 강제**해야 한다.
+Python 워커는 특권 Postgres 역할(§6)로 접속해 RLS를 우회한다. 이는 워커가 모든 사용자의 데이터를 처리해야 하기 때문이다(탐지·추출은 전역 잡). 대가로 **RLS가 막아주지 않으므로 워커 저장소 계층이 user_id 필터를 코드로 강제**해야 한다.
 
 A에서 이 스코핑을 테스트로 고정한다 — B가 텍스트에서 타인 이름을 뽑기 시작하기 전에, 격리 기반을 먼저 못박는다. 이 순서가 의도적이다.
 
