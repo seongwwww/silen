@@ -239,3 +239,122 @@ def upsert_narration(
         (user_id, difference_id, headline, body, evidence_text, model),
     ).fetchone()
     return row[0]
+
+
+@dataclass
+class DiaryMemoryRow:
+    memory_id: str
+    captured_at: datetime
+    timezone: str
+    raw_text: str
+
+
+def fetch_diary_memories(
+    conn: psycopg.Connection, user_id: str, target_date: date
+) -> list[DiaryMemoryRow]:
+    """대상 로컬 날짜를 덮는 UTC 창의 활성 메모(본문 있음)를 반환한다. 로컬 날짜
+    필터는 호출자가 time.local_date_for로 정밀하게 한다. user_id 강제, 잠금/삭제 제외."""
+    lower = datetime.combine(target_date - timedelta(days=1), datetime.min.time(), timezone.utc)
+    upper = datetime.combine(target_date + timedelta(days=2), datetime.min.time(), timezone.utc)
+    rows = conn.execute(
+        """
+        select m.id::text, m.captured_at, u.timezone, m.raw_text
+        from public.memories m
+        join public.users u on u.id = m.user_id
+        where m.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+          and m.raw_text is not null
+          and length(btrim(m.raw_text)) > 0
+          and m.captured_at >= %s
+          and m.captured_at < %s
+        order by m.captured_at
+        """,
+        (user_id, lower, upper),
+    ).fetchall()
+    return [DiaryMemoryRow(r[0], r[1], r[2], r[3]) for r in rows]
+
+
+def fetch_confirmed_differences(
+    conn: psycopg.Connection, user_id: str, target_date: date
+) -> list[tuple[str, str]]:
+    """그날 confirmed(intact) 차이 + 서술 headline(없으면 description 폴백). user_id 강제."""
+    rows = conn.execute(
+        """
+        select d.id::text, coalesce(n.headline, d.description, '')
+        from public.differences d
+        left join public.difference_narrations n on n.difference_id = d.id
+        where d.user_id = %s
+          and d.date = %s
+          and d.status = 'confirmed'
+          and d.evidence_state = 'intact'
+        order by d.id
+        """,
+        (user_id, target_date),
+    ).fetchall()
+    return [(r[0], r[1]) for r in rows]
+
+
+def fetch_existing_diary(
+    conn: psycopg.Connection, user_id: str, target_date: date
+) -> tuple[str, str] | None:
+    """(diary_id, status) 또는 None. 멱등/보호 판정용. user_id 강제."""
+    row = conn.execute(
+        "select id::text, status from public.diaries where user_id = %s and date = %s",
+        (user_id, target_date),
+    ).fetchone()
+    return (row[0], row[1]) if row is not None else None
+
+
+def upsert_diary(
+    conn: psycopg.Connection, user_id: str, target_date: date, generated_text: str
+) -> str:
+    """(user_id, date) 자연키로 멱등 upsert. 재생성 시 본문 갱신·status='draft'."""
+    row = conn.execute(
+        """
+        insert into public.diaries (user_id, date, status, style_profile, generated_text)
+        values (%s, %s, 'draft', '{"preset":"담백"}'::jsonb, %s)
+        on conflict (user_id, date) do update
+          set generated_text = excluded.generated_text,
+              status = 'draft',
+              style_profile = excluded.style_profile
+        returning id::text
+        """,
+        (user_id, target_date, generated_text),
+    ).fetchone()
+    return row[0]
+
+
+def replace_diary_sections(
+    conn: psycopg.Connection,
+    diary_id: str,
+    one_line: str,
+    body: str,
+    used_differences: list[tuple[str, str]],
+) -> None:
+    """기존 섹션을 지우고 오늘의한문장·본문 + used 차이별 다른점을 다시 쓴다."""
+    conn.execute("delete from public.diary_sections where diary_id = %s", (diary_id,))
+    conn.execute(
+        "insert into public.diary_sections (diary_id, section_type, content) "
+        "values (%s, '오늘의한문장', %s), (%s, '본문', %s)",
+        (diary_id, one_line, diary_id, body),
+    )
+    for diff_id, headline in used_differences:
+        conn.execute(
+            "insert into public.diary_sections (diary_id, difference_id, section_type, content) "
+            "values (%s, %s, '다른점', %s)",
+            (diary_id, diff_id, headline),
+        )
+
+
+def replace_diary_sources(
+    conn: psycopg.Connection, diary_id: str, memory_ids: list[str]
+) -> None:
+    """기존 출처를 지우고 used 메모를 다시 링크한다."""
+    conn.execute("delete from public.diary_sources where diary_id = %s", (diary_id,))
+    for memory_id in memory_ids:
+        conn.execute(
+            "insert into public.diary_sources (diary_id, memory_id) values (%s, %s) "
+            "on conflict (diary_id, memory_id) do nothing",
+            (diary_id, memory_id),
+        )
