@@ -192,7 +192,9 @@ def fetch_difference_for_narration(
     conn: psycopg.Connection, difference_id: str
 ) -> DifferenceFacts | None:
     """서술 재료를 엔티티 조인으로 읽는다. 엔티티 차이(entity_id 있음)이고
-    근거가 살아있는(intact) 것만 대상. 저장은 여기서 읽은 user_id로 귀속한다."""
+    근거가 살아있는(intact) 것만 대상. 서술 대상은 status=candidate로 한정한다
+    (스펙 §1) — 사용자가 '아니에요'(dismissed) 한 차이는 서술하지 않는다.
+    저장은 여기서 읽은 user_id로 귀속한다."""
     row = conn.execute(
         """
         select d.id::text, d.user_id::text, d.entity_id::text,
@@ -203,6 +205,7 @@ def fetch_difference_for_narration(
         where d.id = %s
           and d.entity_id is not null
           and d.evidence_state = 'intact'
+          and d.status = 'candidate'
         """,
         (difference_id,),
     ).fetchone()

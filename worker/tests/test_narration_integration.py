@@ -16,7 +16,7 @@ class StubNarrator:
         return self._raw
 
 
-def _seed_difference(conn, user_id, name="김밥"):
+def _seed_difference(conn, user_id, name="김밥", status="candidate"):
     ent = conn.execute(
         "insert into public.entities (user_id, entity_type, name, normalized_name) "
         "values (%s, 'thing', %s, %s) returning id::text",
@@ -28,10 +28,10 @@ def _seed_difference(conn, user_id, name="김밥"):
           (user_id, date, entity_id, dimension, description,
            detection_method, confidence, category, status, evidence_state)
         values (%s, current_date, %s, 'thing', '최근 3일 연속 등장',
-                'freq_shift', 0.5, '오늘의다른점', 'candidate', 'intact')
+                'freq_shift', 0.5, '오늘의다른점', %s, 'intact')
         returning id::text
         """,
-        (user_id, ent),
+        (user_id, ent, status),
     ).fetchone()[0]
     return diff
 
@@ -106,5 +106,19 @@ def test_없는_difference는_None(conn):
     try:
         nid = narrate_difference(conn, str(uuid.uuid4()), narrator=StubNarrator(_GOOD))
         assert nid is None
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_dismissed_상태는_서술되지_않는다(conn):
+    # 사용자가 '아니에요'로 기각(dismissed)한 차이는 서술 대상이 아니다(스펙 §1).
+    user = seed_user(conn)
+    try:
+        seed_memory(conn, user, "김밥 먹음")
+        diff = _seed_difference(conn, user, status="dismissed")
+        nid = narrate_difference(conn, diff, narrator=StubNarrator(_GOOD))
+        assert nid is None
+        assert _narration_row(conn, diff) is None
     finally:
         delete_user(conn, user)
