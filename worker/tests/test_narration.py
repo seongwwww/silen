@@ -47,6 +47,22 @@ def test_길이_초과는_폐기한다():
     assert out is None
 
 
+def test_비문자열_필드는_크래시없이_처리한다():
+    # raw가 JSON 숫자 등 비문자열 값을 담고 있어도(예: headline이 int) 가드레일은
+    # AttributeError로 죽지 않고 str()로 강건하게 변환해 정상 처리해야 한다.
+    raw = {"headline": 5, "body": "김밥을 최근 3일 연속으로 남기셨네요.",
+           "evidence_text": "요즘 자주 등장해서 찾았어요."}
+    out = guardrail(raw, _facts())  # 크래시하지 않는 것 자체가 핵심 검증
+    assert out is not None
+    assert out.headline == "5"
+
+
+def test_모든_필드가_비문자열이어도_크래시없이_폐기한다():
+    raw = {"headline": 5, "body": 10, "evidence_text": None}
+    out = guardrail(raw, _facts())
+    assert out is None
+
+
 def test_프롬프트에_본문은_없고_사실은_있다():
     p = build_prompt(_facts())
     assert "김밥" in p

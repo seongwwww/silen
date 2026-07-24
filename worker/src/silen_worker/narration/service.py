@@ -68,9 +68,9 @@ def guardrail(raw: dict, facts: NarrationInput) -> Narration | None:
     ④ 조언·응원·인과 블록리스트 미포함."""
     if not isinstance(raw, dict):
         return None
-    headline = (raw.get("headline") or "").strip()
-    body = (raw.get("body") or "").strip()
-    evidence = (raw.get("evidence_text") or "").strip()
+    headline = str(raw.get("headline") or "").strip()
+    body = str(raw.get("body") or "").strip()
+    evidence = str(raw.get("evidence_text") or "").strip()
     if not headline or not body or not evidence:
         return None
     if len(headline) > HEADLINE_MAX or len(body) > BODY_MAX or len(evidence) > EVIDENCE_MAX:

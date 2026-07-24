@@ -45,7 +45,7 @@ _GOOD = {
 
 def _narration_row(conn, diff):
     return conn.execute(
-        "select user_id::text, headline from public.difference_narrations "
+        "select user_id::text, headline, body from public.difference_narrations "
         "where difference_id = %s",
         (diff,),
     ).fetchone()
@@ -120,5 +120,35 @@ def test_dismissed_상태는_서술되지_않는다(conn):
         nid = narrate_difference(conn, diff, narrator=StubNarrator(_GOOD))
         assert nid is None
         assert _narration_row(conn, diff) is None
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_재서술은_내용을_덮어쓴다(conn):
+    # on conflict do update가 row count만 멱등한 게 아니라 실제로 내용을 갱신하는지 검증.
+    user = seed_user(conn)
+    try:
+        seed_memory(conn, user, "김밥 먹음")
+        diff = _seed_difference(conn, user)
+        narrate_difference(conn, diff, narrator=StubNarrator(_GOOD))
+        first = _narration_row(conn, diff)
+        assert first[1] == "3일째 김밥"
+
+        second_raw = {
+            "headline": "김밥 또 등장",
+            "body": "김밥이 다시 한 번 눈에 띄었어요.",
+            "evidence_text": "다시 빈도가 올라가서 찾았어요.",
+        }
+        narrate_difference(conn, diff, narrator=StubNarrator(second_raw))
+        second = _narration_row(conn, diff)
+        assert second[1] == "김밥 또 등장"
+        assert second[2] == "김밥이 다시 한 번 눈에 띄었어요."
+
+        count = conn.execute(
+            "select count(*)::int from public.difference_narrations where difference_id = %s",
+            (diff,),
+        ).fetchone()[0]
+        assert count == 1
     finally:
         delete_user(conn, user)
