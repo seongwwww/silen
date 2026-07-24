@@ -1,0 +1,104 @@
+"""일기 오케스트레이션·프롬프트 조립·가드레일. LLM은 DiaryWriter 포트로 주입한다.
+프레임워크·DB·Gemini를 모른다(순수 로직) — 여기 테스트를 집중한다.
+입력은 그날 메모(raw_text)+확정 차이. 출력은 가드레일 통과분만(근거 정합 검증).
+"""
+
+from dataclasses import dataclass
+from typing import Protocol
+
+from silen_worker.diary.constants import BODY_MAX, ONE_LINE_MAX
+from silen_worker.narration.constants import FORBIDDEN_PHRASES
+
+
+@dataclass(frozen=True)
+class DiaryMemory:
+    memory_id: str
+    text: str
+
+
+@dataclass(frozen=True)
+class DiaryDifference:
+    difference_id: str
+    headline: str
+
+
+@dataclass(frozen=True)
+class DiaryInput:
+    date_iso: str
+    user_id: str
+    memories: list[DiaryMemory]
+    differences: list[DiaryDifference]
+
+
+@dataclass(frozen=True)
+class Diary:
+    one_line: str
+    body: str
+    used_memory_ids: list[str]
+    used_difference_ids: list[str]
+
+
+class DiaryWriter(Protocol):
+    model: str
+
+    def write(self, facts: DiaryInput) -> dict:
+        """{"one_line","body","used_memory_ids","used_difference_ids"} 원시 출력. 가드레일 전."""
+        ...
+
+
+def build_prompt(facts: DiaryInput) -> str:
+    """그날 메모(본문)+확정 차이로 프롬프트를 조립한다. 시간순 메모, 사실만."""
+    mem_lines = "\n".join(f"- [{m.memory_id}] {m.text}" for m in facts.memories)
+    diff_lines = (
+        "\n".join(f"- [{d.difference_id}] {d.headline}" for d in facts.differences)
+        or "- (없음)"
+    )
+    return (
+        "너는 일기 앱 '실은'의 서술 담당이다. 아래는 오늘 남긴 메모와, 통계로 검증돼\n"
+        "유저가 확인한 '다른 점'이다. 이것들만으로 오늘 하루를 1인칭 담백한 일기로 써라.\n"
+        "규칙: 메모에 있는 사실만 쓴다. 없는 장면·대사·사람·감정·인과를 만들지 마라.\n"
+        "조언·응원·교훈·자기계발 금지. 평범하면 평범하다고 써도 된다. 감정을 지어내지 마라.\n"
+        "메모가 1~2개면 짧게(2~3문장), 3개 이상이면 흐름으로 엮어라.\n"
+        "one_line은 60자 이내, body는 2000자 이내로 쓴다.\n\n"
+        f"날짜: {facts.date_iso}\n"
+        f"메모(시간순):\n{mem_lines}\n\n"
+        f"확인된 다른 점:\n{diff_lines}\n\n"
+        "출력(JSON): one_line(오늘의 한 문장, 제목처럼), body(일기 본문), "
+        "used_memory_ids(실제 근거로 쓴 메모 id 배열), used_difference_ids(쓴 차이 id 배열)."
+    )
+
+
+def guardrail(raw: dict, facts: DiaryInput) -> Diary | None:
+    """결정적 방어선. 통과 못 하면 None(저장 안 함).
+    ① 두 텍스트 필드 비어있지 않음·길이 상한 ② 근거 정합(used ⊆ 입력)
+    ③ body 있는데 근거메모 없음 폐기 ④ 조언·인과 블록리스트."""
+    if not isinstance(raw, dict):
+        return None
+    one_line = str(raw.get("one_line") or "").strip()
+    body = str(raw.get("body") or "").strip()
+    if not one_line or not body:
+        return None
+    if len(one_line) > ONE_LINE_MAX or len(body) > BODY_MAX:
+        return None
+
+    used_mem = raw.get("used_memory_ids")
+    used_diff = raw.get("used_difference_ids")
+    if not isinstance(used_mem, list) or not isinstance(used_diff, list):
+        return None
+    used_mem = [str(x) for x in used_mem]
+    used_diff = [str(x) for x in used_diff]
+
+    input_mem_ids = {m.memory_id for m in facts.memories}
+    input_diff_ids = {d.difference_id for d in facts.differences}
+    if not set(used_mem) <= input_mem_ids:
+        return None
+    if not set(used_diff) <= input_diff_ids:
+        return None
+    if facts.memories and not used_mem:
+        return None
+
+    blob = f"{one_line} {body}"
+    if any(p in blob for p in FORBIDDEN_PHRASES):
+        return None
+
+    return Diary(one_line=one_line, body=body, used_memory_ids=used_mem, used_difference_ids=used_diff)
