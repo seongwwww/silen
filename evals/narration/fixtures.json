@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {"name": "freq-streak", "entity_name": "김밥", "entity_type": "thing",
+     "detection_method": "freq_shift", "description": "최근 3일 연속 등장",
+     "date_iso": "2026-07-24", "must_include_entity": true,
+     "reason": "반복을 담백하게, 조언·인과 없이"},
+    {"name": "first-place", "entity_name": "그 카페", "entity_type": "place",
+     "detection_method": "first_occurrence", "description": "이 place 첫 등장",
+     "date_iso": "2026-07-24", "must_include_entity": true,
+     "reason": "처음을 사실로만"},
+    {"name": "reemergence", "entity_name": "지은", "entity_type": "person",
+     "detection_method": "freq_shift", "description": "9일 만에 재등장(최근 28일 내)",
+     "date_iso": "2026-07-24", "must_include_entity": true,
+     "reason": "재등장을 감정 승격 없이"}
+  ]
+}

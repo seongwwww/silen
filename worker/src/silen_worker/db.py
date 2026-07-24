@@ -174,3 +174,68 @@ def link_difference_evidence(
         "values (%s, %s) on conflict (difference_id, memory_id) do nothing",
         (difference_id, memory_id),
     )
+
+
+@dataclass
+class DifferenceFacts:
+    difference_id: str
+    user_id: str
+    entity_id: str
+    entity_name: str
+    entity_type: str
+    detection_method: str
+    description: str
+    date_iso: str
+
+
+def fetch_difference_for_narration(
+    conn: psycopg.Connection, difference_id: str
+) -> DifferenceFacts | None:
+    """서술 재료를 엔티티 조인으로 읽는다. 엔티티 차이(entity_id 있음)이고
+    근거가 살아있는(intact) 것만 대상. 서술 대상은 status=candidate로 한정한다
+    (스펙 §1) — 사용자가 '아니에요'(dismissed) 한 차이는 서술하지 않는다.
+    저장은 여기서 읽은 user_id로 귀속한다."""
+    row = conn.execute(
+        """
+        select d.id::text, d.user_id::text, d.entity_id::text,
+               e.name, e.entity_type, d.detection_method,
+               coalesce(d.description, ''), d.date::text
+        from public.differences d
+        join public.entities e on e.id = d.entity_id
+        where d.id = %s
+          and d.entity_id is not null
+          and d.evidence_state = 'intact'
+          and d.status = 'candidate'
+        """,
+        (difference_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return DifferenceFacts(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7])
+
+
+def upsert_narration(
+    conn: psycopg.Connection,
+    user_id: str,
+    difference_id: str,
+    headline: str,
+    body: str,
+    evidence_text: str,
+    model: str,
+) -> str:
+    """difference_id 자연키로 멱등 upsert. 재서술은 덮어쓴다."""
+    row = conn.execute(
+        """
+        insert into public.difference_narrations
+          (user_id, difference_id, headline, body, evidence_text, model)
+        values (%s, %s, %s, %s, %s, %s)
+        on conflict (difference_id) do update
+          set headline = excluded.headline,
+              body = excluded.body,
+              evidence_text = excluded.evidence_text,
+              model = excluded.model
+        returning id::text
+        """,
+        (user_id, difference_id, headline, body, evidence_text, model),
+    ).fetchone()
+    return row[0]
