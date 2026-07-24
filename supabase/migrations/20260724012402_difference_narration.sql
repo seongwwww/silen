@@ -14,10 +14,10 @@ create table public.difference_narrations (
 create index difference_narrations_user_idx on public.difference_narrations (user_id);
 
 alter table public.difference_narrations enable row level security;
+-- 쓰기는 워커(service_role/postgres)만. select-only 정책으로 RLS도 2차 차단(deletions 패턴).
 create policy "본인 데이터만" on public.difference_narrations
-  for all to authenticated
-  using (user_id = (select auth.uid()))
-  with check (user_id = (select auth.uid()));
+  for select to authenticated
+  using (user_id = (select auth.uid()));
 
 -- 신규 테이블이라 과거 일괄 grant에 안 잡힌다. 여기서 명시한다.
 -- 서술은 사용자에게 읽기 전용 — 쓰기는 워커(service_role/postgres)만.

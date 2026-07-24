@@ -3,7 +3,7 @@ import pytest
 from tests.conftest import seed_user, seed_memory, delete_user
 
 
-def _mk_difference(conn, user_id, memory_id):
+def _mk_difference(conn, user_id):
     """엔티티 차이 하나를 만들어 그 id를 돌려준다. narration의 FK 대상."""
     ent = conn.execute(
         "insert into public.entities (user_id, entity_type, name, normalized_name) "
@@ -28,8 +28,8 @@ def _mk_difference(conn, user_id, memory_id):
 def test_서술을_저장하고_읽는다(conn):
     user = seed_user(conn)
     try:
-        mem = seed_memory(conn, user, "김밥 먹음")
-        diff = _mk_difference(conn, user, mem)
+        seed_memory(conn, user, "김밥 먹음")
+        diff = _mk_difference(conn, user)
         conn.execute(
             "insert into public.difference_narrations "
             "(user_id, difference_id, headline, body, evidence_text, model) "
@@ -50,8 +50,8 @@ def test_서술을_저장하고_읽는다(conn):
 def test_difference당_서술은_하나다(conn):
     user = seed_user(conn)
     try:
-        mem = seed_memory(conn, user, "김밥 먹음")
-        diff = _mk_difference(conn, user, mem)
+        seed_memory(conn, user, "김밥 먹음")
+        diff = _mk_difference(conn, user)
         conn.execute(
             "insert into public.difference_narrations "
             "(user_id, difference_id, headline, body, evidence_text, model) "
@@ -73,8 +73,8 @@ def test_difference당_서술은_하나다(conn):
 def test_difference_삭제시_서술도_사라진다(conn):
     user = seed_user(conn)
     try:
-        mem = seed_memory(conn, user, "김밥 먹음")
-        diff = _mk_difference(conn, user, mem)
+        seed_memory(conn, user, "김밥 먹음")
+        diff = _mk_difference(conn, user)
         conn.execute(
             "insert into public.difference_narrations "
             "(user_id, difference_id, headline, body, evidence_text, model) "
