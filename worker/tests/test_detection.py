@@ -14,10 +14,6 @@ def _win(dates, occurred_before, etype="thing", eid="e1"):
     return EntityWindow(eid, etype, frozenset(dates), occurred_before)
 
 
-def _by_id(diffs):
-    return {d.entity_id: d for d in diffs}
-
-
 def test_이력_없는_엔티티는_first_occurrence():
     out = detect_differences(TARGET, [_win({TARGET}, occurred_before=False)])
     assert len(out) == 1

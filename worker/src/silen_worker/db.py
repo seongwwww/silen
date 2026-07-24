@@ -102,8 +102,9 @@ def fetch_window_occurrences(
           and m.is_locked = false
           and m.captured_at >= %s
           and m.captured_at < %s
+          and e.user_id = %s
         """,
-        (user_id, lower, upper),
+        (user_id, lower, upper, user_id),
     ).fetchall()
     return [OccurrenceRow(r[0], r[1], r[2], r[3], r[4]) for r in rows]
 

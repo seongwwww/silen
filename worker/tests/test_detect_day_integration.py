@@ -120,6 +120,19 @@ def test_타임존_경계_전날_늦은_메모는_오늘에_새지_않는다(con
 
 
 @pytest.mark.integration
+def test_공백_후_재등장이_freq_shift로_기록된다(conn):
+    user = seed_user(conn)
+    try:
+        ent = _entity(conn, user, "그노래", "thing")
+        _mention(conn, user, ent, "2026-07-14T02:00:00+00")  # 9일 전(KST 07-14)
+        _mention(conn, user, ent, "2026-07-23T02:00:00+00")  # 오늘(KST 07-23)
+        detect_day(conn, user, "2026-07-23")
+        assert _diffs(conn, user) == [("freq_shift", "9일 만에 재등장(최근 28일 내)")]
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
 def test_타_사용자_엔티티는_절대_섞이지_않는다(conn):
     alice = seed_user(conn)
     bob = seed_user(conn)
