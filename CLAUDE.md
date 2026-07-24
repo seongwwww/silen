@@ -3,6 +3,11 @@
 > "실은 아무것도 아니지 않았다." 똑같다고 생각한 하루에서 놓친 차이를 찾아주는 앱.
 > 이 파일은 **항상 적용되는 핵심 원칙**만 담는다. 세부 규칙은 `.claude/rules/`, 절차는 Skill, 강제 검사는 Hook으로 분리한다. 200줄 이하 유지.
 
+## 멀티 에이전트 · 세션 연속성
+
+- 이 저장소는 여러 AI(Claude · Codex · Gemini · Cursor)가 번갈아 작업한다. **`AGENTS.md`가 모든 에이전트의 공통 진입점**이다(Codex·Cursor 등은 자동으로 읽는다). 시작 순서·워크플로·핸드오프 절차는 거기 있다.
+- 대화 컨텍스트는 세션과 함께 사라진다. **세션 한도 근접(≈80%)이나 작업 중단 시** `PROJECT_STATE.md`(현재 단계)와 `.superpowers/sdd/progress.md`(진행 중 기능의 태스크·커밋 SHA)를 갱신하고, 이어받을 상태를 git에 남긴다 — 추적 안 된 파일은 다음 세션·에이전트에서 보이지 않는다.
+
 ## 제품 불변 원칙 (product invariants)
 
 - **탐지는 통계·규칙이, 서술은 LLM이.** deterministic detector만 차이를 검출한다. LLM에게 "차이를 찾아줘"라고 시키지 않는다.
@@ -43,7 +48,7 @@
 - `.claude/rules/ai-evals.md` — 탐지/서술 분리·골든셋·프롬프트 회귀
 - `.claude/rules/testing.md` — 테스트 전략·커버리지 기준
 - `.claude/rules/git.md` — 커밋 단위·메시지 규약·브랜치·히스토리 프라이버시
-- `AGENTS.md` — Next.js 16 버전 고지. **앱 코드 작성 전 `node_modules/next/dist/docs/`의 해당 문서를 먼저 읽는다.** 이 버전은 학습 데이터와 API·관례가 다르다.
+- `AGENTS.md` — **모든 AI 공통 진입점**(시작 순서·워크플로·세션 핸드오프) + Next.js 16 버전 고지. **앱 코드 작성 전 `node_modules/next/dist/docs/`의 해당 문서를 먼저 읽는다.** 이 버전은 학습 데이터와 API·관례가 다르다.
 
 ## 표준 개발 루프 (기능 단위)
 
