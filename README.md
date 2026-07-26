@@ -23,6 +23,7 @@ worker/src/silen_worker/db.py         # 워커 DB 접근(user 스코프 강제)
 fixtures/               # 두 자산이 공유하는 골든 케이스
 evals/entities/         # 엔티티 추출 골든셋 (환각·빈날·조사·병합·4종)
 evals/narration/        # 차이 서술 골든셋 (조언·인과·감정승격 방지)
+evals/diary/            # 일기 생성 골든셋 (환각·평범한날·근거정합)
 supabase/migrations/    # 마이그레이션 (down/ 에 보상 스크립트)
 docs/
   planning/서비스_기획서.md   # 제품 기획 (단일 출처)
@@ -79,6 +80,9 @@ worker\.venv\Scripts\python.exe evals/entities/run.py
 
 # 차이 서술 eval — 실 Vertex Gemini 호출(비용), ADC + env 3종 필요
 worker\.venv\Scripts\python.exe evals/narration/run.py
+
+# 일기 생성 eval — 실 Vertex Gemini 호출(비용), ADC + env 3종 필요
+worker\.venv\Scripts\python.exe evals/diary/run.py
 ```
 
 > shadcn/ui는 첫 화면 작업 시 도입.

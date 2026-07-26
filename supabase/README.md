@@ -85,3 +85,13 @@ Supabase CLI에는 down 마이그레이션 개념이 없다. `database.md`가 �
 - 입력은 구조화 사실만(엔티티명·통계 근거). **메모 본문은 전송하지 않는다.**
 - 가드레일이 엔티티명 정합·조언/인과 블록리스트·길이를 검사해 통과분만 저장.
 - 서술은 사용자에게 **읽기 전용**(쓰기는 워커). difference 삭제 시 cascade.
+
+## 일기 생성(diary)
+
+- 워커가 `generate_diary(user_id, date)`로 그날 메모(raw_text)+confirmed 차이를
+  담백한 하루 일기로 엮어 `diaries`(하루 1건, unique)+`diary_sections`(오늘의한문장·
+  본문·다른점)+`diary_sources`(메모 근거)에 저장한다.
+- **하루 1건 멱등·자동 재생성 금지.** force=True(명시적 다시 만들기)만 재생성하며
+  그것도 status='draft'일 때만 — 유저가 편집한(edited/confirmed) 일기는 보존한다.
+- 빈 날(메모 0)은 일기를 만들지 않는다. 가드레일이 근거 정합(used⊆입력)·조언/인과를
+  검사해 통과분만 저장. 스키마 변경 없음(기존 테이블 재사용).
