@@ -39,11 +39,12 @@ Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스�
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
 - **계획 확정 커밋:** `6b58e49` · **스펙 커밋:** `9a546b1`.
-- **구현 진행:** 0 / 6 태스크.
-- **커밋된 태스크:** (없음)
-- **다음 시작점:** Task 1 — `lib/services/difference.ts` 전이 규칙(순수 단위 테스트부터).
-- **참고:** 파이프라인 트리거가 없어 라이브 차이 데이터가 없다 → 통합 테스트는 계획의 시드로. Task 3 `shadcn@latest init -d`는 Tailwind v4 자동 감지(대화형이면 defaults).
-- **막힘/결정 필요:** (없음)
+- **구현 진행:** Task 1~5 완료. Task 6 문서·전체 검사 완료, 보안 리뷰 Important 판단 대기.
+- **커밋된 태스크:** Task 1 `1f0c34a` · Task 2 `f5b409a` · Task 3 `448d201` · Task 4 `e1935e8` · Task 5 `36f8beb` · Task 6 문서 `626d2c2`.
+- **검증:** lint PASS · 앱 단위 28 PASS · 현재 로컬 Supabase+라이브 Next 기준 통합 38 PASS · production build PASS. `/review` 모바일 390px empty 상태 육안 확인. 카드·낙관적 제거·실패 복구·undo는 컴포넌트 테스트 3 PASS. DB reset은 `AGENTS.md`상 사람이 실행해야 하므로 이번 세션에서 미실행.
+- **다음 시작점:** 아래 보안 Important를 Claude/컨트롤러가 해결 또는 명시 수용. 해결 시 TDD 회귀 추가 → 전체 검사 → Task 6 Step 5 브랜치 마무리(병합·push는 사람).
+- **참고:** 파이프라인 트리거가 없어 라이브 차이 데이터가 없다 → 통합 테스트는 계획의 시드로. 브라우저에는 로그인 UI가 없고 로컬 매직링크가 implicit hash로 돌아 서버 세션을 만들지 못해 시드 카드 종단 육안 확인은 불가했음(인증 우회/테스트 전용 경로 추가 안 함).
+- **막힘/결정 필요:** (1) **보안 리뷰 Important — 상태 전이 TOCTOU.** PATCH가 현재 status를 조회·검증한 뒤 `updateStatus(id,target)`를 조건 없이 실행한다. 동시에 candidate→confirmed와 candidate→dismissed 요청이 오면 둘 다 candidate를 읽고 둘 다 성공해 직접 전이 금지를 우회할 수 있음. 해결 후보: 저장소 update에 expected current status 조건(`.eq("status", current)`)을 포함하고 0행이면 conflict/invalid_transition으로 처리 + 동시성/낡은 상태 회귀 테스트(계획 인터페이스 변경 필요). (2) `npm audit --omit=dev`: HIGH 3(기존 pinned Next 16.2.11→내장 postcss/sharp), MODERATE 3(새 `shadcn@4.15.0`→MCP SDK/Hono). audit 제안은 Next 9.3.3·shadcn 3.8.3 major downgrade라 자동 적용 금지. shadcn CLI를 devDependency로 옮길지와 Next 보안 업데이트 경로를 별도 결정해야 함. 그 외 PATCH 본인 소유권(RLS)·세션 없음 401·목록 교차 사용자 차단·본문/헤드라인 무로그는 HIGH/MEDIUM 없음.
 
 > 직전 완료: 일기 생성(diary) 기능 — PR 병합됨(`main`). 상세는 git 히스토리.
 
