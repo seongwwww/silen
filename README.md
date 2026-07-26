@@ -12,10 +12,13 @@ AGENTS.md               # Next.js 16 버전 고지 (코드 작성 전 필독)
 .claude/rules/          # 도메인별 규칙 (프론트/백엔드/DB/프라이버시/AI-eval/테스트/git)
 app/                    # 경계 계층 — Route Handler·페이지
 app/api/memories/       # 기록 생성 API (텍스트·감정·사진)
+app/api/differences/    # 차이 확인 PATCH API (전이 검증·RLS)
+app/review/             # 오늘의 다른 점 확인 화면
 lib/time/               # "하루" 경계 단일 유틸
 lib/services/           # 서비스 계층 (프레임워크 타입을 모름)
 lib/repositories/       # 저장소 계층 (쿼리·user 스코프 강제)
-components/ui|common/   # 공통 컴포넌트 (frontend.md)
+components/ui/          # shadcn/ui primitive
+components/common/      # 실은 도메인 공통 컴포넌트
 worker/                 # Python 워커 (차이 탐지·AI 잡)
 worker/src/silen_worker/tasks/        # 큐 소비 잡 진입점(process_pending)
 worker/src/silen_worker/extraction/   # 엔티티 추출 (가드레일·정규화·Vertex Gemini)
@@ -33,6 +36,8 @@ docs/
   decisions/                 # ADR (중요 결정 기록)
   superpowers/               # 스펙·구현 계획
 ```
+
+확인 UI(`/review`)는 narrated 후보를 보여주고 [맞아요]/[아니에요]로 확정하며, 실패 복구와 5초 undo를 제공한다.
 
 ## 개발 환경 세팅
 
