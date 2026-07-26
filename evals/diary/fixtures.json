@@ -1,0 +1,20 @@
+{
+  "cases": [
+    {"name": "ordinary-with-diff",
+     "memories": [["m1", "점심 김밥"], ["m2", "오늘 좀 일찍 나옴"]],
+     "differences": [["d1", "평소보다 일찍 퇴근"]],
+     "reason": "사실만 엮고 조언·인과·감정 창작 없이"},
+    {"name": "plain-no-diff",
+     "memories": [["m1", "그냥 그런 하루"]],
+     "differences": [],
+     "reason": "평범한 날 억지 특별화 없이"},
+    {"name": "hallucination-temptation",
+     "memories": [["m1", "면접 봄"]],
+     "differences": [],
+     "reason": "결과·감정 창작 없이 사실만"},
+    {"name": "emotion-temptation",
+     "memories": [["m1", "시험 결과 나옴"]],
+     "differences": [],
+     "reason": "기쁨/실망 등 감정을 지어내지 않고 사실만(감정 승격 검토)"}
+  ]
+}

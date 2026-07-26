@@ -1,0 +1,100 @@
+"""일기 생성 골든셋 러너 (ai-evals.md: 환각·감정 승격·조언·근거 정합·평범한날).
+
+실 Gemini 원시 출력(raw)을 검사한다(모델/프롬프트 회귀 게이트).
+자동 게이트: 조언·인과·응원(블록리스트)·근거 정합(used ⊆ 입력)·빈필드.
+환각(입력 밖 사실)·감정 승격은 결정적 검사가 어려워 자동 게이트가 아니다 —
+생성된 one_line·body를 케이스별로 출력해 사람이 검토한다(각 케이스 reason 참고).
+guardrail 통과 여부도 부가 확인.
+
+CI 게이트: 케이스 하나라도 실패하면 종료 코드 1.
+
+실행 (실 Vertex, 비용):
+    $env:GOOGLE_GENAI_USE_VERTEXAI = "true"
+    $env:GOOGLE_CLOUD_PROJECT = "..."
+    $env:GOOGLE_CLOUD_LOCATION = "global"
+    worker\\.venv\\Scripts\\python.exe evals/diary/run.py
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+from silen_worker.diary.gemini import GeminiDiaryWriter
+from silen_worker.diary.service import DiaryDifference, DiaryInput, DiaryMemory, guardrail
+from silen_worker.narration.constants import FORBIDDEN_PHRASES
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except AttributeError:
+    pass
+
+FIXTURES_PATH = Path(__file__).parent / "fixtures.json"
+
+
+def _facts(case: dict) -> DiaryInput:
+    return DiaryInput(
+        date_iso="2026-07-24", user_id="eval",
+        memories=[DiaryMemory(mid, text) for mid, text in case["memories"]],
+        differences=[DiaryDifference(did, h) for did, h in case["differences"]],
+    )
+
+
+def run_case(case: dict, writer: GeminiDiaryWriter) -> tuple[bool, list[str]]:
+    facts = _facts(case)
+    raw = writer.write(facts)
+    failures: list[str] = []
+
+    one_line = str(raw.get("one_line") or "").strip()
+    body = str(raw.get("body") or "").strip()
+    blob = f"{one_line} {body}"
+
+    hit = [p for p in FORBIDDEN_PHRASES if p in blob]
+    if hit:
+        failures.append(f"조언/인과/응원 혼입: {hit}")
+    if not one_line or not body:
+        failures.append("빈 필드")
+
+    used_mem = [str(x) for x in (raw.get("used_memory_ids") or [])]
+    used_diff = [str(x) for x in (raw.get("used_difference_ids") or [])]
+    input_mem = {m.memory_id for m in facts.memories}
+    input_diff = {d.difference_id for d in facts.differences}
+    if not set(used_mem) <= input_mem:
+        failures.append(f"근거 정합 위반(메모): {used_mem} ⊄ {sorted(input_mem)}")
+    if not set(used_diff) <= input_diff:
+        failures.append(f"근거 정합 위반(차이): {used_diff} ⊄ {sorted(input_diff)}")
+
+    if not failures and guardrail(raw, facts) is None:
+        failures.append("정상 출력인데 guardrail 탈락(길이 등 확인)")
+
+    return (not failures, failures, raw)
+
+
+def main() -> int:
+    fixtures = json.loads(FIXTURES_PATH.read_text(encoding="utf-8"))
+    writer = GeminiDiaryWriter()
+
+    n_pass = 0
+    print("=== 일기 생성 골든셋 결과 ===")
+    for case in fixtures["cases"]:
+        passed, failures, raw = run_case(case, writer)
+        n_pass += 1 if passed else 0
+        print(f"[{'PASS' if passed else 'FAIL'}] {case['name']}  ({case.get('reason', '')})")
+        print(f"    one_line: {str(raw.get('one_line') or '').strip()}")
+        print(f"    body: {str(raw.get('body') or '').strip()}")
+        for f in failures:
+            print(f"    - {f}")
+
+    total = len(fixtures["cases"])
+    print(f"\n케이스: {n_pass}/{total} 통과")
+    if n_pass < total:
+        print("결과: FAIL — 게이트 실패, 종료 코드 1")
+        return 1
+    print("결과: PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
