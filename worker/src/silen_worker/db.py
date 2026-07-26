@@ -308,8 +308,10 @@ def fetch_existing_diary(
 
 def upsert_diary(
     conn: psycopg.Connection, user_id: str, target_date: date, generated_text: str
-) -> str:
-    """(user_id, date) 자연키로 멱등 upsert. 재생성 시 본문 갱신·status='draft'."""
+) -> str | None:
+    """(user_id, date) 자연키로 멱등 upsert. 재생성은 status='draft'일 때만 덮어쓴다.
+    유저가 편집한(edited/confirmed) 행이면 DB 레벨에서 미갱신하고 None을 반환한다 —
+    체크와 쓰기 사이의 경쟁 조건에서도 '유저 말이 이긴다'를 원자적으로 강제한다."""
     row = conn.execute(
         """
         insert into public.diaries (user_id, date, status, style_profile, generated_text)
@@ -318,11 +320,12 @@ def upsert_diary(
           set generated_text = excluded.generated_text,
               status = 'draft',
               style_profile = excluded.style_profile
+          where diaries.status = 'draft'
         returning id::text
         """,
         (user_id, target_date, generated_text),
     ).fetchone()
-    return row[0]
+    return row[0] if row is not None else None
 
 
 def replace_diary_sections(

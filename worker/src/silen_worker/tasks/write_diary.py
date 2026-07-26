@@ -61,6 +61,10 @@ def generate_diary(
         return None
 
     diary_id = upsert_diary(conn, user_id, target, diary.body)
+    if diary_id is None:
+        # 경쟁 조건: status 확인 후 upsert 전에 유저가 편집 → 보호(덮지 않음).
+        # 섹션·출처도 건드리지 않고 기존 일기 id를 그대로 반환한다.
+        return existing[0] if existing is not None else None
     headline_by_id = {d.difference_id: d.headline for d in facts.differences}
     used_diff_pairs = [(did, headline_by_id.get(did, "")) for did in diary.used_difference_ids]
     replace_diary_sections(conn, diary_id, diary.one_line, diary.body, used_diff_pairs)

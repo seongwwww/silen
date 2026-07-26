@@ -40,6 +40,7 @@
 14. **커밋/푸시** — 커밋만, 사람이 push/merge. Co-Authored-By 트레일러.
 15. **원자성** — 워커는 autocommit(detector/narration과 동일). `upsert_diary`→`replace_diary_sections`→`replace_diary_sources`는 각각 커밋되어 원자적이지 않다. 중간 실패 시 부분 일기가 남을 수 있으나 기존 diary는 `status='draft'`라 **force=True 재생성으로 복구**된다. MVP는 이 창을 수용한다(명시적 트랜잭션 미도입).
 16. **가드레일 탈락 시 기존 draft 보존** — `upsert_diary`는 가드레일 통과 뒤에 호출된다. force+draft인데 새 생성이 가드레일 탈락(또는 메모 0)이면 upsert 전에 `None`을 반환하므로 **기존 draft를 건드리지 않는다**.
+17. **편집 보호는 DB 레벨에서 원자적** (보안 리뷰 Important) — `generate_diary`의 이른 status 확인과 `upsert_diary` 사이에 유저가 편집하면 경쟁 조건이 생긴다. 이를 막기 위해 `upsert_diary`의 conflict update에 `where diaries.status='draft'` 조건을 두어 **draft일 때만 원자적으로 덮어쓰고**, 편집된 행이면 미갱신·`None` 반환한다. `generate_diary`는 `None`이면 섹션/출처를 건드리지 않고 기존 diary_id를 반환한다. #15의 autocommit 비원자성 수용은 부분 일기(force 복구 가능)에 한하며, **사용자 편집 소실은 이 규칙으로 차단**한다.
 
 ## File Structure
 
@@ -338,7 +339,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
   def fetch_diary_memories(conn, user_id, target_date) -> list[DiaryMemoryRow]
   def fetch_confirmed_differences(conn, user_id, target_date) -> list[tuple[str, str]]  # (difference_id, headline)
   def fetch_existing_diary(conn, user_id, target_date) -> tuple[str, str] | None        # (diary_id, status)
-  def upsert_diary(conn, user_id, target_date, generated_text) -> str                   # diary_id
+  def upsert_diary(conn, user_id, target_date, generated_text) -> str | None            # diary_id, 편집된 행이면 None
   def replace_diary_sections(conn, diary_id, one_line, body, used_differences) -> None  # used_differences: list[(diff_id, headline)]
   def replace_diary_sources(conn, diary_id, memory_ids) -> None
   ```
@@ -415,8 +416,10 @@ def fetch_existing_diary(
 
 def upsert_diary(
     conn: psycopg.Connection, user_id: str, target_date: date, generated_text: str
-) -> str:
-    """(user_id, date) 자연키로 멱등 upsert. 재생성 시 본문 갱신·status='draft'."""
+) -> str | None:
+    """(user_id, date) 자연키로 멱등 upsert. 재생성은 status='draft'일 때만 덮어쓴다.
+    유저가 편집한(edited/confirmed) 행이면 DB 레벨에서 미갱신하고 None을 반환한다 —
+    체크와 쓰기 사이의 경쟁 조건에서도 '유저 말이 이긴다'를 원자적으로 강제한다."""
     row = conn.execute(
         """
         insert into public.diaries (user_id, date, status, style_profile, generated_text)
@@ -425,11 +428,12 @@ def upsert_diary(
           set generated_text = excluded.generated_text,
               status = 'draft',
               style_profile = excluded.style_profile
+          where diaries.status = 'draft'
         returning id::text
         """,
         (user_id, target_date, generated_text),
     ).fetchone()
-    return row[0]
+    return row[0] if row is not None else None
 
 
 def replace_diary_sections(
@@ -604,6 +608,30 @@ def test_기존_일기_조회(conn):
         assert got == (did, "draft")
     finally:
         delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_upsert는_편집된_일기를_덮지_않는다(conn):
+    # force 재생성 경쟁 조건 방어: status가 draft가 아니면(유저 편집) upsert는
+    # DB 레벨에서 미갱신하고 None을 반환한다("유저 말이 이긴다").
+    user = seed_user(conn)
+    try:
+        did = upsert_diary(conn, user, date.today(), "draft 본문")
+        conn.execute(
+            "update public.diaries set status = 'edited', edited_text = '내가 고침' where id = %s",
+            (did,),
+        )
+        got = upsert_diary(conn, user, date.today(), "덮으려는 새 본문")
+        assert got is None  # 편집된 행 — 미갱신
+        row = conn.execute(
+            "select status, generated_text, edited_text from public.diaries where id = %s",
+            (did,),
+        ).fetchone()
+        assert row[0] == "edited"      # 상태 보존
+        assert row[1] == "draft 본문"   # 본문 안 덮임
+        assert row[2] == "내가 고침"     # 편집 보존
+    finally:
+        delete_user(conn, user)
 ```
 
 - [ ] **Step 3: 실행**
@@ -612,7 +640,7 @@ def test_기존_일기_조회(conn):
 worker\.venv\Scripts\python.exe -m pytest worker/tests/test_diary_repo_integration.py -m integration -v
 worker\.venv\Scripts\python.exe -m ruff check worker
 ```
-Expected: 6건 PASS, ruff 통과.
+Expected: 7건 PASS, ruff 통과.
 
 - [ ] **Step 4: 커밋**
 
@@ -709,6 +737,9 @@ def generate_diary(
         return None
 
     diary_id = upsert_diary(conn, user_id, target, diary.body)
+    if diary_id is None:
+        # 경쟁 조건: status 확인 후 upsert 전에 유저가 편집 → 보호(덮지 않음).
+        return existing[0] if existing is not None else None
     headline_by_id = {d.difference_id: d.headline for d in facts.differences}
     used_diff_pairs = [(did, headline_by_id.get(did, "")) for did in diary.used_difference_ids]
     replace_diary_sections(conn, diary_id, diary.one_line, diary.body, used_diff_pairs)

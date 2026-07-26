@@ -130,3 +130,27 @@ def test_기존_일기_조회(conn):
         assert got == (did, "draft")
     finally:
         delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_upsert는_편집된_일기를_덮지_않는다(conn):
+    # force 재생성 경쟁 조건 방어: status가 draft가 아니면(유저 편집) upsert는
+    # DB 레벨에서 미갱신하고 None을 반환한다("유저 말이 이긴다").
+    user = seed_user(conn)
+    try:
+        did = upsert_diary(conn, user, date.today(), "draft 본문")
+        conn.execute(
+            "update public.diaries set status = 'edited', edited_text = '내가 고침' where id = %s",
+            (did,),
+        )
+        got = upsert_diary(conn, user, date.today(), "덮으려는 새 본문")
+        assert got is None  # 편집된 행 — 미갱신
+        row = conn.execute(
+            "select status, generated_text, edited_text from public.diaries where id = %s",
+            (did,),
+        ).fetchone()
+        assert row[0] == "edited"      # 상태 보존
+        assert row[1] == "draft 본문"   # 본문 안 덮임
+        assert row[2] == "내가 고침"     # 편집 보존
+    finally:
+        delete_user(conn, user)
