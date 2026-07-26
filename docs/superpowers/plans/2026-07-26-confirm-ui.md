@@ -4,7 +4,7 @@
 
 **Goal:** `/review`에서 narrated 후보 차이를 카드로 보여주고 맞아요/아니에요(+undo)로 확정한다 — `PATCH /api/differences/[id]`(3계층·RLS) + 서버 컴포넌트 패칭 + 낙관적 제거.
 
-**Architecture:** 앱 2자산 3계층. 백엔드는 서비스(전이 규칙, 순수)→저장소(세션 클라이언트, user 스코프)→경계(route/서버컴포넌트). 프론트는 서버 컴포넌트가 목록을 패칭해 클라이언트 리스트에 주입, 클라이언트는 낙관적 제거+인라인 undo만. 첫 UI라 primitive는 shadcn 없이 Tailwind v4로 최소 hand-roll. 스키마 변경 없음.
+**Architecture:** 앱 2자산 3계층. 백엔드는 서비스(전이 규칙, 순수)→저장소(세션 클라이언트, user 스코프)→경계(route/서버컴포넌트). 프론트는 서버 컴포넌트가 목록을 패칭해 클라이언트 리스트에 주입, 클라이언트는 낙관적 제거+sonner undo 토스트만. 첫 UI라 shadcn/ui 도입(button·card·sonner). 스키마 변경 없음.
 
 **Tech Stack:** Next.js 16.2.11(App Router) · React 19 · TypeScript · Tailwind v4 · @supabase/ssr · zod 4 · Vitest 4 (+ 컴포넌트 테스트 도입)
 
@@ -16,7 +16,7 @@
 - **앱 코드 전 Next.js 16 문서 필독**(AGENTS.md): `node_modules/next/dist/docs/01-app/`의 route-handlers·server component·loading/error 규약. 학습데이터와 다르다.
 - **Next 16 동적 라우트 `params`는 Promise** — `PATCH(req, ctx)`에서 `const { id } = await ctx.params`. (문서 15-route-handlers.md:195 확인)
 - **RLS가 유일한 소유권 방어** — 세션 Supabase 클라이언트로 조회/수정, `user_id=auth.uid()` 정책이 교차 사용자 차단. service_role 쓰지 않는다.
-- **shadcn 미도입(스펙 이탈, 의도적)** — 실제 스택이 Tailwind v4 + 컴포넌트 라이브러리 전무라, 이 슬라이스는 Button/Card를 Tailwind v4로 hand-roll하고 undo는 인라인 바(토스트 라이브러리 없음). 새 런타임 의존성 0. shadcn은 UI가 늘 때 별도 도입.
+- **shadcn/ui 도입(스펙대로)** — `npx shadcn@latest init -d`(비대화, defaults) 후 `npx shadcn@latest add button card sonner`. Tailwind v4 자동 감지, CSS 변수는 `app/globals.css`에 기록됨. 아이콘은 `lucide-react`(shadcn이 설치), undo는 `sonner` 토스트. init이 대화형으로 멈추면 defaults로 답한다. 컴포넌트 파일명은 소문자(`button.tsx`·`card.tsx`·`sonner.tsx`).
 - **프론트 컴포넌트 테스트 도입** — devDep `@testing-library/react`·`@testing-library/jest-dom`·`jsdom`·`@vitejs/plugin-react`. `vitest.config.mts`에 `react()` 플러그인 + `.tsx`/`components/**` include. 컴포넌트 테스트 파일은 `// @vitest-environment jsdom`.
 - DoD = lint + typecheck + unit + integration. 파이프라인 트리거 없어 **시드 데이터로 통합 테스트**.
 - 상태·라벨은 frontend.md: 죄책감·독려 금지 · "AI가 발견" 표현 금지("오늘의 다른 점") · 맞아요/아니에요 라벨+아이콘+위치 구분·44px·색만으로 전달 금지 · empty/loading/error 명시.
@@ -26,9 +26,9 @@
 1. **전이 규칙** — 목표 status ∈ {`confirmed`,`dismissed`,`candidate`}. 허용 전이: `candidate`→`confirmed`|`dismissed`(확정), `confirmed`|`dismissed`→`candidate`(undo). 그 외(예: confirmed→dismissed 직접, 동일값) **거부(400)**.
 2. **목록 대상** — `differences` where `user_id=auth.uid()` · `status='candidate'` · `evidence_state='intact'`, INNER JOIN `difference_narrations`(headline), LEFT JOIN 근거 메모(`difference_evidence`→`memories`, `deleted_at is null and is_locked=false`). headline 없는 후보는 제외.
 3. **목록 응답 shape** — `{ id: string, headline: string, category: string, evidence: string[] }[]`. evidence는 근거 메모 raw_text 배열(최대 3개, 없으면 빈 배열).
-4. **undo = 인라인 바(단일 슬롯)** — 액션 탭 → 카드 낙관적 제거 → `PATCH{status}` → 하단 "되돌리기" 바(5초). 되돌리기 탭 → `PATCH{candidate}` + 카드 복원. 5초 경과 → 바 사라짐(확정). 새 액션이 오면 이전 바 대체.
+4. **undo = sonner 토스트** — 액션 탭 → 카드 낙관적 제거 → `PATCH{status}` → `toast("처리했어요", { action: { label: "되돌리기", onClick }, duration: 5000 })`. 되돌리기 탭 → `PATCH{candidate}` + 카드 복원. 토스트는 5초 후 자동 소멸(확정). `<Toaster/>`는 `app/layout.tsx`에 마운트.
 5. **PATCH 실패** — 카드 복원 + 에러 메시지("바꾸지 못했어요. 다시 시도"). 자동 재시도 없음.
-6. **primitive** — `components/ui/Button.tsx`·`Card.tsx`(Tailwind v4, 무의존). 아이콘은 인라인 SVG(check·x). 색 토큰은 `app/globals.css` `@theme`에 success/danger/border 추가(라이트·다크).
+6. **primitive = shadcn** — `components/ui/button.tsx`·`card.tsx`·`sonner.tsx`(shadcn add). 아이콘은 `lucide-react`(`Check`·`X`). 맞아요는 success 색 override(className), 아니에요는 `variant="outline"`. success 색 토큰(`--success-bg`/`--success-text`/`--danger-text`)은 shadcn 변수 옆 globals.css에 추가(라이트·다크).
 7. **라우트** — `/review`. `app/review/page.tsx`(서버 컴포넌트, 목록 패칭 후 주입), `_components/ReviewList.tsx`(`"use client"`). `loading.tsx`·`error.tsx`.
 8. **세션** — 서버 컴포넌트가 `createServerSupabase().auth.getUser()`. 세션 없거나 목록 0 → empty. `/review`는 세션을 새로 만들지 않는다(볼 게 없음).
 9. **저장소 경계 예외** — 기존 eslint `no-restricted-paths` 예외에 `differenceRepository.ts` 추가(경계가 조립, memoryRepository와 동형).
@@ -45,8 +45,9 @@
 | `app/api/differences/[id]/route.ts` | PATCH 경계(zod·await params·에러 매핑) |
 | `app/api/differences/[id]/route.integration.test.ts` | 라이브 PATCH(본인·타인·잘못된 전이) |
 | `eslint.config.mjs`(수정) | differenceRepository 예외 |
-| `app/globals.css`(수정) | success/danger/border 색 토큰 |
-| `components/ui/Button.tsx`·`Card.tsx` | primitive(Tailwind v4) |
+| `app/globals.css`(수정) | shadcn init이 기록 + success/danger 색 토큰 추가 |
+| `components/ui/button.tsx`·`card.tsx`·`sonner.tsx` | shadcn primitive |
+| `app/layout.tsx`(수정) | `<Toaster/>` 마운트 |
 | `components/common/ConfirmActions.tsx` | 맞아요/아니에요 액션 쌍(변형 A) |
 | `components/common/StateView.tsx` | empty/error/loading 재사용 뷰 |
 | `components/common/ConfirmActions.test.tsx` | a11y·라벨·콜백 단위 |
@@ -364,62 +365,43 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-## Task 3: UI primitive + 색 토큰
+## Task 3: shadcn 도입 (primitive·토스트·토큰)
 
-**Files:** Modify `app/globals.css`; Create `components/ui/Button.tsx`, `components/ui/Card.tsx`
+**Files:** shadcn init(`components.json`, `app/globals.css`, deps); Create `components/ui/button.tsx`·`card.tsx`·`sonner.tsx`(shadcn add); Modify `app/layout.tsx`, `app/globals.css`
 
-- [ ] **Step 1: 색 토큰** — `app/globals.css`의 `@theme inline` 아래에 추가(라이트) + 다크 미디어쿼리에도:
-```css
-@theme inline {
-  --color-success-bg: #e1f5ee;
-  --color-success-text: #0f6e56;
-  --color-danger-text: #a32d2d;
-  --color-line: #e5e5e5;
-}
-```
-다크(`@media (prefers-color-scheme: dark)` `:root`)에:
-```css
-  --color-success-bg: #08302a;
-  --color-success-text: #5dcaa5;
-  --color-danger-text: #f09595;
-  --color-line: #2a2a2a;
-```
-
-- [ ] **Step 2: Button** — `components/ui/Button.tsx`:
-```tsx
-import type { ButtonHTMLAttributes } from "react";
-
-type Variant = "neutral" | "success";
-
-/** 최소 primitive. 44px 터치 타깃, 포커스 링, prefers-reduced-motion 존중(트랜지션 없음). */
-export function Button({ variant = "neutral", className = "", ...props }:
-  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }) {
-  const base =
-    "inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg px-4 text-[15px] " +
-    "border outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:opacity-50";
-  const styles =
-    variant === "success"
-      ? "border-[var(--color-success-text)] bg-[var(--color-success-bg)] text-[var(--color-success-text)] font-medium"
-      : "border-[var(--color-line)] bg-transparent text-[var(--foreground)]";
-  return <button className={`${base} ${styles} ${className}`} {...props} />;
-}
-```
-
-- [ ] **Step 3: Card** — `components/ui/Card.tsx`:
-```tsx
-import type { HTMLAttributes } from "react";
-export function Card({ className = "", ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={`rounded-xl border border-[var(--color-line)] p-4 ${className}`} {...props} />;
-}
-```
-
-- [ ] **Step 4: 확인·커밋** — `npm run lint` (JSX 타입 통과). 시각 검증은 Task 5 이후 브라우저에서.
+- [ ] **Step 1: shadcn init + 컴포넌트**
 ```powershell
-git add app/globals.css components/ui/Button.tsx components/ui/Card.tsx
-git commit -m "feat(ui): Tailwind v4 primitive(Button·Card)와 색 토큰
+npx shadcn@latest init -d
+npx shadcn@latest add button card sonner
+```
+Tailwind v4를 자동 감지한다. `components.json` 생성, `app/globals.css`에 CSS 변수 기록, `class-variance-authority`·`clsx`·`tailwind-merge`·`lucide-react`·`sonner` 설치. init이 대화형으로 멈추면 기본값으로 답한다. 컴포넌트는 `components/ui/{button,card,sonner}.tsx`(소문자).
 
-shadcn 없이 최소 hand-roll. 44px·포커스 링. success/danger/line 토큰
-(라이트·다크). 첫 UI 기반.
+- [ ] **Step 2: success 색 토큰** — `app/globals.css`에 추가(shadcn 변수 옆). 라이트 `:root`:
+```css
+  --success-bg: #e1f5ee;
+  --success-text: #0f6e56;
+  --danger-text: #a32d2d;
+```
+다크 스코프(shadcn이 `.dark` 클래스로 만들었으면 `.dark`에, 미디어쿼리면 그쪽에 — init 결과 확인):
+```css
+  --success-bg: #08302a;
+  --success-text: #5dcaa5;
+  --danger-text: #f09595;
+```
+
+- [ ] **Step 3: Toaster 마운트** — `app/layout.tsx`의 `<body>` 안(children 뒤)에 추가:
+```tsx
+import { Toaster } from "@/components/ui/sonner";
+// <body> ... {children} <Toaster /> </body>
+```
+
+- [ ] **Step 4: 확인·커밋** — `npm run lint && npm run build`(타입).
+```powershell
+git add components.json app/globals.css app/layout.tsx components/ui package.json package-lock.json
+git commit -m "feat(ui): shadcn 도입 — button·card·sonner·success 토큰
+
+npx shadcn init + add button card sonner(Tailwind v4 자동 감지). success/
+danger 색 토큰 추가, layout에 Toaster 마운트. 첫 UI 기반.
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
@@ -479,27 +461,22 @@ describe("ConfirmActions", () => {
 
 - [ ] **Step 3: ConfirmActions 구현** — `components/common/ConfirmActions.tsx`:
 ```tsx
-import { Button } from "@/components/ui/Button";
-
-const IconCheck = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M5 12l4 4L19 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-);
-const IconX = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
-);
+import { Check, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 /** 차이 확정 액션 쌍. 아니에요(왼쪽)·맞아요(오른쪽), 색+아이콘+라벨로 구분(색만 X),
- * 44px, 사이 간격으로 오탭 방지. frontend.md 공통 컴포넌트. */
+ * min-h 44px(shadcn 기본 h-9 override), 사이 간격으로 오탭 방지. frontend.md 공통. */
 export function ConfirmActions({ onConfirm, onDismiss }: { onConfirm: () => void; onDismiss: () => void }) {
   return (
     <div className="flex gap-3">
-      <Button variant="neutral" className="flex-1" onClick={onDismiss}>
-        <span className="text-[var(--color-danger-text)]"><IconX /></span>아니에요
+      <Button variant="outline" className="min-h-11 flex-1" onClick={onDismiss}>
+        <X className="size-4 text-[var(--danger-text)]" aria-hidden />아니에요
       </Button>
-      <Button variant="success" className="flex-1" onClick={onConfirm}>
-        <IconCheck />맞아요
+      <Button
+        variant="outline"
+        className="min-h-11 flex-1 border-[var(--success-text)] bg-[var(--success-bg)] font-medium text-[var(--success-text)]"
+        onClick={onConfirm}>
+        <Check className="size-4" aria-hidden />맞아요
       </Button>
     </div>
   );
@@ -510,19 +487,19 @@ export function ConfirmActions({ onConfirm, onDismiss }: { onConfirm: () => void
 ```tsx
 /** empty/error/loading 재사용 뷰. 담담한 문구(죄책감·독려 금지). */
 export function EmptyState({ message = "확인할 차이가 없어요" }: { message?: string }) {
-  return <p className="py-16 text-center text-[15px] text-[var(--foreground)] opacity-60">{message}</p>;
+  return <p className="py-16 text-center text-[15px] text-muted-foreground">{message}</p>;
 }
 export function ErrorState({ onRetry }: { onRetry?: () => void }) {
   return (
     <div className="py-16 text-center">
-      <p className="text-[15px] opacity-70">불러오지 못했어요.</p>
+      <p className="text-[15px] text-muted-foreground">불러오지 못했어요.</p>
       {onRetry && <button className="mt-2 underline" onClick={onRetry}>다시 시도</button>}
     </div>
   );
 }
 export function LoadingState() {
   return <div className="space-y-3 py-4" aria-hidden="true">
-    {[0, 1, 2].map((i) => <div key={i} className="h-24 rounded-xl border border-[var(--color-line)]" />)}
+    {[0, 1, 2].map((i) => <div key={i} className="h-24 rounded-xl border" />)}
   </div>;
 }
 ```
@@ -573,40 +550,44 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ReviewList } from "./ReviewList";
 
-const items = [{ id: "d1", headline: "3일째 김밥", category: "오늘의다른점", evidence: ["점심에 김밥"] }];
+import { Toaster } from "@/components/ui/sonner";
 
-beforeEach(() => { vi.restoreAllMocks(); });
+const items = [{ id: "d1", headline: "3일째 김밥", category: "오늘의다른점", evidence: ["점심에 김밥"] }];
+beforeEach(() => vi.restoreAllMocks());
+const renderList = () => render(<><ReviewList items={items} /><Toaster /></>);
 
 describe("ReviewList", () => {
-  it("맞아요 탭하면 카드가 사라지고 되돌리기 바가 뜬다", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
-    render(<ReviewList items={items} />);
+  it("맞아요 탭하면 카드가 사라지고 PATCH가 confirmed로 불린다", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    renderList();
     await userEvent.click(screen.getByRole("button", { name: "맞아요" }));
     expect(screen.queryByText("3일째 김밥")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "되돌리기" })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith("/api/differences/d1", expect.objectContaining({ method: "PATCH" }));
   });
-  it("되돌리기 탭하면 카드가 복원된다", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
-    render(<ReviewList items={items} />);
-    await userEvent.click(screen.getByRole("button", { name: "아니에요" }));
-    await userEvent.click(screen.getByRole("button", { name: "되돌리기" }));
-    expect(screen.getByText("3일째 김밥")).toBeInTheDocument();
-  });
-  it("PATCH 실패면 카드가 복원되고 에러가 뜬다", async () => {
+  it("PATCH 실패면 카드가 복원된다", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
-    render(<ReviewList items={items} />);
-    await userEvent.click(screen.getByRole("button", { name: "맞아요" }));
+    renderList();
+    await userEvent.click(screen.getByRole("button", { name: "아니에요" }));
     await waitFor(() => expect(screen.getByText("3일째 김밥")).toBeInTheDocument());
-    expect(screen.getByText(/다시 시도/)).toBeInTheDocument();
+  });
+  it("되돌리기 토스트로 카드가 복원된다", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+    renderList();
+    await userEvent.click(screen.getByRole("button", { name: "맞아요" }));
+    await userEvent.click(await screen.findByRole("button", { name: "되돌리기" }));
+    await waitFor(() => expect(screen.getByText("3일째 김밥")).toBeInTheDocument());
   });
 });
 ```
+> sonner 토스트는 포털로 렌더된다 — `<Toaster/>`를 함께 렌더하고 `findByRole`(async)로 접근한다. jsdom에서 토스트 조회가 불안정하면 앞의 두 테스트를 게이트로 삼고 되돌리기는 브라우저에서 육안 확인한다.
 
 - [ ] **Step 3: ReviewList 구현** — `app/review/_components/ReviewList.tsx`:
 ```tsx
 "use client";
 import { useState } from "react";
-import { Card } from "@/components/ui/Card";
+import { toast } from "sonner";
+import { Card } from "@/components/ui/card";
 import { ConfirmActions } from "@/components/common/ConfirmActions";
 import type { ReviewItem, DiffStatus } from "@/lib/services/difference";
 
@@ -619,40 +600,40 @@ async function patch(id: string, status: DiffStatus): Promise<boolean> {
 
 export function ReviewList({ items }: { items: ReviewItem[] }) {
   const [list, setList] = useState(items);
-  const [undo, setUndo] = useState<ReviewItem | null>(null);
-  const [error, setError] = useState(false);
+  const restore = (item: ReviewItem) =>
+    setList((l) => (l.some((x) => x.id === item.id) ? l : [item, ...l]));
 
   async function act(item: ReviewItem, status: "confirmed" | "dismissed") {
-    setError(false);
     setList((l) => l.filter((x) => x.id !== item.id)); // 낙관적 제거
-    setUndo(item);
     if (!(await patch(item.id, status))) {
-      setList((l) => [item, ...l]); // 복원
-      setUndo(null);
-      setError(true);
+      restore(item);
+      toast.error("바꾸지 못했어요. 다시 시도해 주세요.");
+      return;
     }
-  }
-  async function doUndo() {
-    if (!undo) return;
-    const item = undo;
-    setUndo(null);
-    if (await patch(item.id, "candidate")) setList((l) => [item, ...l]);
-    else setError(true);
+    toast("처리했어요", {
+      duration: 5000,
+      action: {
+        label: "되돌리기",
+        onClick: async () => {
+          if (await patch(item.id, "candidate")) restore(item);
+          else toast.error("되돌리지 못했어요.");
+        },
+      },
+    });
   }
 
   return (
     <div className="space-y-3">
-      {error && <p role="alert" className="text-[13px] text-[var(--color-danger-text)]">바꾸지 못했어요. 다시 시도해 주세요.</p>}
       {list.map((item) => (
-        <Card key={item.id}>
-          <span className="inline-block rounded-full bg-[var(--color-success-bg)] px-2.5 py-0.5 text-[12px] text-[var(--color-success-text)]">오늘의 다른 점</span>
+        <Card key={item.id} className="p-4">
+          <span className="inline-block rounded-full bg-[var(--success-bg)] px-2.5 py-0.5 text-[12px] text-[var(--success-text)]">오늘의 다른 점</span>
           <p className="mt-2 text-[16px] font-medium">{item.headline}</p>
           {item.evidence.length > 0 && (
             <>
-              <p className="mt-2 text-[13px] opacity-60">이 기록에서 찾았어요</p>
+              <p className="mt-2 text-[13px] text-muted-foreground">이 기록에서 찾았어요</p>
               <div className="mb-4 mt-1.5 flex flex-wrap gap-1.5">
                 {item.evidence.map((e, i) => (
-                  <span key={i} className="rounded-lg border border-[var(--color-line)] px-2.5 py-1 text-[13px] opacity-70">{e}</span>
+                  <span key={i} className="rounded-lg border px-2.5 py-1 text-[13px] text-muted-foreground">{e}</span>
                 ))}
               </div>
             </>
@@ -662,17 +643,10 @@ export function ReviewList({ items }: { items: ReviewItem[] }) {
           </div>
         </Card>
       ))}
-      {undo && (
-        <div className="flex items-center justify-between rounded-lg border border-[var(--color-line)] px-4 py-3 text-[14px]">
-          <span className="opacity-70">처리했어요</span>
-          <button className="font-medium underline" onClick={doUndo}>되돌리기</button>
-        </div>
-      )}
     </div>
   );
 }
 ```
-> undo 바의 5초 자동 소멸은 MVP에서 생략 가능(바는 다음 액션 시 대체되고, 남아 있어도 무해). 구현자가 `useEffect` 타이머로 5초 후 `setUndo(null)`를 추가해도 되며, 테스트는 타이머에 의존하지 않는다.
 
 - [ ] **Step 4: loading·error** —
 `app/review/loading.tsx`:
@@ -741,5 +715,5 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - 단위(서비스·컴포넌트) + 통합(저장소·RLS) + lint + build 통과. 스키마 변경 없음.
 
 ## 이번 범위 밖
-- 홈·일기·기록 화면 · offline·애니메이션 · 원본/생성물 구분 표식 · shadcn 도입.
+- 홈·일기·기록 화면 · offline·애니메이션 · 원본/생성물 구분 표식.
 - 파이프라인 트리거 배선(추출·detector 자동 구동) · 실데이터 · 확정 후 일기 재생성.
