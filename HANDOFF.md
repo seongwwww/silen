@@ -39,11 +39,15 @@ Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스�
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
 - **계획 확정 커밋:** `6fb49cb` · **스펙 커밋:** `9500086`.
-- **구현 진행:** Task 1~5 완료. Task 6 Step 1~5 완료(문서·전체 검사·보안 리뷰), Step 6 브랜치 마무리와 보안 리뷰 Important 판단 대기.
-- **커밋된 태스크:** Task 1 `aa86eb3` · Task 2 `39e3477` · Task 3 `91ba74e` · Task 4 `6c946d1` · Task 5 `2fa7337` · Task 6 문서 `aed290e`.
-- **검증:** ruff clean · 전체 worker 93 PASS · 사람이 올바른 `C:\workspace\silen`에서 db reset+stop/start 완료 후 integration 47 PASS · 실 Vertex Task 4 스모크 1회와 Task 5 eval 1회(4/4 자동 PASS) 완료. 유료 호출 재실행 금지.
-- **다음 시작점:** Claude가 아래 3개 판단 사항을 검토. 보안 Important를 해결/수용한 뒤 전체 회귀 검사 → Task 6 Step 6 브랜치 마무리(병합·push는 사람).
-- **막힘/결정 필요:** (1) **보안 리뷰 Important — force 편집 보호 경쟁 조건.** `generate_diary`가 기존 status를 읽은 뒤 `upsert_diary`까지 별도 autocommit이며, 사이에 사용자가 편집하면 unconditional conflict update가 generated_text를 덮고 status를 draft로 되돌릴 수 있음. Locked Decision #15의 비원자성 수용이 이 편집 보호 위반까지 포함하는지 불명확. 해결 후보는 conflict update에 현재 status='draft' 조건을 넣고 미갱신 시 기존 id 반환(계획 변경 필요). 그 외 user_id 스코프·근거 ID 부분집합·본문 무로그·diary→sections/sources cascade는 HIGH/MEDIUM 없음. (2) Task 4 첫 스모크의 `one_line`은 메모 “오늘 좀 일찍 나옴”을 “평소보다 일찍 나옴”으로 승격함(`평소보다` 근거는 퇴근 차이에만 존재). (3) Task 5 eval 자동 게이트는 4/4 PASS했으나 `hallucination-temptation` body의 “다른 일 없이”는 입력에 없는 부재 사실일 수 있음. (2)·(3)은 프롬프트·가드레일 임의 수정 없이 Claude 판단 필요.
+- **구현 진행:** Task 1~6 완료 + 보안 리뷰 Important 해결. **브랜치 병합 준비 완료**(병합·push는 사람).
+- **커밋된 태스크:** Task 1 `aa86eb3` · Task 2 `39e3477` · Task 3 `91ba74e` · Task 4 `6c946d1` · Task 5 `2fa7337` · Task 6 문서 `aed290e` · 보안 수정 `7682554`.
+- **검증:** ruff clean · 전체 worker **94 PASS**(편집보호 통합 테스트 +1) · integration 48 PASS. 실 Vertex 스모크/eval 각 1회 소진(재호출 금지, 자동 게이트 4/4).
+- **3개 판단 결과:**
+  - **(1) 보안 Important — 해결.** `upsert_diary`에 `where diaries.status='draft'` 원자 조건(draft일 때만 덮어쓰기), 편집 행이면 미갱신·None → `generate_diary`가 섹션/출처 안 건드리고 기존 id 반환. TDD 통합 테스트로 고정. 커밋 `7682554`, 계획 Locked Decision #17.
+  - **(2) “평소보다 일찍 나옴” — 위반 아님(수용).** “평소보다”는 확정 차이 d1 headline “평소보다 일찍 퇴근”에 실재하는 근거이고 used_diff⊆입력으로 붙는다. 일기가 메모+확정차이를 엮는 정상 범위. 가벼운 이벤트 결합(나옴↔퇴근)만 알려진 minor.
+  - **(3) “다른 일 없이” — minor 위반(부재 사실 창작).** 기록 없음 ≠ 사건 없음. “과잉해석·없는 사실 창작 금지”에 걸린다. 자동 게이트로는 못 잡는 의미 문제 + 유료 eval 재호출 금지라 **지금 미수정**. **다음 승인된 eval 1회**에서 프롬프트에 “부재·총량 단정 금지(메모는 하루의 완전한 기록이 아님)” 규칙 + 골든 케이스 추가 후 재검증.
+- **다음 시작점:** 사람이 `main` 위로 rebase → `merge --no-ff`(squash 금지) 병합. 병합 후 (3) 프롬프트 보강 + eval 1회(유료 승인 필요).
+- **막힘/결정 필요:** (없음)
 
 > 갱신 예: `Task 1 완료 (커밋 abc1234). 다음: Task 2 저장소.`
 
