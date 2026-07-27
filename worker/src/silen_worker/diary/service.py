@@ -6,7 +6,7 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from silen_worker.diary.constants import BODY_MAX, ONE_LINE_MAX
+from silen_worker.diary.constants import BODY_MAX, META_PHRASES, ONE_LINE_MAX
 from silen_worker.narration.constants import FORBIDDEN_PHRASES
 
 
@@ -107,5 +107,15 @@ def guardrail(raw: dict, facts: DiaryInput) -> Diary | None:
     blob = f"{one_line} {body}"
     if any(p in blob for p in FORBIDDEN_PHRASES):
         return None
+    if any(p in blob for p in META_PHRASES):
+        return None
+
+    # 본문에 쓴 차이는 그 엔티티 표현을 그대로 써야 한다.
+    # ('여친'을 '여자친구'로 바꾸는 확장을 막는다 — 원문에 없는 표현이다.)
+    name_by_id = {d.difference_id: d.entity_name for d in facts.differences}
+    for difference_id in used_diff:
+        name = name_by_id.get(difference_id, "")
+        if name and name not in body:
+            return None
 
     return Diary(one_line=one_line, body=body, used_memory_ids=used_mem, used_difference_ids=used_diff)
