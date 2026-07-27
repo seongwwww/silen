@@ -41,9 +41,11 @@
 
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
-- **진행:** 미착수. 위 2줄만 하면 된다.
-- **기준선(main):** 프론트 단위 **59** · 통합 **49** · 워커 **131** · build PASS · ruff clean. `npm run lint`만 EPERM으로 죽는다(이번에 고칠 것).
+- **진행:** `fix/eslint-ignore-python`에서 구현·검증 완료 — `5f1db3c`.
+- **검증:** `npm run lint` PASS · `npx eslint app lib components` PASS · build/TypeScript PASS · 프론트 단위 **59 PASS**.
+- **참고:** 이번 세션에서는 변경 전 lint도 통과해 EPERM을 재현하지 못했다. 캐시 잠금 상태에 따라 간헐적인 문제이며, `worker/**`·`evals/**`만 전역 제외해 해당 경로 순회를 차단했다.
 - **막힘/결정 필요:** (없음)
+- **다음 시작점:** 사람이 `5f1db3c`를 리뷰한 뒤 push·merge한다. AI는 push·merge하지 않았다.
 - **알려진 문제(범위 밖):** ① 통합 테스트가 개발 DB의 auth 사용자 전체와 큐를 지운다(`schema.integration.test.ts`·`queue.integration.test.ts`). ② 워커 CLI가 stdout을 UTF-8로 reconfigure하지 않아 cp949 콘솔에서 한글이 깨진다. ③ 엔티티 추출이 `시간` 같은 일반명사도 잡는다. ④ **일기 품질 개선(`599be4b`)이 실데이터로는 아직 재검증되지 않았다** — eval 5/5는 합성 기준이고, Task 2의 db reset으로 로컬 데이터가 초기화됐다.
 
 > 직전 완료: 일기 품질 개선(`feat/diary-recap-followup`) — 병합·push 완료(`599be4b`). 본문/recap 분리·메타 서술 차단·꼬리 질문.

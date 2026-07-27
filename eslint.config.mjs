@@ -68,6 +68,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // worker·evals는 파이썬이다. 1차 JS/TS가 없고, .venv·캐시까지 훑다가
+    // 권한이 깨진 디렉터리를 만나면 lint 전체가 EPERM으로 죽는다.
+    // (.gitignore를 따르게 하는 방식은 worker/src·tests가 추적 파일이라 안 통한다.)
+    "worker/**",
+    "evals/**",
   ]),
 ]);
 
