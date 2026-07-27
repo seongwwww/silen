@@ -56,7 +56,7 @@ describe("차이 확인 저장소", () => {
   it("본인 차이 status를 바꾼다", async () => {
     const diff = await seedCandidate(alice, "새 카페", "처음 간 카페");
     const repo = createDifferenceRepository(await clientFor("alice-diff@example.com"));
-    expect(await repo.updateStatus(diff, "confirmed")).toBe(true);
+    expect(await repo.updateStatus(diff, "confirmed", "candidate")).toBe(true);
     const row = await db.query("select status from public.differences where id=$1", [diff]);
     expect(row.rows[0].status).toBe("confirmed");
   });
@@ -64,8 +64,20 @@ describe("차이 확인 저장소", () => {
   it("타인 차이는 RLS로 못 바꾼다(0행)", async () => {
     const diff = await seedCandidate(alice, "앨리스 차이", "앨리스 메모");
     const bobRepo = createDifferenceRepository(await clientFor("bob-diff@example.com"));
-    expect(await bobRepo.updateStatus(diff, "confirmed")).toBe(false);
+    expect(await bobRepo.updateStatus(diff, "confirmed", "candidate")).toBe(false);
     const row = await db.query("select status from public.differences where id=$1", [diff]);
     expect(row.rows[0].status).toBe("candidate"); // 안 바뀜
+  });
+
+  it("기대한 현재 상태와 다르면 바꾸지 않는다(TOCTOU 방어)", async () => {
+    // 읽은 뒤 update 사이에 다른 요청이 status를 바꾼 상황을 재현한다.
+    const diff = await seedCandidate(alice, "경쟁 차이", "경쟁 메모");
+    const repo = createDifferenceRepository(await clientFor("alice-diff@example.com"));
+    expect(await repo.updateStatus(diff, "confirmed", "candidate")).toBe(true);
+
+    // 이제 confirmed인데, candidate를 기대한 두 번째 요청이 도착 → 미갱신.
+    expect(await repo.updateStatus(diff, "dismissed", "candidate")).toBe(false);
+    const row = await db.query("select status from public.differences where id=$1", [diff]);
+    expect(row.rows[0].status).toBe("confirmed"); // 직접 전이 우회 차단
   });
 });

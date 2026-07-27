@@ -33,6 +33,8 @@
 8. **세션** — 서버 컴포넌트가 `createServerSupabase().auth.getUser()`. 세션 없거나 목록 0 → empty. `/review`는 세션을 새로 만들지 않는다(볼 게 없음).
 9. **저장소 경계 예외** — 기존 eslint `no-restricted-paths` 예외에 `differenceRepository.ts` 추가(경계가 조립, memoryRepository와 동형).
 10. **커밋 단위** — 태스크마다 1커밋. push/merge 안 함.
+11. **전이는 DB에서 원자적으로 강제(보안 리뷰 Important)** — 라우트가 현재 status를 읽고 검증한 뒤 `updateStatus(id, target, expected=current)`를 호출한다. 저장소 update는 `.eq("status", expected)`를 포함해 **기대 상태일 때만** 갱신하고, 그 사이 다른 요청이 바꿨으면 0행 → 라우트가 **409 conflict**. 읽기-검증-쓰기 TOCTOU로 "confirmed→dismissed 직접 전이 금지"가 우회되는 것을 막는다.
+12. **`shadcn`은 `dependencies`(devDep 아님)** — `app/globals.css`가 `@import "shadcn/tailwind.css"`(패키지의 `./tailwind.css` subpath export)를 하므로 빌드타임 CSS 의존성이다. devDependencies로 옮기면 `npm ci --omit=dev` 환경에서 빌드가 깨진다. `npm audit --omit=dev`의 MODERATE(전이 의존 MCP SDK/Hono)는 런타임 코드에 포함되지 않으니 수용하고, Next의 HIGH는 pinned 16.2.11의 내장 sharp/postcss라 **major 다운그레이드로 "수정"하지 않는다**(Next 패치 릴리스로 해소).
 
 ## File Structure
 
@@ -150,7 +152,8 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 **Interfaces — Consumes:** Task 1(`DiffStatus`,`ReviewItem`,`assertValidTransition`), 기존 `createServerSupabase`. **Produces:**
 ```ts
 export function createDifferenceRepository(client: SupabaseClient): {
-  updateStatus(id: string, status: DiffStatus): Promise<boolean>;   // 영향 행 있으면 true(RLS로 타인 것은 0행)
+  // expected(기대 현재 상태)와 일치할 때만 원자적으로 갱신. 불일치·타인 것이면 false(0행).
+  updateStatus(id: string, status: DiffStatus, expected: DiffStatus): Promise<boolean>;
   listCandidatesForReview(): Promise<ReviewItem[]>;
 };
 ```
@@ -166,14 +169,18 @@ const MAX_EVIDENCE = 3;
  * service_role을 쓰지 않는다. */
 export function createDifferenceRepository(client: SupabaseClient) {
   return {
-    async updateStatus(id: string, status: DiffStatus): Promise<boolean> {
+    /** 기대한 현재 상태(expected)일 때만 원자적으로 바꾼다. 읽기와 쓰기 사이에
+     * 다른 요청이 상태를 바꾸면(TOCTOU) 0행이 되어 전이 규칙 우회를 차단한다.
+     * 타인 차이도 RLS로 0행. */
+    async updateStatus(id: string, status: DiffStatus, expected: DiffStatus): Promise<boolean> {
       const { data, error } = await client
         .from("differences")
         .update({ status })
         .eq("id", id)
+        .eq("status", expected)
         .select("id");
       if (error) throw error;
-      return (data?.length ?? 0) > 0; // RLS로 타인 차이는 0행
+      return (data?.length ?? 0) > 0;
     },
 
     async listCandidatesForReview(): Promise<ReviewItem[]> {
@@ -277,9 +284,19 @@ describe("차이 확인 저장소", () => {
   it("타인 차이는 RLS로 못 바꾼다(0행)", async () => {
     const diff = await seedCandidate(alice, "앨리스 차이", "앨리스 메모");
     const bobRepo = createDifferenceRepository(await clientFor("bob-diff@example.com"));
-    expect(await bobRepo.updateStatus(diff, "confirmed")).toBe(false);
+    expect(await bobRepo.updateStatus(diff, "confirmed", "candidate")).toBe(false);
     const row = await db.query("select status from public.differences where id=$1", [diff]);
     expect(row.rows[0].status).toBe("candidate"); // 안 바뀜
+  });
+
+  it("기대한 현재 상태와 다르면 바꾸지 않는다(TOCTOU 방어)", async () => {
+    const diff = await seedCandidate(alice, "경쟁 차이", "경쟁 메모");
+    const repo = createDifferenceRepository(await clientFor("alice-diff@example.com"));
+    expect(await repo.updateStatus(diff, "confirmed", "candidate")).toBe(true);
+    // 이제 confirmed인데 candidate를 기대한 두 번째 요청 → 미갱신(직접 전이 우회 차단).
+    expect(await repo.updateStatus(diff, "dismissed", "candidate")).toBe(false);
+    const row = await db.query("select status from public.differences where id=$1", [diff]);
+    expect(row.rows[0].status).toBe("confirmed");
   });
 });
 ```
@@ -323,9 +340,13 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     }
     throw e;
   }
-  const changed = await repo.updateStatus(id, parsed.status);
+  // 읽은 상태를 기대값으로 넘긴다 — 그 사이 다른 요청이 바꿨으면 0행(409).
+  const changed = await repo.updateStatus(id, parsed.status, current.status as DiffStatus);
   if (!changed) {
-    return NextResponse.json({ error: { code: "not_found", message: "차이를 찾을 수 없습니다" } }, { status: 404 });
+    return NextResponse.json(
+      { error: { code: "conflict", message: "그새 상태가 바뀌었어요. 다시 시도해 주세요" } },
+      { status: 409 },
+    );
   }
   return new NextResponse(null, { status: 204 });
 }

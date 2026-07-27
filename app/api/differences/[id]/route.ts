@@ -35,9 +35,13 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     }
     throw e;
   }
-  const changed = await repo.updateStatus(id, parsed.status);
+  // 읽은 상태를 기대값으로 넘긴다 — 그 사이 다른 요청이 바꿨으면 0행(409).
+  const changed = await repo.updateStatus(id, parsed.status, current.status as DiffStatus);
   if (!changed) {
-    return NextResponse.json({ error: { code: "not_found", message: "차이를 찾을 수 없습니다" } }, { status: 404 });
+    return NextResponse.json(
+      { error: { code: "conflict", message: "그새 상태가 바뀌었어요. 다시 시도해 주세요" } },
+      { status: 409 },
+    );
   }
   return new NextResponse(null, { status: 204 });
 }
