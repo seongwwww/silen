@@ -52,7 +52,7 @@
 
 ⚠️ **죄책감 유도 금지(frontend.md):** "일기를 써보세요"·"N일째 비어 있어요" 같은 독려·압박 문구를 쓰지 않는다. 없으면 없다고 담담히 말한다.
 
-현재 `components/common/StateView.tsx`엔 `EmptyState`·`ErrorState`·`LoadingState` 3종만 있다. **"아직 생성되지 않음" 상태를 추가**한다(공통 컴포넌트 — 다른 화면도 쓰게 된다).
+현재 `components/common/StateView.tsx`의 `EmptyState`는 `message` prop을 받는다. **미생성 상태는 새 컴포넌트를 만들지 않고 `<EmptyState message="아직 일기가 만들어지지 않았어요" />`로 표현**한다 — 기본 문구만 다른 컴포넌트를 추가하면 verbatim 중복이 된다. `StateView.tsx`는 수정하지 않는다.
 
 ## 6. "지금 만들기" 버튼이 없는 이유
 
@@ -68,7 +68,7 @@
 - `app/diary/_components/EvidenceDisclosure.tsx` — 근거 메모 접기(클라이언트).
 - `lib/repositories/diaryRepository.ts` — **세션 클라이언트 + RLS**(service_role 금지, 기존 선례와 동일). `diaries`+`diary_sections`+`diary_sources→memories` 조인, 잠금·삭제 필터.
 - `lib/services/diary.ts` — 표시용 타입.
-- `components/common/StateView.tsx`(수정) — 미생성 상태 추가.
+- `components/common/StateView.tsx` — **수정 없음.** 기존 `EmptyState`에 문구를 넘겨 쓴다.
 
 **API 라우트 없음**(읽기 전용 서버 컴포넌트로 충분). **스키마 변경 없음.** **워커 변경 없음.**
 
