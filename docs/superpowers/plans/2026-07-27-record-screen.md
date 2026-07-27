@@ -36,6 +36,7 @@
 11. **컴포넌트 배치** — `EmotionChips`는 `app/_components/`(이 화면 전용). 두 번째 사용처가 생기면 `components/common/`으로 승격. 지금 성급히 공통화하지 않는다.
 12. **홈 교체** — `app/page.tsx`의 Next 스캐폴딩을 전부 제거하고 기록 화면으로. `app/layout.tsx`의 `metadata`를 `{ title: "실은", description: "실은 아무것도 아니지 않았다" }`로 교체. `<Toaster/>`는 이미 마운트돼 있으니 건드리지 않는다.
 13. **커밋 단위** — 태스크마다 1커밋. push/merge 안 함.
+14. **터치 타깃 44px는 계획 코드보다 우선한다** — 감정 칩을 포함한 모든 탭 대상은 `min-h-11`(44px). shadcn 기본 `h-9`(36px)는 override한다. 기존 `components/common/ConfirmActions.tsx`가 같은 선례다. **계획의 예시 코드와 frontend.md/스펙의 접근성 규칙이 어긋나면 규칙이 이긴다**(접근성은 타협 대상이 아니다).
 
 ## File Structure
 
@@ -150,7 +151,7 @@ export function EmotionChips({
             aria-pressed={selected}
             disabled={disabled}
             onClick={() => onChange(selected ? undefined : c.value)}
-            className={`min-h-9 rounded-full px-3 text-[13px] ${
+            className={`min-h-11 rounded-full px-3 text-[13px] ${
               selected ? "border-foreground font-medium" : "text-muted-foreground"
             }`}
           >

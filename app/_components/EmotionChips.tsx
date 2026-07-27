@@ -34,7 +34,7 @@ export function EmotionChips({
             aria-pressed={selected}
             disabled={disabled}
             onClick={() => onChange(selected ? undefined : choice.value)}
-            className={`min-h-9 rounded-full px-3 text-[13px] ${
+            className={`min-h-11 rounded-full px-3 text-[13px] ${
               selected
                 ? "border-foreground font-medium"
                 : "text-muted-foreground"
