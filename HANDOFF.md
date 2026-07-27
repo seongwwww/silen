@@ -9,11 +9,47 @@
 
 ## 현재 활성 작업 (Active Work Order)
 
-**목표:** `docs/superpowers/plans/2026-07-27-diary-view.md`(일기 보기 화면 `/diary`) 구현.
+**두 가지다. 순서대로 한다: ⓪ 파이프라인 1회 실전 실행 → ① 일기 날짜 이동 구현.**
+
+---
+
+### ⓪ 선행 — 파이프라인 1회 실전 실행 (사람이 지시함)
+
+**목적:** 지금까지 만든 파이프라인을 **실데이터로 한 번 끝까지 돌려** 실제로 도는지 확인한다. 코드 변경 없음, 검증만.
+
+**⚠️ 실 Vertex LLM 호출이라 비용이 발생한다.** 사람이 이번 1회를 명시적으로 지시했다. **딱 한 번만** 돌리고, 실패해도 반복 실행하지 마라 — 원인을 보고하라.
+
+**env(ADC):**
+```powershell
+$env:GOOGLE_GENAI_USE_VERTEXAI = "true"
+$env:GOOGLE_CLOUD_PROJECT = "project-58561b19-fb35-4c01-bb2"
+$env:GOOGLE_CLOUD_LOCATION = "global"
+```
+
+**순서:**
+1. **대상 날짜부터 확인한다.** `run-daily`·`run-diary`의 기본 대상은 **사용자 로컬 "어제"** 다. 로컬 DB의 메모가 오늘 것이면 기본값으로는 아무것도 안 잡힌다. 먼저 메모가 어느 날짜에 있는지 확인하고, 그 날짜를 `--date`로 명시해라.
+   ```powershell
+   worker\.venv\Scripts\python.exe -c "import psycopg; c=psycopg.connect('postgresql://postgres:postgres@127.0.0.1:54322/postgres'); print(c.execute('select user_id::text, date(captured_at at time zone (select timezone from public.users u where u.id=m.user_id))::text, count(*) from public.memories m where deleted_at is null and is_locked=false group by 1,2 order by 2').fetchall())"
+   ```
+2. `run-pending` — 큐를 소비해 엔티티를 추출한다(인자 없음).
+3. `run-daily --date <위에서 확인한 날짜>` — 차이 검출 + 서술.
+4. **여기서 멈추고 보고한다.** 일기는 사용자가 확인 UI(`/review`)에서 차이를 확정한 뒤에 만들어야 의미가 있다(확정 차이만 일기에 녹는다). `run-diary`는 사람이 확정한 뒤 지시할 때 돌린다.
+
+**확인·보고할 것(본문은 싣지 말 것 — 카운트·id만):**
+- 각 명령의 종료 코드와 JSON 로그 요약
+- `entities`·`memory_entities`·`differences`·`difference_narrations` 각 건수 변화
+- `/review`에 확인할 차이 카드가 보이는지(dev 서버로 육안, 선택)
+- 실패했다면 어느 단계에서 어떤 에러인지(스택 전체 말고 요약)
+
+---
+
+### ① 본 작업 — 일기 날짜 이동
+
+**목표:** `docs/superpowers/plans/2026-07-27-diary-navigation.md`(일기 날짜 이동 `/diary/[date]`) 구현.
 **성격:** 계획 확정 완료 — **"코드만 짜면 되는" 상태**. 재설계하지 말고 계획을 그대로 따른다(10개 Locked Decisions로 모호함 제거됨).
-**스펙 배경:** `docs/superpowers/specs/2026-07-27-diary-view-design.md`.
-**브랜치:** **`feat/diary-view`를 `main`에서 새로 만들어** 작업한다(`git checkout -b feat/diary-view main`). 스펙·계획은 이미 `main`에 있다.
-**왜 이게 지금 중요한가:** 파이프라인이 일기를 만들지만 **볼 화면이 없다.** 기록(`/`)과 확인(`/review`)은 있는데 끝단 산출물이 사용자에게 도달하지 않는다. 이 화면이 루프를 닫는다.
+**스펙 배경:** `docs/superpowers/specs/2026-07-27-diary-navigation-design.md`.
+**브랜치:** **`feat/diary-navigation`을 `main`에서 새로 만들어** 작업한다(`git checkout -b feat/diary-navigation main`). 스펙·계획은 이미 `main`에 있다.
+**왜 이게 지금 중요한가:** `/diary`는 `findLatest()` — 최신 일기 **하나만** 보여준다. 새 일기가 만들어지면 **어제 일기는 도달할 수 없게 된다.** 파이프라인은 계속 쌓는데 사용자는 마지막 하나만 본다. "돌아본다"는 제품 컨셉의 핵심이 빠져 있다.
 
 ### 실행 방식 (플러그인 없이 수동)
 Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스킬이 없으니 아래를 수동으로** 밟는다. 계획 헤더의 "REQUIRED SUB-SKILL"은 무시. **Task 1 → 5 순서, TDD:**
@@ -29,17 +65,19 @@ Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스�
 - shadcn은 이미 도입돼 있다(button·card·sonner·textarea). 새로 추가할 게 없다.
 
 ### 어기면 안 되는 것 (hard rules)
-- **스키마 변경·마이그레이션·API 라우트·워커 변경 없음.** 읽기 전용 프론트 슬라이스다. 서버 컴포넌트가 저장소를 직접 부른다(`/review` 선례) — 새 라우트를 만들지 마라.
-- ⚠️ **`components/common/StateView.tsx`를 수정하지 마라.** "아직 일기가 만들어지지 않았어요"는 기존 `EmptyState`에 `message`를 넘겨 쓴다. 기본 문구만 다른 컴포넌트를 새로 만들면 **verbatim 중복**이다(Locked Decision — 스펙 §5).
-- ⚠️ **"오늘의 일기"가 아니라 "가장 최근 일기"다.** `run-diary`는 사용자 로컬 **어제**를 대상으로 돌아 최신 일기는 보통 어제 것이다. 오늘 날짜로 필터하면 화면이 거의 항상 비어 있게 된다(Locked Decision 1).
-- ⚠️ **터치 타깃 44px** — 토글은 `min-h-11`을 쓴다. `min-h-9`(36px)는 `frontend.md` 위반이다(record-screen에서 같은 실수가 한 번 났다).
-- **잠긴(`is_locked`)·삭제된(`deleted_at`) 메모를 근거에 노출하지 마라**(privacy.md — 잠근 기억은 노출 경로에서 빠진다). 저장소 계층에서 거른다.
-- **죄책감 유도 문구 금지**(frontend.md): "일기를 써보세요"·"N일째 비어 있어요" 같은 독려·압박 표현을 쓰지 마라. 없으면 담담히 없다고 말한다.
-- **색만으로 의미를 전달하지 마라** — AI 생성물/원본 구분에 라벨을 병행한다.
-- **저장소는 세션 클라이언트 + RLS.** `service_role`을 쓰지 마라(`differenceRepository` 선례).
-- 🚫 **`run-diary`를 실행하지 마라(실 LLM 비용).** 육안 확인용 일기가 필요하면 사람에게 요청하라.
+- **스키마 변경·마이그레이션·API 라우트·워커 변경 없음.** 읽기 전용 프론트 슬라이스다. `eslint.config.mjs`도 `diaryRepository.ts`가 이미 예외에 있어 **수정 불필요**.
+- ⚠️ **`DiaryArticle`·`EvidenceDisclosure`·`StateView`를 수정하지 마라.** 그대로 재사용한다.
+- ⚠️ **`/diary`를 목록으로 바꾸지 마라.** 최신 일기를 바로 보여주는 주 흐름을 유지하고, 과거 접근은 `/diary/[date]`로만 붙인다(Locked Decision 1).
+- ⚠️ **리다이렉트를 쓰지 마라.** `/diary` → 최신 날짜로 `redirect()`하면 뒤로가기가 꼬인다. 두 라우트가 `DiaryScreen`을 공유한다(Locked Decision 2).
+- ⚠️ **이전/다음은 "존재하는 일기로 점프"** 다. 날짜−1이 아니다 — 빈 날엔 일기가 없어 날짜 단위로 넘기면 계속 지나가야 한다(Locked Decision 3).
+- ⚠️ **`supabase.select()` 인자는 리터럴 타입이어야 한다.** 상수로 뽑을 땐 `as const`. `+`로 이어붙이면 타입 추론이 깨지고 **이 오류는 lint·단위로 안 잡히고 `npm run build`(tsc)에서만** 드러난다 → **태스크마다 build를 돌려라**(지난 기능에서 실제로 겪은 함정).
+- ⚠️ **터치 타깃 44px** — `min-h-11`. `min-h-9`(36px)는 `frontend.md` 위반이다(record-screen에서 같은 실수가 한 번 났다).
+- **색만으로 의미를 전달하지 마라** — 이전/다음에 텍스트 라벨을 병행하고 비활성은 `aria-disabled`로 알린다.
+- **잠긴·삭제된 메모를 근거에 노출하지 마라**(privacy.md). 기존 필터를 그대로 유지한다.
+- **저장소는 세션 클라이언트 + RLS.** `service_role`을 쓰지 마라.
+- 🚫 **`run-diary`를 임의로 실행하지 마라(실 LLM 비용).** ⓪에서도 `run-diary`는 사람이 확정한 뒤 지시할 때만 돌린다.
 - **태스크마다 커밋만. push·merge 금지**(사람이 한다).
-- 이미 병합된 기능(**extraction·detector·narration·diary·confirm-ui·record-screen·pipeline-trigger**)을 수정하지 마라 — 계획이 지정한 파일만 추가한다.
+- 이미 병합된 기능(**extraction·detector·narration·diary·confirm-ui·record-screen·pipeline-trigger·diary-view**)을 수정하지 마라 — 계획이 지정한 파일만 손댄다.
 - 커밋 메시지의 `Co-Authored-By` 트레일러는 **네 것으로** 바꿔라(네가 저자다). git.md 규약.
 - 못 고치는 테스트 실패나 모호한 점이 있으면 **멈추고 보고**하라. 추측하거나 테스트를 약화시키지 마라.
 - 완료(DoD) = lint + typecheck(build) + unit + integration. **eval은 이 기능 대상 아님**(프롬프트·모델 미변경).
@@ -48,30 +86,14 @@ Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스�
 
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
-- **스펙 커밋:** `4a4bd0d` 계열(일기 보기 설계) · **계획 확정 커밋:** 최신 `docs: 일기 보기 화면 구현 계획`. 둘 다 **`main`에 있다**(문서는 main 직접 커밋 허용, git.md).
-- **구현 진행:** `feat/diary-view`에서 **Task 1~5 전체 완료**.
-  - Task 1 저장소·통합 테스트 완료 — 커밋 `8d0cbbb`
-  - Task 2 근거 메모 접기 완료 — 커밋 `7acdfbf`
-  - Task 3 일기 표시 컴포넌트 완료 — 커밋 `d502b0d`
-  - Task 4 페이지 배선·상태 분기·계층 예외·select 타입 수정 완료 — 커밋 `cec3bb8`
-  - Task 5 README 안내 완료 — 커밋 `8832130`
-- **시작 전 확인 결과:** 최신 `main`에서 브랜치를 만들었고 로컬 Supabase API·DB가 실행 중이다. 선택 서비스(`imgproxy`·`edge_runtime`·`pooler`) 정지는 Task 1 통합 테스트에 영향 없었다.
-- **최종 검증 결과:** `npm run lint` PASS · `npm run build` PASS(`/diary` 동적 라우트 생성) · 프론트 단위 **49 PASS**(기준선 40 + 새 9) · 통합 **44 PASS**(기존 39 + 새 5).
-  - 최초 최종 통합 실행에서 기존 `/api/differences/[id]` 라이브 테스트가 500을 반환했으나, 응답은 코드 오류가 아니라 장시간 실행 중이던 dev 서버의 `Jest worker encountered 2 child process exceptions`였다. dev 서버만 재시작하자 같은 요청이 400으로 정상화됐고 통합 44건 전체가 통과했다.
-- **✅ 해결된 결정 — 불릿 충돌(Codex 캐치가 옳았음).** 계획 Task 3의 테스트는 정확 일치를 요구하는데 같은 계획의 구현이 `<li>· {d}</li>`로 불릿을 텍스트에 넣어 모순이었다. **계획의 버그였고 (A)로 확정** — 불릿을 CSS `::marker`(`list-disc`)로 옮겨 접근 가능한 텍스트에 차이 문장만 남긴다.
-  - 근거: `·`는 장식이라 접근 가능한 텍스트에 있으면 스크린리더가 "가운데점 …"으로 읽는다. `<ul>/<li>`가 이미 목록 의미를 전달하므로 문자 불릿은 중복이다. (B)는 접근성 노이즈를 남기면서 테스트도 약화시켜 둘 다 잃는다.
-  - 조치: 계획 Task 3 구현 코드를 `list-disc pl-5`로 고치고 **Locked Decision #11**("장식 문자를 접근 가능한 텍스트에 넣지 마라 — 계획 예시 코드와 접근성 규칙이 어긋나면 규칙이 이긴다")을 추가했다. record-screen의 44px 선례와 같은 판단이다.
-  - **`app/diary/_components/DiaryView.tsx`에 적용해 검증했고(5/5 PASS), Task 3 커밋 `d502b0d`에 포함했다.**
-- **✅ 해결된 결정 — Task 4 계층 lint 충돌(Codex 캐치가 옳았음). (A)로 확정** — `eslint.config.mjs` 예외 목록에 `./diaryRepository.ts`를 추가한다.
-  - 근거: 규칙 주석이 예외 기준을 "경계가 조립하는 인프라(팩토리)"로 명시한다. `diaryRepository`는 세션 client를 받는 팩토리이고, `/diary`는 `/review`와 구조가 같은 RLS 스코프 읽기 전용 화면이다 — `differenceRepository.ts`가 예외에 있는 것과 같은 이유다.
-  - (B)를 버린 이유: 읽기 화면엔 서비스에 넣을 도메인 로직이 없어 통과용 계층만 늘고, `/diary`만 `/review`와 다른 패턴이 되어 다음 사람이 어느 쪽을 따를지 알 수 없게 된다.
-  - 예외 목록이 닳지 않도록 주석을 남겼다: 읽기 화면이 또 늘면 목록 대신 "`*Repository.ts` 팩토리 허용"으로 기준 자체를 다시 세울 것.
-- **✅ 해결된 문제 — Task 1 타입 에러(계획 버그).** `diaryRepository`의 `select()` 인자를 가독성 때문에 `+`로 이어붙였더니 리터럴 타입이 아니라 `string`이 되어 supabase-js의 select 타입 추론이 깨졌다(`row.diary_sections`가 `GenericStringError`). **한 줄 문자열 리터럴로 고쳤다.**
-  - 이 오류는 lint·단위 테스트로 안 잡히고 **`npm run build`(tsc)에서만** 드러난다. → **Locked Decision 13**: 태스크마다 build를 돌려라.
-- **조치 완료:** `eslint.config.mjs` 예외 추가 + `lib/repositories/diaryRepository.ts` select 한 줄화는 Task 4 커밋 `cec3bb8`에 포함했다. 계획의 **Locked Decision 12·13**을 따랐다.
-- **막힘:** 없음. `run-diary`·스키마 변경·API/워커 변경은 하지 않았고, push·merge도 하지 않았다.
-- **다음 시작점:** 사람이 `feat/diary-view` 커밋들을 검토한 뒤 push·merge한다.
-- **참고:** 로컬 개발 DB에 합성 기록 1건(`브라우저 확인용 기록`)이 남아 있다(로컬 dev DB라 무해). 사용자 소유 미추적 `.claude/orchestration/`·`.claude/settings.local.json`은 건드리지 마라.
+- **스펙 커밋:** `docs: 일기 날짜 이동 설계 스펙` · **계획 확정 커밋:** `docs: 일기 날짜 이동 구현 계획`. 둘 다 **`main`에 있다**(문서는 main 직접 커밋 허용, git.md).
+- **진행:** ⓪ 파이프라인 1회 실행 **미착수** · ① 일기 날짜 이동 **미착수**. ⓪ → ① 순서로 한다.
+- **시작 전 확인:** `git pull`로 최신 `main`인지, `npx supabase status`로 로컬 스택이 떠 있는지, ADC env 3종(⓪에만 필요).
+- **직전 검증 기준선(main):** 프론트 단위 **49** · 통합 **44** · 워커 **113** · lint·build·ruff clean. 여기서 시작한다(단위가 `DiaryNav` 4건만큼 늘어 53이 될 것, 통합은 5건 늘어 49).
+- **막힘/결정 필요:** (없음)
+- **참고:** 로컬 개발 DB에 합성 기록 1건(`브라우저 확인용 기록`)이 남아 있다 — ⓪의 실전 실행 재료로 쓸 수 있다. 사용자 소유 미추적 `.claude/orchestration/`·`.claude/settings.local.json`은 건드리지 마라.
+
+> 직전 완료: 일기 보기 화면(`feat/diary-view`) — 병합·push 완료(`e0e701d`). MVP 루프(기록→확인→일기)가 닫혔다.
 
 > 직전 완료: 파이프라인 트리거(`feat/pipeline-trigger`) — 병합·push 완료(`3c90e5d`). 워커 CLI 3명령, 재실행 시 LLM 재과금 차단.
 
