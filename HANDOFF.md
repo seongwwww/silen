@@ -9,56 +9,44 @@
 
 ## 현재 활성 작업 (Active Work Order)
 
-**목표:** `docs/superpowers/plans/2026-07-27-diary-recap-followup.md`(일기 정화 · 오늘의 처음 recap · 꼬리 질문) 구현.
-**성격:** 계획 확정 완료 — **"코드만 짜면 되는" 상태**. 재설계하지 말고 계획을 그대로 따른다(12개 Locked Decisions).
-**스펙 배경:** `docs/superpowers/specs/2026-07-27-diary-recap-followup-design.md`.
-**브랜치:** **`feat/diary-recap-followup`을 `main`에서 새로 만들어** 작업한다. 스펙·계획은 이미 `main`에 있다.
-**왜 이게 지금 중요한가:** 파이프라인 첫 실데이터 완주에서 **출력 품질이 무너졌다.** 일기 본문이 *"~한 것도 오늘이 처음이다"* 를 6번 반복했고, *"일기에 출근이라는 행동이 기록된 것도 처음"* 처럼 **사용자의 하루가 아니라 시스템의 기록 상태**를 서술했다. 본문과 아래 목록이 완전히 중복됐고, `여친`을 `여자친구`로 확장했다. **기존 eval을 통과하고도 실데이터에서 터졌다.**
+**목표:** ESLint가 파이썬 디렉터리(`worker/`·`evals/`)를 훑지 않게 한다. **`eslint.config.mjs` 2줄.**
+**브랜치:** **`fix/eslint-ignore-python`을 `main`에서 새로 만들어** 작업한다.
+**왜:** `npm run lint`가 `EPERM: scandir 'worker/.pytest_cache'`로 **크래시한다.** ESLint 9 flat config는 `.gitignore`를 자동으로 따르지 않아 파이썬 트리까지 걸어 들어간다. 캐시 디렉터리 권한이 한 번 깨지면 lint 전체가 죽는다 — DoD(`lint + build + test`)를 검증할 수 없게 된다.
 
-### 실행 방식 (플러그인 없이 수동)
-계획 헤더의 "REQUIRED SUB-SKILL"은 무시. **Task 1 → 7 순서, TDD:**
-- 태스크마다: ① 실패 테스트 → ② 실패 확인 → ③ 계획의 코드 그대로 → ④ 통과 → ⑤ ruff/lint + build → ⑥ **그 태스크 단위로 1커밋**.
+### 무엇을 (전부다)
 
-### 환경 (Windows)
-- 파이썬은 `worker\.venv\Scripts\python.exe` 직접 호출. 프론트는 Node/npm.
-- **로컬 Supabase 필요.** `db reset` 후엔 `npx supabase stop; Start-Sleep -Seconds 3; npx supabase start`.
-- **앱 코드 전 Next.js 16 문서**(`node_modules/next/dist/docs/01-app/`) 확인 — `searchParams`도 **Promise**다.
-- Vertex/ADC는 **Task 7(eval)에만** 필요하다. Task 1~6은 스텁으로 검증한다.
+`eslint.config.mjs`의 `globalIgnores([...])`에 두 줄을 추가한다:
 
-### 어기면 안 되는 것 (hard rules)
-- ⚠️ **detector 변경과 프롬프트 변경을 같은 커밋에 섞지 마라**(git.md — eval 회귀를 이분 탐색해야 한다). Task 1은 반드시 단독 커밋.
-- ⚠️ **detector 판정 로직·임계값·confidence를 바꾸지 마라.** Task 1은 `description` **문구만** 바꾼다.
-- ⚠️ **URL에 사용자 콘텐츠·엔티티명을 넣지 마라.** 질문 링크는 `?section=<uuid>` — **id만**. 질문 텍스트엔 사람 이름이 들어갈 수 있다(privacy.md).
-- ⚠️ **새 `section_type`을 만들지 마라.** recap은 기존 `다른점` 목록을 재사용한다(확정 차이 전부를 쓰도록 바꾼다). 추가되는 건 `'질문'` 하나뿐이다.
-- ⚠️ **`supabase.select()` 인자는 리터럴 타입 유지.** 이 오류는 lint·단위로 안 잡히고 **`npm run build`(tsc)에서만** 드러난다 → **프론트 태스크마다 build를 돌려라.**
-- ⚠️ **터치 타깃 44px**(`min-h-11`). `min-h-9` 금지.
-- **로그에 기록 본문·일기·질문 텍스트를 남기지 마라.** id·카운트만.
-- 🚫 **`run-diary`·`run-daily`를 임의로 실행하지 마라(실 LLM 비용).** Task 1~6은 스텁으로 검증한다. Task 7의 eval만 실 호출이며 **1회**다.
-- **태스크마다 커밋만. push·merge 금지**(사람이 한다).
-- 커밋의 `Co-Authored-By`는 **네 것으로**. 못 고치는 실패·모호한 점은 **멈추고 보고**.
-- 완료(DoD) = ruff + pytest + lint + build + vitest(단위·통합) + eval(Task 7).
+```js
+    // worker·evals는 파이썬이다. 1차 JS/TS가 없고, .venv·캐시까지 훑다가
+    // 권한이 깨진 디렉터리를 만나면 lint 전체가 EPERM으로 죽는다.
+    // (.gitignore를 따르게 하는 방식은 worker/src·tests가 추적 파일이라 안 통한다.)
+    "worker/**",
+    "evals/**",
+```
+
+### 검증
+- `npm run lint` — **크래시 없이 통과**해야 한다(지금은 EPERM으로 죽는다).
+- `npx eslint app lib components` — 여전히 exit 0.
+- `npm run build`·`npx vitest run` 회귀 확인.
+
+### 어기면 안 되는 것
+- **다른 ignore 패턴을 추가하지 마라.** `worker/**`·`evals/**` 둘뿐이다.
+- **`@eslint/compat`·`includeIgnoreFile` 같은 의존성을 추가하지 마라.** `worker/src`·`worker/tests`는 git 추적 파일이라 `.gitignore` 연동으로는 문제가 안 풀린다.
+- **기존 규칙(`import/no-restricted-paths`·`no-restricted-imports`)을 건드리지 마라.**
+- `worker/.pytest_cache` 디렉터리 자체는 **잠겨 있어 삭제되지 않는다.** 지우려 하지 마라 — 사람이 프로세스를 닫고 처리한다.
+- **커밋만. push·merge 금지.** `Co-Authored-By`는 네 것으로.
 
 ---
 
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
-- **스펙·계획 커밋:** `docs: 일기 정화·recap·꼬리 질문 설계 스펙` / `docs: 일기 정화·recap·꼬리 질문 구현 계획`. 둘 다 **`main`에 있다**.
-- **진행:** `feat/diary-recap-followup`에서 **Task 1~7 구현·검증 완료**. 사람의 리뷰·push·merge만 남았다.
-- **태스크별 커밋:**
-  - Task 1 detector description 정화 — `d7d70f2`
-  - Task 2 질문 section_type 마이그레이션(up/down) — `202fcd0`
-  - Task 3 본문(freq_shift)·recap(확정 차이 전부) 분리 — `13d6ff8`
-  - Task 4 메타 서술·엔티티 표현 가드레일 — `b29ed81`
-  - Task 5 꼬리 질문 생성·저장 — `343e3e9`
-  - Task 6 recap·질문 카드·기록 화면 맥락 — `e79f952`
-  - Task 7 eval 보강·문서 — `104ebcd`
-- **최종 검증:** 워커 **131 PASS** · ruff clean · 프론트 단위 **59 PASS** · 통합 **49 PASS** · lint clean · build/TypeScript PASS(`/` 동적 렌더 포함).
-- **실 Vertex eval:** 승인된 env로 **정확히 1회** 실행했고 **5/5 PASS**. `ordinary-with-diff` fixture를 `(id, headline, entity_name)` 3필드로 맞췄고, `many-firsts-no-repetition` 및 메타 서술·`처음` 반복 검사를 추가했다. 합성 eval의 `one_line`·`body` 출력은 품질 판정을 위해 유지했다.
-- **DB:** 승인 후 로컬 Supabase를 초기화해 `20260727070737_diary_question.sql`까지 적용했고, stop/start로 auth를 복구했다. 기존 로컬 사용자·큐·일기 데이터는 초기화됐다.
-- **파이프라인은 실데이터로 완주 검증됨:** 메모 4 → entities 7 → differences 7 → narrations 7 → 확정 6 → 일기 1건(다른점 6·근거 4). 서술 품질(엔티티명 정합·조언/인과 0)도 실출력에서 통과. **다만 일기 본문 품질이 무너져 이번 작업으로 고친다.**
-- **막힘:** 없음.
-- **다음 시작점:** 사람이 `104ebcd`까지 리뷰한 뒤 push·merge한다. AI는 push·merge하지 않았다.
-- **알려진 문제(이번 범위 밖):** ① 통합 테스트가 개발 DB의 auth 사용자 전체와 큐를 지운다(`schema.integration.test.ts`·`queue.integration.test.ts`) — 실데이터 검증 재료가 날아간다. ② 워커 CLI가 stdout을 UTF-8로 reconfigure하지 않아 cp949 콘솔에서 한글 출력이 깨진다. ③ 엔티티 추출이 `시간` 같은 일반명사도 잡는다.
+- **진행:** 미착수. 위 2줄만 하면 된다.
+- **기준선(main):** 프론트 단위 **59** · 통합 **49** · 워커 **131** · build PASS · ruff clean. `npm run lint`만 EPERM으로 죽는다(이번에 고칠 것).
+- **막힘/결정 필요:** (없음)
+- **알려진 문제(범위 밖):** ① 통합 테스트가 개발 DB의 auth 사용자 전체와 큐를 지운다(`schema.integration.test.ts`·`queue.integration.test.ts`). ② 워커 CLI가 stdout을 UTF-8로 reconfigure하지 않아 cp949 콘솔에서 한글이 깨진다. ③ 엔티티 추출이 `시간` 같은 일반명사도 잡는다. ④ **일기 품질 개선(`599be4b`)이 실데이터로는 아직 재검증되지 않았다** — eval 5/5는 합성 기준이고, Task 2의 db reset으로 로컬 데이터가 초기화됐다.
+
+> 직전 완료: 일기 품질 개선(`feat/diary-recap-followup`) — 병합·push 완료(`599be4b`). 본문/recap 분리·메타 서술 차단·꼬리 질문.
 
 > 직전 완료: 일기 날짜 이동(`feat/diary-navigation`) — 병합·push 완료(`d0b5aed`).
 
