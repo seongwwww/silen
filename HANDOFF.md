@@ -49,10 +49,13 @@ Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스�
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
 - **스펙 커밋:** `4a4bd0d` 계열(일기 보기 설계) · **계획 확정 커밋:** 최신 `docs: 일기 보기 화면 구현 계획`. 둘 다 **`main`에 있다**(문서는 main 직접 커밋 허용, git.md).
-- **구현 진행:** **미착수.** Task 1부터 시작한다. `feat/diary-view` 브랜치를 `main`에서 새로 만들어라.
-- **시작 전 확인:** `git pull`로 최신 `main`인지, `npx supabase status`로 로컬 스택이 떠 있는지.
-- **직전 검증 기준선(main):** 프론트 단위 **40 PASS** · 워커 **113 PASS** · ruff clean. 이 숫자에서 시작한다(프론트가 새 테스트만큼 늘어야 한다 — Task 2·3에서 9건 예상).
-- **막힘/결정 필요:** (없음)
+- **구현 진행:** `feat/diary-view`에서 **Task 1·2 완료**, Task 3은 실패 테스트와 계획 코드 작성 후 검증에서 중단.
+  - Task 1 저장소·통합 테스트 완료 — 커밋 `8d0cbbb`
+  - Task 2 근거 메모 접기 완료 — 커밋 `7acdfbf`
+  - Task 3 `DiaryView.tsx`·`DiaryView.test.tsx`는 미커밋 상태. Task 4·5는 미착수.
+- **시작 전 확인 결과:** 최신 `main`에서 브랜치를 만들었고 로컬 Supabase API·DB가 실행 중이다. 선택 서비스(`imgproxy`·`edge_runtime`·`pooler`) 정지는 Task 1 통합 테스트에 영향 없었다.
+- **검증 결과:** Task 1 통합 **5 PASS**, Task 2 단위 **4 PASS**, 각 태스크 lint PASS. Task 3은 **4 PASS / 1 FAIL**.
+- **막힘/결정 필요:** 계획 Task 3의 테스트는 `getByText("평소보다 일찍 퇴근")`로 정확 일치를 요구하지만, 같은 계획의 구현은 `<li>· {d}</li>`로 불릿을 텍스트에 포함한다. 현재 Testing Library에서는 실제 텍스트가 `· 평소보다 일찍 퇴근`이므로 정확 일치가 실패한다. 계획 코드·테스트 임의 변경 금지 규칙 때문에 우회하지 않고 중단했다. 결정 필요: (A) 불릿을 CSS/pseudo-element로 옮겨 접근 가능한 텍스트를 차이 문장만 남길지, (B) 테스트 matcher를 불릿 포함 또는 부분 일치로 바꿀지.
 - **참고:** 로컬 개발 DB에 합성 기록 1건(`브라우저 확인용 기록`)이 남아 있다(로컬 dev DB라 무해). 사용자 소유 미추적 `.claude/orchestration/`·`.claude/settings.local.json`은 건드리지 마라.
 
 > 직전 완료: 파이프라인 트리거(`feat/pipeline-trigger`) — 병합·push 완료(`3c90e5d`). 워커 CLI 3명령, 재실행 시 LLM 재과금 차단.
