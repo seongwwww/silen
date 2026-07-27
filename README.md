@@ -24,6 +24,7 @@ components/common/      # 실은 도메인 공통 컴포넌트
 worker/                 # Python 워커 (차이 탐지·AI 잡)
 worker/src/silen_worker/tasks/        # 큐 소비 잡 진입점(process_pending)
 worker/src/silen_worker/extraction/   # 엔티티 추출 (가드레일·정규화·Vertex Gemini)
+worker/src/silen_worker/cli.py        # 파이프라인 CLI(run-pending·run-daily·run-diary)
 worker/src/silen_worker/db.py         # 워커 DB 접근(user 스코프 강제)
 fixtures/               # 두 자산이 공유하는 골든 케이스
 evals/entities/         # 엔티티 추출 골든셋 (환각·빈날·조사·병합·4종)
@@ -91,6 +92,56 @@ worker\.venv\Scripts\python.exe evals/narration/run.py
 # 일기 생성 eval — 실 Vertex Gemini 호출(비용), ADC + env 3종 필요
 worker\.venv\Scripts\python.exe evals/diary/run.py
 ```
+
+### 4. 파이프라인 실행
+
+워커 함수는 CLI로 구동한다. **주기 실행은 OS 스케줄러에 위임**한다(상주 데몬 없음).
+
+```powershell
+# 큐 소비 → 엔티티 추출 (실 Vertex 호출·비용)
+worker\.venv\Scripts\python.exe -m silen_worker run-pending
+
+# 차이 검출 → 서술 (실 Vertex 호출·비용). 기본 대상: 전체 사용자 × 각자 로컬 어제
+worker\.venv\Scripts\python.exe -m silen_worker run-daily
+
+# 일기 생성 (확정 차이 반영). 사람이 확인 UI에서 맞아요/아니에요를 누른 뒤 실행
+worker\.venv\Scripts\python.exe -m silen_worker run-diary
+
+# 특정 사용자·날짜만 (디버깅·재실행)
+worker\.venv\Scripts\python.exe -m silen_worker run-daily --user <uuid> --date 2026-07-26
+```
+
+전제: Vertex ADC env 3종(`GOOGLE_GENAI_USE_VERTEXAI`·`GOOGLE_CLOUD_PROJECT`·`GOOGLE_CLOUD_LOCATION`).
+
+**순서가 중요하다.** `run-daily`는 차이 카드를 준비만 하고, 일기는 사람이 확정한 차이만 녹인다:
+
+```
+run-daily (자정 이후)  →  사람이 확인 UI에서 확정  →  run-diary (그날 밤)
+```
+
+**재실행 안전:** 이미 서술된 차이는 LLM을 다시 부르지 않는다. 스케줄러가 자주 돌아도 새 차이에만 비용이 든다.
+
+**종료 코드:** 전부 성공 `0`, 사용자 처리 실패가 하나라도 있으면 `1`.
+
+#### 스케줄 등록 (사람이 실행)
+
+Windows 작업 스케줄러 예시 — **아래는 안내이며 등록은 사람이 직접 한다.**
+
+```powershell
+# 5분마다 큐 소비
+schtasks /create /tn "silen-run-pending" /sc minute /mo 5 ^
+  /tr "C:\workspace\silen\worker\.venv\Scripts\python.exe -m silen_worker run-pending"
+
+# 매일 00:30 차이 검출·서술
+schtasks /create /tn "silen-run-daily" /sc daily /st 00:30 ^
+  /tr "C:\workspace\silen\worker\.venv\Scripts\python.exe -m silen_worker run-daily"
+
+# 매일 22:00 일기 생성
+schtasks /create /tn "silen-run-diary" /sc daily /st 22:00 ^
+  /tr "C:\workspace\silen\worker\.venv\Scripts\python.exe -m silen_worker run-diary"
+```
+
+작업 스케줄러는 작업의 "시작 위치"를 저장소 루트로 두고, ADC env가 필요한 작업은 사용자 계정 컨텍스트로 실행해야 한다.
 
 > shadcn/ui는 첫 화면 작업 시 도입.
 
