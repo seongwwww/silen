@@ -4,14 +4,31 @@
 
 import psycopg
 
-from silen_worker.db import fetch_difference_for_narration, upsert_narration
+from silen_worker.db import (
+    fetch_difference_for_narration,
+    fetch_narration_id,
+    upsert_narration,
+)
 from silen_worker.narration.service import Narrator, NarrationInput, guardrail
 
 
 def narrate_difference(
-    conn: psycopg.Connection, difference_id: str, narrator: Narrator | None = None
+    conn: psycopg.Connection,
+    difference_id: str,
+    narrator: Narrator | None = None,
+    skip_if_exists: bool = True,
 ) -> str | None:
-    """서술 성공 시 narration id, 대상 없음/가드레일 탈락 시 None."""
+    """서술 성공 시 narration id, 대상 없음/가드레일 탈락 시 None.
+
+    skip_if_exists=True(기본)면 이미 서술이 있는 차이에는 LLM을 부르지 않고
+    기존 id를 돌려준다 — 스케줄러가 반복 호출해도 재과금이 없다.
+    명시적 '다시 만들기'는 skip_if_exists=False로 호출한다.
+    """
+    if skip_if_exists:
+        existing = fetch_narration_id(conn, difference_id)
+        if existing is not None:
+            return existing
+
     if narrator is None:
         from silen_worker.narration.gemini import GeminiNarrator
 

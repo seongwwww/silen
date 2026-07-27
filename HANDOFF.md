@@ -47,11 +47,13 @@ Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스�
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
 - **스펙 커밋:** `e0a6b30` · **계획 확정 커밋:** `f032570`. 둘 다 **`main`에 있다**(문서는 main 직접 커밋 허용, git.md).
-- **구현 진행:** **미착수.** Task 1부터 시작한다. `feat/pipeline-trigger` 브랜치를 `main`에서 새로 만들어라.
-- **시작 전 확인:** `git log --oneline -1`이 `f032570`(또는 그 이후)인지, `npx supabase status`로 로컬 스택이 떠 있는지.
-- **직전 검증 기준선(main):** 프론트 단위 **40 PASS** · 워커 **94 PASS** · ruff clean. 이 숫자에서 시작한다(새 테스트만큼 늘어야 한다).
-- **막힘/결정 필요:** (없음)
-- **참고:** 로컬 개발 DB에 합성 기록 1건(`브라우저 확인용 기록`)이 남아 있다(로컬 dev DB라 무해). 사용자 소유 미추적 `.claude/orchestration/`·`.claude/settings.local.json`은 건드리지 마라.
+- **구현 진행:** **Task 1~6 완료 (6 / 6).** 브랜치 `feat/pipeline-trigger`; push·merge 안 함.
+- **태스크별 커밋:** Task 1 DB 함수 `d182292` · Task 2 서술 재실행 안전 `53cbc02` · Task 3 대상 계산·파서 `f9b7a64` · Task 4 세 CLI 명령 `1e756ae` · Task 5 module 엔트리포인트 `2e903ba` · Task 6 실행 문서 `39c7cb7`.
+- **검증:** 로컬 Supabase 상태 확인. `python -m silen_worker --help`와 `run-daily --help` 성공(실 명령·실 LLM 미호출). 워커 전체 **113 PASS**(기준선 94 + 새 테스트 19), ruff clean, 프론트 단위 **40 PASS**.
+- **안전 확인:** 스키마·마이그레이션 변경 없음. `schtasks`·`crontab` 미실행. CLI 로그는 user_id·날짜·카운트·id·예외 타입명만 포함하고 본문·일기 텍스트·예외 메시지를 싣지 않는다.
+- **다음 시작점:** 사람이 변경을 리뷰한 뒤 `main` 기준 rebase와 `merge --no-ff` 또는 PR을 진행한다(squash·push 자동 실행 금지).
+- **막힘/결정 필요:** 없음. pytest가 `.pytest_cache` 쓰기 권한 경고 1건을 내지만 테스트 결과에는 영향 없음.
+- **참고:** 로컬 개발 DB에 합성 기록 1건(`브라우저 확인용 기록`)이 남아 있다(로컬 dev DB라 무해). 사용자 소유 미추적 `.claude/orchestration/`·`.claude/settings.local.json`은 건드리지 않았다.
 
 > 직전 완료: 기록 화면(`feat/record-screen`) — 병합·push 완료(`d42906b`). 44px 규칙 준수로 확정.
 

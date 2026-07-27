@@ -361,3 +361,22 @@ def replace_diary_sources(
             "on conflict (diary_id, memory_id) do nothing",
             (diary_id, memory_id),
         )
+
+
+def fetch_active_users(conn: psycopg.Connection) -> list[tuple[str, str]]:
+    """모든 사용자를 (user_id, timezone)으로 반환한다. 배치 대상 열거용.
+    사용자별 '하루' 경계 계산에 timezone이 필요하다(time.local_date_for)."""
+    rows = conn.execute(
+        "select id::text, timezone from public.users order by id"
+    ).fetchall()
+    return [(r[0], r[1]) for r in rows]
+
+
+def fetch_narration_id(conn: psycopg.Connection, difference_id: str) -> str | None:
+    """이 차이에 이미 서술이 있으면 그 id, 없으면 None.
+    재실행 시 LLM 재호출(반복 과금)을 막는 판정에 쓴다."""
+    row = conn.execute(
+        "select id::text from public.difference_narrations where difference_id = %s",
+        (difference_id,),
+    ).fetchone()
+    return row[0] if row is not None else None
