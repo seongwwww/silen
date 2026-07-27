@@ -87,11 +87,21 @@ Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스�
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
 - **스펙 커밋:** `docs: 일기 날짜 이동 설계 스펙` · **계획 확정 커밋:** `docs: 일기 날짜 이동 구현 계획`. 둘 다 **`main`에 있다**(문서는 main 직접 커밋 허용, git.md).
-- **진행:** ⓪ 파이프라인 1회 실행 **미착수** · ① 일기 날짜 이동 **미착수**. ⓪ → ① 순서로 한다.
-- **시작 전 확인:** `git pull`로 최신 `main`인지, `npx supabase status`로 로컬 스택이 떠 있는지, ADC env 3종(⓪에만 필요).
-- **직전 검증 기준선(main):** 프론트 단위 **49** · 통합 **44** · 워커 **113** · lint·build·ruff clean. 여기서 시작한다(단위가 `DiaryNav` 4건만큼 늘어 53이 될 것, 통합은 5건 늘어 49).
-- **막힘/결정 필요:** (없음)
-- **참고:** 로컬 개발 DB에 합성 기록 1건(`브라우저 확인용 기록`)이 남아 있다 — ⓪의 실전 실행 재료로 쓸 수 있다. 사용자 소유 미추적 `.claude/orchestration/`·`.claude/settings.local.json`은 건드리지 마라.
+- **진행:** ⓪ 파이프라인 1회 실행 완료 · ① 일기 날짜 이동 **Task 1~4 전체 완료**(`feat/diary-navigation`).
+- **⓪ 실행 결과(각 명령 정확히 1회):**
+  - 대상 날짜 `2026-07-27` — 활성 메모가 사용자 `4a83fd9b-28c2-41ff-aade-8d7a02d45104`, `dd3f3f24-ae7c-43c4-a3c4-86c7096cda52`에 각 1건.
+  - `run-pending` 종료 코드 0, `{"event":"run_pending.done","processed":0}`. 큐가 비어 있어 엔티티 추출·Vertex 요청은 발생하지 않았다.
+  - `run-daily --date 2026-07-27` 종료 코드 0, 사용자 5명 모두 `differences=0`, `narrated=0`, 최종 `ok=5`, `failed=0`. 새 차이가 없어 Vertex 서술 요청은 발생하지 않았다.
+  - 전후 건수: `entities` 0→0 · `memory_entities` 0→0 · `differences` 0→0 · `difference_narrations` 0→0. 새 ID 없음. `/review` 육안 확인은 생략(차이 0건). **재실행·`run-diary` 실행 없음.**
+- **① 태스크별 커밋:**
+  - Task 1 날짜 조회·실재 이웃 조회 — `94ced2e`
+  - Task 2 이전/다음 네비게이션 — `94a5296`
+  - Task 3 공통 화면·`/diary/[date]` 라우트 — `cc7a222`
+  - Task 4 README 안내 — `2908cc7`
+- **최종 검증:** `npm run lint` PASS · `npm run build` PASS(`/diary`, `/diary/[date]`) · 단위 **53 PASS** · 통합 **49 PASS**.
+- **막힘/결정 필요:** 없음. 스키마·마이그레이션·API 라우트·워커·`eslint.config.mjs`·기존 `DiaryArticle`/`EvidenceDisclosure`/`StateView` 변경 없음. push·merge도 하지 않았다.
+- **다음 시작점:** 사람이 `feat/diary-navigation`을 검토한 뒤 push·merge한다.
+- **참고:** 사용자 소유 미추적 `.claude/orchestration/`·`.claude/settings.local.json`은 건드리지 않았다.
 
 > 직전 완료: 일기 보기 화면(`feat/diary-view`) — 병합·push 완료(`e0e701d`). MVP 루프(기록→확인→일기)가 닫혔다.
 
