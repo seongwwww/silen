@@ -41,7 +41,7 @@ def test_첫_등장이_first_occurrence로_기록되고_근거가_연결된다(c
 
         assert len(written) == 1
         rows = _diffs(conn, user)
-        assert rows == [("first_occurrence", "이 place 첫 등장")]
+        assert rows == [("first_occurrence", "처음 등장")]
         ev = conn.execute(
             "select memory_id::text from public.difference_evidence where difference_id = %s",
             (written[0],),

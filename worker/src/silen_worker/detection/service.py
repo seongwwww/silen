@@ -54,7 +54,9 @@ def detect_differences(target_date: date, windows: list[EntityWindow]) -> list[D
             out.append(
                 DetectedDifference(
                     w.entity_id, w.entity_type, "first_occurrence",
-                    f"이 {w.entity_type} 첫 등장", FIRST_OCCURRENCE_CONFIDENCE,
+                    # 영문 enum이 LLM에 그대로 가면 "이 thing이 기록된 것도 처음"
+                    # 같은 메타 서술을 낳는다. 사람 말로 둔다.
+                    "처음 등장", FIRST_OCCURRENCE_CONFIDENCE,
                 )
             )
             continue
