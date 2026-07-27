@@ -7,7 +7,7 @@ def _facts(memories=None, differences=None):
     if memories is None:
         memories = [DiaryMemory("m1", "점심 김밥"), DiaryMemory("m2", "오늘 좀 일찍 나옴")]
     if differences is None:
-        differences = [DiaryDifference("d1", "평소보다 일찍 퇴근")]
+        differences = [DiaryDifference("d1", "평소보다 일찍 퇴근", "퇴근")]
     return DiaryInput("2026-07-24", "u1", memories, differences)
 
 

@@ -66,7 +66,12 @@ def test_confirmed_차이와_headline을_조회한다(conn):
     try:
         diff = _confirmed_difference(conn, user, headline="3일째 김밥")
         got = fetch_confirmed_differences(conn, user, date.today())
-        assert (diff, "3일째 김밥") in got
+        assert len(got) == 1
+        assert got[0].difference_id == diff
+        assert got[0].headline == "3일째 김밥"
+        assert got[0].detection_method == "freq_shift"
+        assert got[0].entity_type == "thing"
+        assert got[0].entity_name == "김밥"
     finally:
         delete_user(conn, user)
 

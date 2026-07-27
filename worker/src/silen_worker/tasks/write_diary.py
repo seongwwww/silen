@@ -47,12 +47,19 @@ def generate_diary(
     if not memories:
         return None  # 빈 날 — 억지 생성 안 함
 
-    diffs = fetch_confirmed_differences(conn, user_id, target)
+    confirmed = fetch_confirmed_differences(conn, user_id, target)
+    # 본문엔 '이야기가 되는' 반복만 녹인다. '처음 등장'은 나열이 자연스러워
+    # recap 목록이 담당한다(본문에 넣으면 "~한 것도 처음이다"가 반복된다).
+    body_diffs = [c for c in confirmed if c.detection_method == "freq_shift"]
+
     facts = DiaryInput(
         date_iso=target_date_iso,
         user_id=user_id,
         memories=memories,
-        differences=[DiaryDifference(d, h) for d, h in diffs],
+        differences=[
+            DiaryDifference(c.difference_id, c.headline, c.entity_name)
+            for c in body_diffs
+        ],
     )
 
     raw = writer.write(facts)
@@ -65,8 +72,8 @@ def generate_diary(
         # 경쟁 조건: status 확인 후 upsert 전에 유저가 편집 → 보호(덮지 않음).
         # 섹션·출처도 건드리지 않고 기존 일기 id를 그대로 반환한다.
         return existing[0] if existing is not None else None
-    headline_by_id = {d.difference_id: d.headline for d in facts.differences}
-    used_diff_pairs = [(did, headline_by_id.get(did, "")) for did in diary.used_difference_ids]
-    replace_diary_sections(conn, diary_id, diary.one_line, diary.body, used_diff_pairs)
+    # recap 목록은 그날 확정된 차이 전부다(본문에 녹은 것만이 아니라).
+    recap = [(c.difference_id, c.headline) for c in confirmed]
+    replace_diary_sections(conn, diary_id, diary.one_line, diary.body, recap)
     replace_diary_sources(conn, diary_id, diary.used_memory_ids)
     return diary_id

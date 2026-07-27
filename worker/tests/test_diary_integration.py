@@ -131,3 +131,48 @@ def test_일기_삭제시_섹션출처_연쇄삭제(conn):
         assert sec == 0 and src == 0
     finally:
         delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_처음등장은_본문재료가_아니고_recap에만_남는다(conn):
+    user = seed_user(conn)
+    try:
+        seed_memory(conn, user, "점심 김밥")
+        # first_occurrence 확정 차이 하나
+        ent = conn.execute(
+            "insert into public.entities (user_id, entity_type, name, normalized_name) "
+            "values (%s, 'thing', '김밥', '김밥') returning id::text", (user,)
+        ).fetchone()[0]
+        conn.execute(
+            "insert into public.differences (user_id, date, entity_id, dimension, description, "
+            "detection_method, confidence, category, status, evidence_state) "
+            "values (%s, %s, %s, 'thing', '처음 등장', 'first_occurrence', 1.0, "
+            "'오늘의다른점', 'confirmed', 'intact')",
+            (user, date.today(), ent),
+        )
+
+        seen = {}
+
+        class RecordingWriter:
+            model = "stub"
+
+            def write(self, facts):
+                seen["diffs"] = [d.difference_id for d in facts.differences]
+                return {
+                    "one_line": "비슷한 하루.",
+                    "body": "특별할 것 없는 하루였다. 점심은 김밥.",
+                    "used_memory_ids": [m.memory_id for m in facts.memories],
+                    "used_difference_ids": [],
+                }
+
+        did = generate_diary(conn, user, _today_iso(), writer=RecordingWriter())
+        assert did is not None
+        assert seen["diffs"] == []  # 본문 재료에서 제외됐다
+
+        recap = conn.execute(
+            "select count(*)::int from public.diary_sections "
+            "where diary_id = %s and section_type = '다른점'", (did,),
+        ).fetchone()[0]
+        assert recap == 1  # recap 목록엔 남는다
+    finally:
+        delete_user(conn, user)
