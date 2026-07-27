@@ -9,51 +9,55 @@
 
 ## 현재 활성 작업 (Active Work Order)
 
-**목표:** `docs/superpowers/plans/2026-07-27-record-screen.md`(기록 화면 — 홈을 메모 입력으로) 구현.
-**성격:** 계획 확정 완료 — **"코드만 짜면 되는" 상태**. 재설계하지 말고 계획을 그대로 따른다(13개 Locked Decisions로 모호함 제거됨).
-**스펙 배경:** `docs/superpowers/specs/2026-07-27-record-screen-design.md`.
-**브랜치:** `feat/record-screen`.
-**왜 이게 지금 중요한가:** 백엔드(추출·detector·서술·일기)는 다 있는데 **사람이 기록할 화면이 없어 실데이터가 하나도 안 쌓인다.** 이 화면이 파이프라인 입구를 연다.
+**목표:** `docs/superpowers/plans/2026-07-27-pipeline-trigger.md`(파이프라인 트리거 — 워커 CLI 엔트리포인트) 구현.
+**성격:** 계획 확정 완료 — **"코드만 짜면 되는" 상태**. 재설계하지 말고 계획을 그대로 따른다(14개 Locked Decisions로 모호함 제거됨).
+**스펙 배경:** `docs/superpowers/specs/2026-07-27-pipeline-trigger-design.md`.
+**브랜치:** **`feat/pipeline-trigger`를 `main`에서 새로 만들어** 작업한다(`git checkout -b feat/pipeline-trigger main`). 스펙·계획은 이미 `main`에 있다.
+**왜 이게 지금 중요한가:** 워커 진입점 4개(`process_pending`·`detect_day`·`narrate_difference`·`generate_diary`)가 전부 "호출 가능한 함수"일 뿐 **CLI도 엔트리포인트도 없어 아무도 부를 수 없다.** 기록 화면이 생겨 메모가 쌓여도 차이·일기가 만들어지지 않는다. 이걸 붙여야 제품이 실제로 돈다.
 
 ### 실행 방식 (플러그인 없이 수동)
 Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스킬이 없으니 아래를 수동으로** 밟는다. 계획 헤더의 "REQUIRED SUB-SKILL"은 무시. **Task 1 → 6 순서, TDD:**
-- 태스크마다: ① 실패 테스트 작성 → ② 실행해 실패 확인 → ③ 계획의 코드 그대로 구현 → ④ 테스트 통과 → ⑤ lint clean → ⑥ **그 태스크 단위로 1커밋**.
+- 태스크마다: ① 실패 테스트 작성 → ② 실행해 실패 확인 → ③ 계획의 코드 그대로 구현 → ④ 테스트 통과 → ⑤ ruff clean → ⑥ **그 태스크 단위로 1커밋**.
 - 계획 안의 명령을 그대로 실행한다. 코드·테스트를 임의로 바꾸지 않는다.
 
-### 환경 (Windows, 순수 프론트 슬라이스)
-- Node/npm. **앱 코드 작성 전 Next.js 16 문서**(`node_modules/next/dist/docs/01-app/`) 필독 — 학습데이터와 다르다.
-- **DB·Vertex/ADC 불필요.** 이 기능은 컴포넌트 단위 테스트만으로 검증한다(통합 테스트 추가 없음).
-- 테스트: `npx vitest run`(단위) · `npm run lint` · `npm run build`(타입). 육안 확인은 `npm run dev` 후 `/`.
-- shadcn은 이미 도입돼 있다(button·card·sonner). Task 1에서 `npx shadcn@latest add textarea`만 추가하며, 대화형으로 멈추면 기본값으로 답한다.
-- 전체 회귀가 필요하면 통합도 돌릴 수 있다(로컬 Supabase + 라이브 dev 서버 필요): `npx vitest run --config vitest.integration.config.mts`.
+### 환경 (Windows, Python 워커 슬라이스)
+- 파이썬은 **`worker\.venv\Scripts\python.exe`를 직접 호출**한다(venv 활성화 대신).
+- **로컬 Supabase 스택이 떠 있어야 한다**(통합 테스트). `npx supabase status`로 확인.
+  `npx supabase db reset` 후에는 반드시 `npx supabase stop; Start-Sleep -Seconds 3; npx supabase start`로 auth 502를 복구한다.
+- **Vertex/ADC 불필요** — 이 기능의 테스트는 LLM을 전부 스텁으로 주입한다. ADC env를 셋업할 필요가 없다.
+- 테스트: `worker\.venv\Scripts\python.exe -m pytest worker`(전체) · `-m "not integration"`(단위만, DB 불필요) · `-m integration`(DB 필요) · `-m ruff check worker`(lint).
+- 프론트는 이 기능과 무관하지만 Task 6에서 회귀만 확인한다(`npx vitest run`).
 
 ### 어기면 안 되는 것 (hard rules)
-- **백엔드·스키마 변경 없음** — 기존 `POST /api/memories`를 재사용한다. 새 라우트·마이그레이션 만들지 마라.
-- **세션 로직 넣지 마라** — API가 세션 없으면 익명 세션을 자동 생성한다(로그인 없이 기록 가능).
-- ⚠️ **`POST /api/memories`는 멱등이 아니다** — 이중 클릭이 중복 메모를 만든다. `useRef` 동기 가드 + 버튼 disabled **둘 다** 필수(Locked Decision 4).
-- **실패해도 사용자가 쓴 글을 절대 비우지 마라**(최악의 UX).
+- **스키마 변경·마이그레이션 없음.** 새 도메인 로직도 없다 — 이건 기존 함수를 부르는 **배선 계층**이다.
+- ⚠️ **`process_pending`만 `conn`을 받지 않는다**(자체 `connect()`). 나머지 셋은 `conn`을 받는다. **이 불일치를 통일하지 마라** — 병합된 코드 회귀 위험이고 이 기능의 목적과 무관하다(Locked Decision 1).
+- ⚠️ **Task 2가 이 기능의 핵심이다.** `narrate_difference`는 지금 기존 서술이 있어도 **매번 LLM을 부른다** — 스케줄러가 반복 호출하면 전체 재서술로 **반복 과금**이 된다. `skip_if_exists=True` 기본값으로 막는다.
+- ⚠️ **Task 2가 기존 `test_narration_integration.py`의 재서술 테스트를 깨뜨릴 수 있다.** 그 테스트는 같은 차이를 두 번 서술해 내용이 덮어써지는지 본다. 깨지면 **테스트를 약화시키지 말고** 그 호출에 `skip_if_exists=False`를 넘겨라(그 테스트의 의도가 "명시적 재서술"이므로 의도를 명확히 하는 수정이다). 판단이 안 서면 멈추고 보고하라.
+- 🚫 **실 LLM을 부르는 실행을 하지 마라(비용).** 스모크는 `python -m silen_worker --help`까지만. `run-daily`/`run-pending`을 인자 없이 실행하면 실제 Vertex 호출이 발생한다.
+- 🚫 **스케줄러에 실제로 등록하지 마라.** `schtasks`·`crontab`을 실행하지 마라 — 계획 Task 6은 **문서만** 쓴다. 등록은 사람이 한다(안전 가드).
+- **로그에 사용자 기록 본문·일기 텍스트를 넣지 마라.** `user_id`·카운트·id·**예외 타입명**만. 예외 메시지에 프롬프트/본문이 섞여 나올 수 있어 `str(exc)`를 로그에 넣지 않는다.
 - **태스크마다 커밋만. push·merge 금지**(사람이 한다).
-- 이미 병합된 기능(**extraction·detector·narration·diary·confirm-ui**)을 수정하지 마라 — 계획이 지정한 파일만 추가/교체한다.
+- 이미 병합된 기능(**extraction·detector·narration·diary·confirm-ui·record-screen**)을 수정하지 마라 — 계획이 지정한 파일만 추가/교체한다(`db.py`·`tasks/narrate.py`는 계획이 지정한 범위에서만).
 - 커밋 메시지의 `Co-Authored-By` 트레일러는 **네 것으로** 바꿔라(네가 저자다). git.md 규약.
 - 못 고치는 테스트 실패나 모호한 점이 있으면 **멈추고 보고**하라. 추측하거나 테스트를 약화시키지 마라.
-- 완료(DoD) = lint + typecheck(build) + unit. (이 기능은 통합 테스트를 추가하지 않는다 — 기존 API 것으로 충분.)
+- 완료(DoD) = ruff + pytest(단위+통합). **eval은 이 기능 대상 아님**(프롬프트·모델 미변경).
 
 ---
 
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
-- **계획 확정 커밋:** `d3bb07e` · **스펙 커밋:** `55fc2a4`.
-- **구현 진행:** Task 1~4 완료 + 44px 결정 해결. **브랜치 병합 준비 완료**(병합·push는 사람).
-- **커밋된 태스크:** Task 1 `8078556` · Task 2 `a278312` · 44px 수정 `d6b14b8` · Task 3 홈 교체 `bddd33f` · Task 4 문서 `259c2e9`.
-- **44px 판단 — 44px 준수로 확정(Codex 캐치가 옳았음).** 계획 예시 코드의 `min-h-9`가 실수였다. `frontend.md`(터치 타깃 44px 이상)·스펙 §7·완료 기준이 모두 44px을 요구하고, 이미 병합된 `components/common/ConfirmActions.tsx`가 `min-h-11`로 같은 선례를 세웠다. → `EmotionChips`를 `min-h-11`로 수정하고 계획도 갱신, **Locked Decision #14**(“계획 예시 코드와 접근성 규칙이 어긋나면 규칙이 이긴다”) 추가.
-- **검증(수정 후 전체 재실행):** 단위 **40 PASS** · 통합 **39 PASS** · lint PASS · production build PASS. Codex의 육안 확인(390×844)에서 저장 후 초기화·포커스 유지, textarea 160px 상한·스크롤 확인됨.
-- **다음 시작점:** 사람이 `main` 위로 rebase → `merge --no-ff`(squash 금지) 병합.
-- **참고:** 육안 검증으로 로컬 개발 DB에 합성 기록 1건(`브라우저 확인용 기록`)이 남아 있다(로컬 dev DB라 무해, 자동 삭제하지 않음). 사용자 소유 미추적 `.claude/orchestration/`·`.claude/settings.local.json`은 건드리지 않았다.
+- **스펙 커밋:** `e0a6b30` · **계획 확정 커밋:** `f032570`. 둘 다 **`main`에 있다**(문서는 main 직접 커밋 허용, git.md).
+- **구현 진행:** **미착수.** Task 1부터 시작한다. `feat/pipeline-trigger` 브랜치를 `main`에서 새로 만들어라.
+- **시작 전 확인:** `git log --oneline -1`이 `f032570`(또는 그 이후)인지, `npx supabase status`로 로컬 스택이 떠 있는지.
+- **직전 검증 기준선(main):** 프론트 단위 **40 PASS** · 워커 **94 PASS** · ruff clean. 이 숫자에서 시작한다(새 테스트만큼 늘어야 한다).
 - **막힘/결정 필요:** (없음)
+- **참고:** 로컬 개발 DB에 합성 기록 1건(`브라우저 확인용 기록`)이 남아 있다(로컬 dev DB라 무해). 사용자 소유 미추적 `.claude/orchestration/`·`.claude/settings.local.json`은 건드리지 마라.
+
+> 직전 완료: 기록 화면(`feat/record-screen`) — 병합·push 완료(`d42906b`). 44px 규칙 준수로 확정.
 
 > 직전 완료: 확인 UI(`feat/confirm-ui`) — 병합됨. TOCTOU 보안 수정 포함. 상세는 git 히스토리.
 
-> 직전 완료: 일기 생성(diary) 기능 — PR 병합됨(`main`). 상세는 git 히스토리.
+> 직전 완료: 일기 생성(diary) 기능 — 병합됨(`main`). 상세는 git 히스토리.
 
 > 갱신 예: `Task 1 완료 (커밋 abc1234). 다음: Task 2 저장소.`
 
@@ -61,6 +65,7 @@ Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스�
 
 ## 참고 (context)
 
-- **파이프라인 현황:** 워커 진입점 4개(`process`·`detect`·`narrate`·`write_diary`)가 전부 "호출 가능한 함수"일 뿐 **자동 구동(스케줄러·큐 루프)이 없다.** 그래서 기록 화면이 생겨 메모가 쌓여도 차이·일기는 아직 자동 생성되지 않는다 — 다음 기능 후보 1순위.
-- **이 기능 병합 후 후보:** **파이프라인 스케줄 트리거**(자동 구동 — 그래야 실데이터가 흐른다) · 일기 보기 화면 · 기록 열람/목록 · 사진 첨부. 전체 로드맵은 `PROJECT_STATE.md`.
+- **파이프라인 순서(이 기능이 여는 것):** 메모 insert → DB 트리거가 pgmq `memory_jobs`에 적재 → `run-pending`이 소비해 엔티티 추출 → `run-daily`가 차이 검출·서술 → **사람이 확인 UI에서 확정** → `run-diary`가 확정 차이를 녹인 일기 생성.
+  일기는 `status='confirmed'` 차이만 쓰므로 `run-daily`와 `run-diary` 사이에 **사람의 확정**이 들어가야 한다. 그래서 명령이 둘로 나뉜다.
+- **이 기능 병합 후 후보:** 일기 보기 화면 · 기록 열람/목록 · 사진 첨부. 전체 로드맵은 `PROJECT_STATE.md`.
 - Claude 세션이 서브에이전트 주도(SDD)로 돌 땐 `.superpowers/sdd/progress.md`에 더 세밀한 태스크 원장을 둔다(선택). **공용 진행 상태의 기준은 이 파일의 "상태" 절**이다.
