@@ -8,8 +8,15 @@
 """
 
 import argparse
-from datetime import date, datetime, timedelta
+import json
+import sys
+from datetime import date, datetime, timedelta, timezone
 
+from silen_worker.db import connect, fetch_active_users
+from silen_worker.tasks.detect import detect_day
+from silen_worker.tasks.narrate import narrate_difference
+from silen_worker.tasks.process import process_pending
+from silen_worker.tasks.write_diary import generate_diary
 from silen_worker.time import local_date_for
 
 
@@ -65,3 +72,125 @@ def build_parser() -> argparse.ArgumentParser:
             )
 
     return parser
+
+
+def _emit(event: dict) -> None:
+    """구조화 로그 한 줄. 본문·일기 텍스트를 절대 싣지 않는다."""
+    print(json.dumps(event, ensure_ascii=False))
+
+
+def resolve_targets(
+    conn, user: str | None, date_iso: str | None, now: datetime | None = None
+) -> list[tuple[str, str]]:
+    """DB에서 사용자를 읽어 처리 대상 (user_id, date_iso) 목록을 만든다."""
+    return build_targets(
+        fetch_active_users(conn),
+        user,
+        date_iso,
+        now or datetime.now(timezone.utc),
+    )
+
+
+def run_pending(extractor=None, limit: int = 10, max_batches: int = 50) -> int:
+    """큐가 빌 때까지(또는 상한까지) 소비하고 처리한 memory 개수를 반환한다.
+    process_pending은 conn을 받지 않고 자체 접속한다(기존 인터페이스 유지)."""
+    total = 0
+    for _ in range(max_batches):
+        processed = process_pending(limit=limit, extractor=extractor)
+        total += len(processed)
+        if len(processed) < limit:
+            break
+    _emit({"event": "run_pending.done", "processed": total})
+    return total
+
+
+def run_daily(conn, targets: list[tuple[str, str]], narrator=None) -> tuple[int, int]:
+    """사용자별로 차이를 검출하고 서술한다. (성공 수, 실패 수) 반환.
+    한 사용자의 실패가 나머지를 막지 않는다."""
+    ok = fail = 0
+    for user_id, date_iso in targets:
+        try:
+            difference_ids = detect_day(conn, user_id, date_iso)
+            narrated = 0
+            for difference_id in difference_ids:
+                if (
+                    narrate_difference(conn, difference_id, narrator=narrator)
+                    is not None
+                ):
+                    narrated += 1
+            _emit(
+                {
+                    "event": "run_daily.user",
+                    "user_id": user_id,
+                    "date": date_iso,
+                    "differences": len(difference_ids),
+                    "narrated": narrated,
+                }
+            )
+            ok += 1
+        except Exception as exc:  # 사용자 단위 격리
+            fail += 1
+            _emit(
+                {
+                    "event": "run_daily.error",
+                    "user_id": user_id,
+                    "date": date_iso,
+                    "error": type(exc).__name__,  # 메시지는 본문이 섞일 수 있어 제외
+                }
+            )
+    return ok, fail
+
+
+def run_diary(
+    conn, targets: list[tuple[str, str]], writer=None, force: bool = False
+) -> tuple[int, int]:
+    """사용자별로 일기를 생성한다. (성공 수, 실패 수) 반환.
+    빈 날은 생성하지 않지만 실패가 아니다."""
+    ok = fail = 0
+    for user_id, date_iso in targets:
+        try:
+            diary_id = generate_diary(
+                conn, user_id, date_iso, force=force, writer=writer
+            )
+            _emit(
+                {
+                    "event": "run_diary.user",
+                    "user_id": user_id,
+                    "date": date_iso,
+                    "created": diary_id is not None,
+                }
+            )
+            ok += 1
+        except Exception as exc:  # 사용자 단위 격리
+            fail += 1
+            _emit(
+                {
+                    "event": "run_diary.error",
+                    "user_id": user_id,
+                    "date": date_iso,
+                    "error": type(exc).__name__,
+                }
+            )
+    return ok, fail
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+
+    if args.command == "run-pending":
+        run_pending(limit=args.limit, max_batches=args.max_batches)
+        return 0
+
+    with connect() as conn:
+        targets = resolve_targets(conn, args.user, args.date)
+        if args.user is not None and not targets:
+            print(f"사용자를 찾을 수 없습니다: {args.user}", file=sys.stderr)
+            return 1
+
+        if args.command == "run-daily":
+            ok, fail = run_daily(conn, targets)
+        else:
+            ok, fail = run_diary(conn, targets, force=args.force)
+
+    _emit({"event": f"{args.command}.done", "ok": ok, "failed": fail})
+    return 1 if fail else 0
