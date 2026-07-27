@@ -19,6 +19,7 @@
 - ⚠️ **터치 타깃 44px**(`min-h-11`). `min-h-9` 금지.
 - ⚠️ **URL에 사용자 콘텐츠·엔티티명을 넣지 마라.** 질문 링크는 **id만** 넘긴다(`?section=<uuid>`). 질문 텍스트를 쿼리스트링에 넣지 마라(privacy.md).
 - **로그에 기록 본문·일기·질문 텍스트를 남기지 마라.** id·카운트만.
+  **예외: `evals/`의 러너 출력.** eval 픽스처는 **합성 예시**라 사용자 기록이 아니고, eval은 출력 품질을 사람이 판정하라고 만든 도구다. 본문을 감추면 무엇이 왜 나빴는지 볼 수 없어 도구의 목적이 사라진다(이번 작업도 일기 본문을 눈으로 보고 문제를 발견했다). **`evals/diary/run.py`의 one_line·body 출력을 지우지 마라.**
 - 파이썬은 `worker\.venv\Scripts\python.exe` 직접 호출. 통합 테스트는 로컬 Supabase 필요.
 - 🚫 **`run-diary`·`run-daily`를 임의로 실행하지 마라(실 LLM 비용).** 검증은 스텁으로 한다.
 - 🚫 **통합 테스트가 개발 DB의 사용자·큐를 지운다는 걸 알고 있어라.** 그건 알려진 문제이며 이번 범위 밖이다. 테스트는 정상적으로 돌려도 된다(실데이터 검증은 이미 끝났다).
@@ -1021,6 +1022,26 @@ URL엔 섹션 id만 담는다(질문에 사람 이름이 들어갈 수 있다)."
 ## Task 7: eval 보강 · 문서
 
 **Files:** Modify `evals/diary/fixtures.json`, `evals/diary/run.py`, `README.md`, `supabase/README.md`
+
+- [ ] **Step 0: fixture를 3필드로 고친다 (먼저 해야 안 터진다)**
+
+Task 3에서 `DiaryDifference`가 `(difference_id, headline, entity_name)` 3필드가 됐다. `evals/diary/run.py:41`은 아직 2필드로 언패킹하므로 그대로 두면 **터진다.**
+
+`evals/diary/run.py`의 해당 줄을 바꾼다:
+
+```python
+        differences=[DiaryDifference(did, h, name) for did, h, name in case["differences"]],
+```
+
+`evals/diary/fixtures.json`의 `ordinary-with-diff` 케이스 `differences`를 아래로 바꾼다:
+
+```json
+     "differences": [["d1", "김밥 3일째", "김밥"]],
+```
+
+> 값도 함께 바꾸는 이유: 기존 `평소보다 일찍 퇴근`은 엔티티명이 메모(`점심 김밥`·`오늘 좀 일찍 나옴`)에 없어, 새 가드레일(쓴 차이의 엔티티명이 본문에 있어야 함)에 걸려 **가짜 FAIL**이 난다. 그리고 이제 본문에 오는 건 `freq_shift`뿐이라 반복형 케이스가 설계와 맞다.
+
+다른 케이스는 `differences`가 비어 있어 수정이 필요 없다.
 
 - [ ] **Step 1: 골든셋 보강**
 
