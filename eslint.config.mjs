@@ -24,7 +24,17 @@ const eslintConfig = defineConfig([
               // - differenceRepository.ts: 차이 확인 경계가 세션 client와 조립하는 팩토리.
               //   경계(합성 루트)가 client→repository를 엮어 서비스에 주입한다.
               //   도메인 질의 자체는 여전히 서비스를 거친다.
-              except: ["./supabase.ts", "./memoryRepository.ts", "./differenceRepository.ts"],
+              // - diaryRepository.ts: 일기 보기 경계가 세션 client와 조립하는 팩토리.
+              //   /review와 구조가 같은 RLS 스코프 읽기 전용 화면이다.
+              // 주의: 읽기 화면이 늘 때마다 예외를 추가하면 규칙이 닳는다. 다음에
+              // 또 추가하게 되면 목록 대신 "*Repository.ts 팩토리는 허용"처럼
+              // 기준 자체를 다시 세울 것.
+              except: [
+                "./supabase.ts",
+                "./memoryRepository.ts",
+                "./differenceRepository.ts",
+                "./diaryRepository.ts",
+              ],
               message:
                 "계층 건너뛰기 금지(backend.md): 경계에서 저장소를 직접 호출하지 말고 서비스를 거친다.",
             },

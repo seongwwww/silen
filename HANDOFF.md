@@ -49,10 +49,28 @@ Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스�
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
 - **스펙 커밋:** `4a4bd0d` 계열(일기 보기 설계) · **계획 확정 커밋:** 최신 `docs: 일기 보기 화면 구현 계획`. 둘 다 **`main`에 있다**(문서는 main 직접 커밋 허용, git.md).
-- **구현 진행:** **미착수.** Task 1부터 시작한다. `feat/diary-view` 브랜치를 `main`에서 새로 만들어라.
-- **시작 전 확인:** `git pull`로 최신 `main`인지, `npx supabase status`로 로컬 스택이 떠 있는지.
-- **직전 검증 기준선(main):** 프론트 단위 **40 PASS** · 워커 **113 PASS** · ruff clean. 이 숫자에서 시작한다(프론트가 새 테스트만큼 늘어야 한다 — Task 2·3에서 9건 예상).
-- **막힘/결정 필요:** (없음)
+- **구현 진행:** `feat/diary-view`에서 **Task 1~5 전체 완료**.
+  - Task 1 저장소·통합 테스트 완료 — 커밋 `8d0cbbb`
+  - Task 2 근거 메모 접기 완료 — 커밋 `7acdfbf`
+  - Task 3 일기 표시 컴포넌트 완료 — 커밋 `d502b0d`
+  - Task 4 페이지 배선·상태 분기·계층 예외·select 타입 수정 완료 — 커밋 `cec3bb8`
+  - Task 5 README 안내 완료 — 커밋 `8832130`
+- **시작 전 확인 결과:** 최신 `main`에서 브랜치를 만들었고 로컬 Supabase API·DB가 실행 중이다. 선택 서비스(`imgproxy`·`edge_runtime`·`pooler`) 정지는 Task 1 통합 테스트에 영향 없었다.
+- **최종 검증 결과:** `npm run lint` PASS · `npm run build` PASS(`/diary` 동적 라우트 생성) · 프론트 단위 **49 PASS**(기준선 40 + 새 9) · 통합 **44 PASS**(기존 39 + 새 5).
+  - 최초 최종 통합 실행에서 기존 `/api/differences/[id]` 라이브 테스트가 500을 반환했으나, 응답은 코드 오류가 아니라 장시간 실행 중이던 dev 서버의 `Jest worker encountered 2 child process exceptions`였다. dev 서버만 재시작하자 같은 요청이 400으로 정상화됐고 통합 44건 전체가 통과했다.
+- **✅ 해결된 결정 — 불릿 충돌(Codex 캐치가 옳았음).** 계획 Task 3의 테스트는 정확 일치를 요구하는데 같은 계획의 구현이 `<li>· {d}</li>`로 불릿을 텍스트에 넣어 모순이었다. **계획의 버그였고 (A)로 확정** — 불릿을 CSS `::marker`(`list-disc`)로 옮겨 접근 가능한 텍스트에 차이 문장만 남긴다.
+  - 근거: `·`는 장식이라 접근 가능한 텍스트에 있으면 스크린리더가 "가운데점 …"으로 읽는다. `<ul>/<li>`가 이미 목록 의미를 전달하므로 문자 불릿은 중복이다. (B)는 접근성 노이즈를 남기면서 테스트도 약화시켜 둘 다 잃는다.
+  - 조치: 계획 Task 3 구현 코드를 `list-disc pl-5`로 고치고 **Locked Decision #11**("장식 문자를 접근 가능한 텍스트에 넣지 마라 — 계획 예시 코드와 접근성 규칙이 어긋나면 규칙이 이긴다")을 추가했다. record-screen의 44px 선례와 같은 판단이다.
+  - **`app/diary/_components/DiaryView.tsx`에 적용해 검증했고(5/5 PASS), Task 3 커밋 `d502b0d`에 포함했다.**
+- **✅ 해결된 결정 — Task 4 계층 lint 충돌(Codex 캐치가 옳았음). (A)로 확정** — `eslint.config.mjs` 예외 목록에 `./diaryRepository.ts`를 추가한다.
+  - 근거: 규칙 주석이 예외 기준을 "경계가 조립하는 인프라(팩토리)"로 명시한다. `diaryRepository`는 세션 client를 받는 팩토리이고, `/diary`는 `/review`와 구조가 같은 RLS 스코프 읽기 전용 화면이다 — `differenceRepository.ts`가 예외에 있는 것과 같은 이유다.
+  - (B)를 버린 이유: 읽기 화면엔 서비스에 넣을 도메인 로직이 없어 통과용 계층만 늘고, `/diary`만 `/review`와 다른 패턴이 되어 다음 사람이 어느 쪽을 따를지 알 수 없게 된다.
+  - 예외 목록이 닳지 않도록 주석을 남겼다: 읽기 화면이 또 늘면 목록 대신 "`*Repository.ts` 팩토리 허용"으로 기준 자체를 다시 세울 것.
+- **✅ 해결된 문제 — Task 1 타입 에러(계획 버그).** `diaryRepository`의 `select()` 인자를 가독성 때문에 `+`로 이어붙였더니 리터럴 타입이 아니라 `string`이 되어 supabase-js의 select 타입 추론이 깨졌다(`row.diary_sections`가 `GenericStringError`). **한 줄 문자열 리터럴로 고쳤다.**
+  - 이 오류는 lint·단위 테스트로 안 잡히고 **`npm run build`(tsc)에서만** 드러난다. → **Locked Decision 13**: 태스크마다 build를 돌려라.
+- **조치 완료:** `eslint.config.mjs` 예외 추가 + `lib/repositories/diaryRepository.ts` select 한 줄화는 Task 4 커밋 `cec3bb8`에 포함했다. 계획의 **Locked Decision 12·13**을 따랐다.
+- **막힘:** 없음. `run-diary`·스키마 변경·API/워커 변경은 하지 않았고, push·merge도 하지 않았다.
+- **다음 시작점:** 사람이 `feat/diary-view` 커밋들을 검토한 뒤 push·merge한다.
 - **참고:** 로컬 개발 DB에 합성 기록 1건(`브라우저 확인용 기록`)이 남아 있다(로컬 dev DB라 무해). 사용자 소유 미추적 `.claude/orchestration/`·`.claude/settings.local.json`은 건드리지 마라.
 
 > 직전 완료: 파이프라인 트리거(`feat/pipeline-trigger`) — 병합·push 완료(`3c90e5d`). 워커 CLI 3명령, 재실행 시 LLM 재과금 차단.
