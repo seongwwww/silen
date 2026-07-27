@@ -38,6 +38,8 @@
 9. **API 라우트를 만들지 마라.** 서버 컴포넌트가 저장소를 직접 부른다(`/review` 선례).
 10. **로그인하지 않았으면 빈 상태**로 처리한다(`/review`가 `user ? ... : []`로 하는 것과 동일). 리다이렉트·로그인 유도를 넣지 마라.
 11. **장식 문자를 접근 가능한 텍스트에 넣지 마라.** 불릿·구분자는 CSS(`list-disc`·`::before`)로 그린다. 문자로 넣으면 스크린리더가 읽고 `getByText` 정확 일치도 깨진다. **계획 예시 코드와 접근성 규칙이 어긋나면 규칙이 이긴다** — 예시 코드는 출발점이지 근거가 아니다(record-screen의 44px 선례와 동일).
+12. **`eslint.config.mjs`의 예외 목록에 `diaryRepository.ts`를 추가한다.** `import/no-restricted-paths`가 `app → lib/repositories`를 막는데, 예외는 "경계가 조립하는 인프라(팩토리)"에 한한다고 규칙 주석이 명시한다. `diaryRepository`는 세션 client를 받는 팩토리이고 `/diary`는 `/review`와 구조가 같은 RLS 읽기 전용 화면이라 같은 근거로 예외에 들어간다. **서비스 통과 계층을 새로 만들지 마라** — 읽기 화면엔 서비스에 넣을 도메인 로직이 없고, `/review`와 다른 패턴이 되면 다음 사람이 어느 쪽을 따를지 알 수 없다.
+13. **`supabase.select()` 인자는 반드시 한 줄 문자열 리터럴.** 이어붙이면 타입 추론이 깨진다(#1 Task 1 주석 참고). 이 오류는 `npm run lint`·`npx vitest run`으로는 안 잡히고 **`npm run build`(tsc)에서만** 드러난다 — 태스크마다 build를 돌려라.
 
 ## File Structure
 
@@ -248,10 +250,11 @@ export function createDiaryRepository(client: SupabaseClient) {
     async findLatest(): Promise<DiaryView | null> {
       const { data, error } = await client
         .from("diaries")
+        // ⚠️ 반드시 한 줄 문자열 리터럴로 둔다. 문자열을 `+`로 이어붙이면
+        // 리터럴 타입이 아니라 string이 되어 supabase-js의 select 타입 추론이
+        // 깨지고 row.diary_sections가 GenericStringError가 된다(tsc에서만 잡힘).
         .select(
-          "date, status, generated_text, edited_text, " +
-            "diary_sections(section_type, content), " +
-            "diary_sources(memories(raw_text, is_locked, deleted_at))",
+          "date, status, generated_text, edited_text, diary_sections(section_type, content), diary_sources(memories(raw_text, is_locked, deleted_at))",
         )
         .order("date", { ascending: false })
         .limit(1);
@@ -573,6 +576,7 @@ git commit -m "feat(ui): 일기 표시 컴포넌트
 
 **Files:**
 - Create: `app/diary/page.tsx`, `app/diary/loading.tsx`, `app/diary/error.tsx`
+- Modify: `eslint.config.mjs` (예외 목록에 `./diaryRepository.ts` 추가 — Locked Decision 12)
 
 **Interfaces:**
 - Consumes: Task 1 저장소, Task 3 `DiaryArticle`, 기존 `createServerSupabase`·`EmptyState`

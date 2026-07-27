@@ -60,11 +60,15 @@ Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스�
   - 근거: `·`는 장식이라 접근 가능한 텍스트에 있으면 스크린리더가 "가운데점 …"으로 읽는다. `<ul>/<li>`가 이미 목록 의미를 전달하므로 문자 불릿은 중복이다. (B)는 접근성 노이즈를 남기면서 테스트도 약화시켜 둘 다 잃는다.
   - 조치: 계획 Task 3 구현 코드를 `list-disc pl-5`로 고치고 **Locked Decision #11**("장식 문자를 접근 가능한 텍스트에 넣지 마라 — 계획 예시 코드와 접근성 규칙이 어긋나면 규칙이 이긴다")을 추가했다. record-screen의 44px 선례와 같은 판단이다.
   - **`app/diary/_components/DiaryView.tsx`에 적용해 검증했고(5/5 PASS), Task 3 커밋 `d502b0d`에 포함했다.**
-- **⚠️ 새 결정 필요 — Task 4 계층 lint 충돌.** 계획은 `/review` 선례대로 `app/diary/page.tsx`가 `@/lib/repositories/diaryRepository`를 직접 import하도록 고정했지만, `eslint.config.mjs`의 `import/no-restricted-paths`는 `app → lib/repositories`를 금지한다. 기존 `/review`는 예외 목록에 `differenceRepository.ts`가 명시돼 통과하지만 `diaryRepository.ts`는 예외가 아니어서 `npm run lint`가 `app/diary/page.tsx:2:39`에서 실패한다.
-  - 선택 A: `eslint.config.mjs` 예외 목록에 `diaryRepository.ts`를 추가한다. 계획의 `/review` 합성 루트 선례를 그대로 따르지만 계획 지정 파일 밖을 수정한다.
-  - 선택 B: 페이지가 서비스 계층을 거치도록 `lib/services/diary.ts` 등에 질의 배선을 추가한다. lint 원칙에는 맞지만 계획의 직접 저장소 호출 코드·파일 범위를 바꾼다.
-  - 계획과 규칙이 충돌하면 멈추라는 지시에 따라 어느 쪽도 임의 적용하지 않았다.
-- **다음 시작점:** 위 A/B를 결정하고 계획·Locked Decision을 갱신한 뒤 Task 4 lint → build → 전체 단위 검사부터 재개한다. 이후 Task 4 커밋 → Task 5.
+- **✅ 해결된 결정 — Task 4 계층 lint 충돌(Codex 캐치가 옳았음). (A)로 확정** — `eslint.config.mjs` 예외 목록에 `./diaryRepository.ts`를 추가한다.
+  - 근거: 규칙 주석이 예외 기준을 "경계가 조립하는 인프라(팩토리)"로 명시한다. `diaryRepository`는 세션 client를 받는 팩토리이고, `/diary`는 `/review`와 구조가 같은 RLS 스코프 읽기 전용 화면이다 — `differenceRepository.ts`가 예외에 있는 것과 같은 이유다.
+  - (B)를 버린 이유: 읽기 화면엔 서비스에 넣을 도메인 로직이 없어 통과용 계층만 늘고, `/diary`만 `/review`와 다른 패턴이 되어 다음 사람이 어느 쪽을 따를지 알 수 없게 된다.
+  - 예외 목록이 닳지 않도록 주석을 남겼다: 읽기 화면이 또 늘면 목록 대신 "`*Repository.ts` 팩토리 허용"으로 기준 자체를 다시 세울 것.
+- **✅ 해결된 문제 — Task 1 타입 에러(계획 버그).** `diaryRepository`의 `select()` 인자를 가독성 때문에 `+`로 이어붙였더니 리터럴 타입이 아니라 `string`이 되어 supabase-js의 select 타입 추론이 깨졌다(`row.diary_sections`가 `GenericStringError`). **한 줄 문자열 리터럴로 고쳤다.**
+  - 이 오류는 lint·단위 테스트로 안 잡히고 **`npm run build`(tsc)에서만** 드러난다. → **Locked Decision 13**: 태스크마다 build를 돌려라.
+- **조치·검증(내가 적용해 둠, 미커밋):** `eslint.config.mjs` 예외 추가 + `lib/repositories/diaryRepository.ts` select 한 줄화. 계획에 **Locked Decision 12·13**을 추가하고 Task 4 파일 목록에 `eslint.config.mjs`를 넣었다.
+  - **전체 검증 통과:** lint PASS · 단위 **49 PASS**(기준선 40 + 새 9) · build PASS(`/diary` 라우트 생성 확인) · 통합 **44 PASS**(기존 39 + 새 5).
+- **다음 시작점:** Task 4 커밋(`app/diary/page.tsx`·`loading.tsx`·`error.tsx` + `eslint.config.mjs` + `diaryRepository.ts` 수정) → Task 5(문서). 검증은 이미 전부 통과한 상태다.
 - **참고:** 로컬 개발 DB에 합성 기록 1건(`브라우저 확인용 기록`)이 남아 있다(로컬 dev DB라 무해). 사용자 소유 미추적 `.claude/orchestration/`·`.claude/settings.local.json`은 건드리지 마라.
 
 > 직전 완료: 파이프라인 트리거(`feat/pipeline-trigger`) — 병합·push 완료(`3c90e5d`). 워커 CLI 3명령, 재실행 시 LLM 재과금 차단.
