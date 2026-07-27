@@ -161,4 +161,73 @@ describe("diaryRepository", () => {
     );
     expect(await repo.hasAnyMemory()).toBe(true);
   });
+
+  it("날짜로 일기를 가져온다", async () => {
+    await db.query("delete from public.diaries where user_id = $1", [bob]);
+    await db.query("delete from public.memories where user_id = $1", [bob]);
+    await seedDiary(bob, { memo: "날짜 조회용" });
+    const today = (await db.query("select current_date::text as d")).rows[0].d;
+
+    const repo = createDiaryRepository(
+      await clientFor("diary-bob@example.com"),
+    );
+    const view = await repo.findByDate(today);
+    expect(view).not.toBeNull();
+    expect(view!.date).toBe(today);
+    expect(view!.evidence).toContain("날짜 조회용");
+  });
+
+  it("일기가 없는 날짜는 null", async () => {
+    const repo = createDiaryRepository(
+      await clientFor("diary-bob@example.com"),
+    );
+    expect(await repo.findByDate("2020-01-01")).toBeNull();
+  });
+
+  it("이웃은 빈 날을 건너뛰고 존재하는 일기로 점프한다", async () => {
+    await db.query("delete from public.diaries where user_id = $1", [alice]);
+    // 7/10, 7/20, 7/30 — 사이 날짜엔 일기가 없다
+    for (const date of ["2026-07-10", "2026-07-20", "2026-07-30"]) {
+      await db.query(
+        "insert into public.diaries (user_id, date, status, generated_text) " +
+          "values ($1,$2,'draft','본문')",
+        [alice, date],
+      );
+    }
+    const repo = createDiaryRepository(
+      await clientFor("diary-alice@example.com"),
+    );
+    const mid = await repo.findNeighborDates("2026-07-20");
+    expect(mid.prev).toBe("2026-07-10");
+    expect(mid.next).toBe("2026-07-30");
+  });
+
+  it("가장 오래된·최신 일기에서 경계는 null", async () => {
+    const repo = createDiaryRepository(
+      await clientFor("diary-alice@example.com"),
+    );
+    const oldest = await repo.findNeighborDates("2026-07-10");
+    expect(oldest.prev).toBeNull();
+    expect(oldest.next).toBe("2026-07-20");
+
+    const newest = await repo.findNeighborDates("2026-07-30");
+    expect(newest.prev).toBe("2026-07-20");
+    expect(newest.next).toBeNull();
+  });
+
+  it("타 사용자 일기는 이웃으로 잡히지 않는다", async () => {
+    await db.query("delete from public.diaries where user_id = $1", [bob]);
+    await db.query(
+      "insert into public.diaries (user_id, date, status, generated_text) " +
+        "values ($1,'2026-07-20','draft','밥의 일기')",
+      [bob],
+    );
+    // alice의 일기는 7/10·7/20·7/30 — bob은 7/20 하나뿐이라 이웃이 없어야 한다
+    const repo = createDiaryRepository(
+      await clientFor("diary-bob@example.com"),
+    );
+    const neighbors = await repo.findNeighborDates("2026-07-20");
+    expect(neighbors.prev).toBeNull();
+    expect(neighbors.next).toBeNull();
+  });
 });
