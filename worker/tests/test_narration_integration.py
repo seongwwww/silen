@@ -140,7 +140,9 @@ def test_재서술은_내용을_덮어쓴다(conn):
             "body": "김밥이 다시 한 번 눈에 띄었어요.",
             "evidence_text": "다시 빈도가 올라가서 찾았어요.",
         }
-        narrate_difference(conn, diff, narrator=StubNarrator(second_raw))
+        narrate_difference(
+            conn, diff, narrator=StubNarrator(second_raw), skip_if_exists=False
+        )
         second = _narration_row(conn, diff)
         assert second[1] == "김밥 또 등장"
         assert second[2] == "김밥이 다시 한 번 눈에 띄었어요."
