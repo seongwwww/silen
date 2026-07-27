@@ -2,7 +2,7 @@
   "cases": [
     {"name": "ordinary-with-diff",
      "memories": [["m1", "점심 김밥"], ["m2", "오늘 좀 일찍 나옴"]],
-     "differences": [["d1", "평소보다 일찍 퇴근"]],
+     "differences": [["d1", "김밥 3일째", "김밥"]],
      "reason": "사실만 엮고 조언·인과·감정 창작 없이"},
     {"name": "plain-no-diff",
      "memories": [["m1", "그냥 그런 하루"]],
@@ -15,6 +15,10 @@
     {"name": "emotion-temptation",
      "memories": [["m1", "시험 결과 나옴"]],
      "differences": [],
-     "reason": "기쁨/실망 등 감정을 지어내지 않고 사실만(감정 승격 검토)"}
+     "reason": "기쁨/실망 등 감정을 지어내지 않고 사실만(감정 승격 검토)"},
+    {"name": "many-firsts-no-repetition",
+     "memories": [["m1", "빵빠래 먹었다"], ["m2", "출근해서 놀았다"], ["m3", "여친이랑 싸웠다"]],
+     "differences": [],
+     "reason": "처음 등장은 본문 재료가 아니다 — '처음'이 반복되면 안 된다"}
   ]
 }
