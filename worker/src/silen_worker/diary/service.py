@@ -6,7 +6,7 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from silen_worker.diary.constants import BODY_MAX, ONE_LINE_MAX
+from silen_worker.diary.constants import BODY_MAX, META_PHRASES, ONE_LINE_MAX
 from silen_worker.narration.constants import FORBIDDEN_PHRASES
 
 
@@ -20,6 +20,7 @@ class DiaryMemory:
 class DiaryDifference:
     difference_id: str
     headline: str
+    entity_name: str
 
 
 @dataclass(frozen=True)
@@ -50,7 +51,10 @@ def build_prompt(facts: DiaryInput) -> str:
     """그날 메모(본문)+확정 차이로 프롬프트를 조립한다. 시간순 메모, 사실만."""
     mem_lines = "\n".join(f"- [{m.memory_id}] {m.text}" for m in facts.memories)
     diff_lines = (
-        "\n".join(f"- [{d.difference_id}] {d.headline}" for d in facts.differences)
+        "\n".join(
+            f"- [{d.difference_id}] {d.headline} (표현: {d.entity_name})"
+            for d in facts.differences
+        )
         or "- (없음)"
     )
     return (
@@ -59,6 +63,9 @@ def build_prompt(facts: DiaryInput) -> str:
         "규칙: 메모에 있는 사실만 쓴다. 없는 장면·대사·사람·감정·인과를 만들지 마라.\n"
         "조언·응원·교훈·자기계발 금지. 평범하면 평범하다고 써도 된다. 감정을 지어내지 마라.\n"
         "메모가 1~2개면 짧게(2~3문장), 3개 이상이면 흐름으로 엮어라.\n"
+        "'일기에 기록됐다' 같은 메타 서술 금지 — 시스템의 기록 상태가 아니라 네 하루를 써라.\n"
+        "다른 점에 적힌 표현을 그대로 써라. 다른 말로 바꾸지 마라"
+        "(예: '여친'을 '여자친구'로 바꾸지 마라).\n"
         "one_line은 60자 이내, body는 2000자 이내로 쓴다.\n\n"
         f"날짜: {facts.date_iso}\n"
         f"메모(시간순):\n{mem_lines}\n\n"
@@ -100,5 +107,15 @@ def guardrail(raw: dict, facts: DiaryInput) -> Diary | None:
     blob = f"{one_line} {body}"
     if any(p in blob for p in FORBIDDEN_PHRASES):
         return None
+    if any(p in blob for p in META_PHRASES):
+        return None
+
+    # 본문에 쓴 차이는 그 엔티티 표현을 그대로 써야 한다.
+    # ('여친'을 '여자친구'로 바꾸는 확장을 막는다 — 원문에 없는 표현이다.)
+    name_by_id = {d.difference_id: d.entity_name for d in facts.differences}
+    for difference_id in used_diff:
+        name = name_by_id.get(difference_id, "")
+        if name and name not in body:
+            return None
 
     return Diary(one_line=one_line, body=body, used_memory_ids=used_mem, used_difference_ids=used_diff)

@@ -275,14 +275,26 @@ def fetch_diary_memories(
     return [DiaryMemoryRow(r[0], r[1], r[2], r[3]) for r in rows]
 
 
+@dataclass
+class ConfirmedDifference:
+    difference_id: str
+    headline: str
+    detection_method: str
+    entity_type: str
+    entity_name: str
+
+
 def fetch_confirmed_differences(
     conn: psycopg.Connection, user_id: str, target_date: date
-) -> list[tuple[str, str]]:
-    """그날 confirmed(intact) 차이 + 서술 headline(없으면 description 폴백). user_id 강제."""
+) -> list[ConfirmedDifference]:
+    """그날 confirmed(intact) 차이. detection_method로 본문용(freq_shift)과
+    recap용(first_occurrence)을 가르고, entity_name은 가드레일에 쓴다."""
     rows = conn.execute(
         """
-        select d.id::text, coalesce(n.headline, d.description, '')
+        select d.id::text, coalesce(n.headline, d.description, ''),
+               d.detection_method, e.entity_type, e.name
         from public.differences d
+        join public.entities e on e.id = d.entity_id
         left join public.difference_narrations n on n.difference_id = d.id
         where d.user_id = %s
           and d.date = %s
@@ -292,7 +304,7 @@ def fetch_confirmed_differences(
         """,
         (user_id, target_date),
     ).fetchall()
-    return [(r[0], r[1]) for r in rows]
+    return [ConfirmedDifference(r[0], r[1], r[2], r[3], r[4]) for r in rows]
 
 
 def fetch_existing_diary(
@@ -380,3 +392,14 @@ def fetch_narration_id(conn: psycopg.Connection, difference_id: str) -> str | No
         (difference_id,),
     ).fetchone()
     return row[0] if row is not None else None
+
+
+def insert_diary_question(
+    conn: psycopg.Connection, diary_id: str, difference_id: str, content: str
+) -> None:
+    """일기의 꼬리 질문 하나. replace_diary_sections가 섹션을 지운 뒤에 부른다."""
+    conn.execute(
+        "insert into public.diary_sections (diary_id, difference_id, section_type, content) "
+        "values (%s, %s, '질문', %s)",
+        (diary_id, difference_id, content),
+    )

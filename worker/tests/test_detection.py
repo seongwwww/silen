@@ -18,7 +18,7 @@ def test_이력_없는_엔티티는_first_occurrence():
     out = detect_differences(TARGET, [_win({TARGET}, occurred_before=False)])
     assert len(out) == 1
     assert out[0].method == "first_occurrence"
-    assert out[0].description == "이 thing 첫 등장"
+    assert out[0].description == "처음 등장"
     assert out[0].confidence == 1.0
 
 

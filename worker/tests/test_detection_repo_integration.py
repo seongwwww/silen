@@ -84,10 +84,10 @@ def test_difference_upsert는_멱등이고_근거를_링크한다(conn):
         _link(conn, mem, ent)
         d = date(2026, 7, 23)
 
-        did1 = upsert_difference(conn, user, d, ent, "first_occurrence", "thing", "이 thing 첫 등장", 1.0)
+        did1 = upsert_difference(conn, user, d, ent, "first_occurrence", "thing", "처음 등장", 1.0)
         link_difference_evidence(conn, did1, mem)
         # 재실행 — 같은 자연키 → 같은 행
-        did2 = upsert_difference(conn, user, d, ent, "first_occurrence", "thing", "이 thing 첫 등장", 1.0)
+        did2 = upsert_difference(conn, user, d, ent, "first_occurrence", "thing", "처음 등장", 1.0)
         link_difference_evidence(conn, did2, mem)
 
         assert did1 == did2

@@ -21,6 +21,7 @@ import json
 import sys
 from pathlib import Path
 
+from silen_worker.diary.constants import META_PHRASES
 from silen_worker.diary.gemini import GeminiDiaryWriter
 from silen_worker.diary.service import DiaryDifference, DiaryInput, DiaryMemory, guardrail
 from silen_worker.narration.constants import FORBIDDEN_PHRASES
@@ -38,7 +39,7 @@ def _facts(case: dict) -> DiaryInput:
     return DiaryInput(
         date_iso="2026-07-24", user_id="eval",
         memories=[DiaryMemory(mid, text) for mid, text in case["memories"]],
-        differences=[DiaryDifference(did, h) for did, h in case["differences"]],
+        differences=[DiaryDifference(did, h, name) for did, h, name in case["differences"]],
     )
 
 
@@ -54,6 +55,11 @@ def run_case(case: dict, writer: GeminiDiaryWriter) -> tuple[bool, list[str]]:
     hit = [p for p in FORBIDDEN_PHRASES if p in blob]
     if hit:
         failures.append(f"조언/인과/응원 혼입: {hit}")
+    meta_hit = [p for p in META_PHRASES if p in blob]
+    if meta_hit:
+        failures.append(f"메타 서술 혼입: {meta_hit}")
+    if blob.count("처음") > 1:
+        failures.append(f"'처음' 반복 {blob.count('처음')}회 — 나열은 recap이 담당한다")
     if not one_line or not body:
         failures.append("빈 필드")
 

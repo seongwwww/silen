@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DiaryView } from "@/lib/services/diary";
 
-type SectionRow = { section_type: string; content: string };
+type SectionRow = { id: string; section_type: string; content: string };
 type SourceRow = {
   memories: {
     raw_text: string | null;
@@ -14,7 +14,7 @@ type SourceRow = {
 // 타입을 잃으면 supabase-js의 select 타입 추론이 깨져 row.diary_sections가
 // GenericStringError가 된다(tsc에서만 드러남).
 const DIARY_SELECT =
-  "date, status, generated_text, edited_text, diary_sections(section_type, content), diary_sources(memories(raw_text, is_locked, deleted_at))" as const;
+  "date, status, generated_text, edited_text, diary_sections(id, section_type, content), diary_sources(memories(raw_text, is_locked, deleted_at))" as const;
 
 /** 조회 행 하나를 표시용 뷰로 옮긴다. findLatest·findByDate가 공유한다. */
 function toDiaryView(row: {
@@ -59,6 +59,10 @@ function toDiaryView(row: {
       )
       .map((memory) => memory.raw_text),
     isEdited: (row.status as string) !== "draft",
+    question: (() => {
+      const found = sections.find((section) => section.section_type === "질문");
+      return found ? { sectionId: found.id, text: found.content } : null;
+    })(),
   };
 }
 
@@ -116,6 +120,18 @@ export function createDiaryRepository(client: SupabaseClient) {
         prev: (prevResult.data?.[0]?.date as string | undefined) ?? null,
         next: (nextResult.data?.[0]?.date as string | undefined) ?? null,
       };
+    },
+
+    /** 기록 화면이 질문을 맥락으로 보여줄 때 쓴다. RLS가 소유권을 강제한다. */
+    async findQuestionById(sectionId: string): Promise<string | null> {
+      const { data, error } = await client
+        .from("diary_sections")
+        .select("content")
+        .eq("id", sectionId)
+        .eq("section_type", "질문")
+        .limit(1);
+      if (error) throw error;
+      return (data?.[0]?.content as string | undefined) ?? null;
     },
 
     /** 일기 재료가 될 수 있는 기록이 하나라도 있는가.

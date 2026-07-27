@@ -7,12 +7,12 @@ def _facts(memories=None, differences=None):
     if memories is None:
         memories = [DiaryMemory("m1", "점심 김밥"), DiaryMemory("m2", "오늘 좀 일찍 나옴")]
     if differences is None:
-        differences = [DiaryDifference("d1", "평소보다 일찍 퇴근")]
+        differences = [DiaryDifference("d1", "평소보다 일찍 퇴근", "퇴근")]
     return DiaryInput("2026-07-24", "u1", memories, differences)
 
 
 def _raw(one_line="비슷한 하루, 그래도 조금 일찍.",
-         body="특별할 것 없는 하루였다. 점심은 김밥. 오늘은 조금 일찍 나왔다.",
+         body="특별할 것 없는 하루였다. 점심은 김밥. 오늘은 조금 일찍 퇴근했다.",
          used_memory_ids=None, used_difference_ids=None):
     return {
         "one_line": one_line, "body": body,
@@ -74,3 +74,30 @@ def test_프롬프트에_메모본문과_차이가_들어간다():
     assert "점심 김밥" in p
     assert "평소보다 일찍 퇴근" in p
     assert "2026-07-24" in p
+
+
+def test_메타_서술은_폐기한다():
+    out = guardrail(_raw(body="일기에 출근이라는 행동이 기록된 것도 오늘이 처음이다."), _facts())
+    assert out is None
+
+
+def test_단어를_기록했다는_표현도_폐기한다():
+    out = guardrail(_raw(body="시간이라는 단어를 남긴 것은 오늘이 처음이다."), _facts())
+    assert out is None
+
+
+def test_쓴_차이의_표현을_바꾸면_폐기한다():
+    # 입력 엔티티명은 '퇴근'인데 본문이 다른 말로 바꿔 쓰면 안 된다.
+    out = guardrail(
+        _raw(body="오늘은 평소보다 일찍 회사를 나왔다.", used_difference_ids=["d1"]),
+        _facts(),
+    )
+    assert out is None
+
+
+def test_쓴_차이의_표현을_그대로_쓰면_통과한다():
+    out = guardrail(
+        _raw(body="오늘은 평소보다 일찍 퇴근을 했다.", used_difference_ids=["d1"]),
+        _facts(),
+    )
+    assert out is not None

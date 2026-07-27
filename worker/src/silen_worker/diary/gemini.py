@@ -49,3 +49,34 @@ class GeminiDiaryWriter:
             ),
         )
         return json.loads(resp.text)
+
+
+_QUESTION_SCHEMA = types.Schema(
+    type="OBJECT",
+    properties={"question": types.Schema(type="STRING")},
+    required=["question"],
+)
+
+
+class GeminiQuestionWriter:
+    """QuestionWriter 포트 구현. 가드레일은 호출자 책임."""
+
+    model = _MODEL
+
+    def __init__(self) -> None:
+        if not os.environ.get("GOOGLE_CLOUD_PROJECT"):
+            raise RuntimeError("GOOGLE_CLOUD_PROJECT 미설정 — Vertex ADC 구성 필요")
+        self._client = genai.Client()
+
+    def ask(self, target) -> dict:
+        from silen_worker.diary.question import build_question_prompt
+
+        resp = self._client.models.generate_content(
+            model=_MODEL,
+            contents=build_question_prompt(target),
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=_QUESTION_SCHEMA,
+            ),
+        )
+        return json.loads(resp.text)

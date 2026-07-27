@@ -12,6 +12,7 @@ const base: DiaryView = {
   differences: ["평소보다 일찍 퇴근"],
   evidence: ["점심 김밥"],
   isEdited: false,
+  question: null,
 };
 
 describe("DiaryArticle", () => {
@@ -37,13 +38,32 @@ describe("DiaryArticle", () => {
   it("한 문장이 없으면 그 영역을 렌더하지 않는다", () => {
     render(<DiaryArticle diary={{ ...base, oneLine: "" }} />);
     expect(screen.getByText(base.body)).toBeInTheDocument();
-    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2 })).not.toBeInTheDocument();
   });
 
   it("근거 접기를 함께 보여준다", () => {
     render(<DiaryArticle diary={base} />);
     expect(
       screen.getByRole("button", { name: /무엇을 보고 썼는지/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("오늘 처음 제목을 보여준다", () => {
+    render(<DiaryArticle diary={base} />);
+    expect(screen.getByText("오늘 처음")).toBeInTheDocument();
+  });
+
+  it("질문이 있으면 카드를 보여준다", () => {
+    render(
+      <DiaryArticle
+        diary={{
+          ...base,
+          question: { sectionId: "s1", text: "지은은 어떤 사람이었어요?" },
+        }}
+      />,
+    );
+    expect(
+      screen.getByRole("link", { name: "지은은 어떤 사람이었어요?" }),
     ).toBeInTheDocument();
   });
 });

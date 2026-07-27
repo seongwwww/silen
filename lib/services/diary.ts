@@ -13,4 +13,6 @@ export interface DiaryView {
   evidence: string[];
   /** 사용자가 손댄 일기인가(status !== 'draft') */
   isEdited: boolean;
+  /** 꼬리 질문(없으면 null). id는 기록 화면 링크에 쓴다 — URL엔 id만 넣는다. */
+  question: { sectionId: string; text: string } | null;
 }

@@ -101,4 +101,9 @@ describe("RecordForm", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(input()).toHaveValue("오프라인 글");
   });
+
+  it("질문이 주어지면 맥락으로 보여준다", () => {
+    render(<RecordForm question="지은은 어떤 사람이었어요?" />);
+    expect(screen.getByText("지은은 어떤 사람이었어요?")).toBeInTheDocument();
+  });
 });

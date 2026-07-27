@@ -13,7 +13,7 @@ const MAX_HEIGHT_PX = 160;
 /** 기록 입력. 파이프라인의 입구다 — 열자마자 한 줄 쓰고 보내는 것이 전부여야 한다.
  * POST /api/memories는 멱등이 아니라 이중 전송이 중복 메모를 만든다(가드 필수).
  * 실패해도 사용자가 쓴 글은 절대 비우지 않는다. */
-export function RecordForm() {
+export function RecordForm({ question }: { question?: string | null }) {
   const [text, setText] = useState("");
   const [emotion, setEmotion] = useState<EmotionChoice | undefined>(undefined);
   const [saving, setSaving] = useState(false);
@@ -66,6 +66,11 @@ export function RecordForm() {
 
   return (
     <div className="flex flex-col gap-3">
+      {question && (
+        <p className="rounded-lg bg-muted px-3 py-2 text-[15px] text-muted-foreground">
+          {question}
+        </p>
+      )}
       <div className="flex items-start gap-2">
         <label htmlFor="record-text" className="sr-only">
           오늘의 기록
