@@ -176,3 +176,58 @@ def test_처음등장은_본문재료가_아니고_recap에만_남는다(conn):
         assert recap == 1  # recap 목록엔 남는다
     finally:
         delete_user(conn, user)
+
+
+class StubAsker:
+    def __init__(self, question):
+        self._question = question
+
+    def ask(self, target):
+        return {"question": self._question}
+
+
+@pytest.mark.integration
+def test_처음_등장한_사람이_있으면_질문이_생긴다(conn):
+    user = seed_user(conn)
+    try:
+        seed_memory(conn, user, "지은이 만남")
+        ent = conn.execute(
+            "insert into public.entities (user_id, entity_type, name, normalized_name) "
+            "values (%s, 'person', '지은', '지은') returning id::text", (user,)
+        ).fetchone()[0]
+        conn.execute(
+            "insert into public.differences (user_id, date, entity_id, dimension, description, "
+            "detection_method, confidence, category, status, evidence_state) "
+            "values (%s, %s, %s, 'person', '처음 등장', 'first_occurrence', 1.0, "
+            "'오늘의다른점', 'confirmed', 'intact')",
+            (user, date.today(), ent),
+        )
+        did = generate_diary(
+            conn, user, _today_iso(), writer=StubWriter(_GOOD),
+            asker=StubAsker("지은은 어떤 사람이었어요?"),
+        )
+        row = conn.execute(
+            "select content from public.diary_sections "
+            "where diary_id = %s and section_type = '질문'", (did,),
+        ).fetchone()
+        assert row is not None
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_대상이_없으면_질문이_생기지_않는다(conn):
+    user = seed_user(conn)
+    try:
+        seed_memory(conn, user, "점심 김밥")
+        did = generate_diary(
+            conn, user, _today_iso(), writer=StubWriter(_GOOD),
+            asker=StubAsker("아무 질문"),
+        )
+        count = conn.execute(
+            "select count(*)::int from public.diary_sections "
+            "where diary_id = %s and section_type = '질문'", (did,),
+        ).fetchone()[0]
+        assert count == 0
+    finally:
+        delete_user(conn, user)

@@ -392,3 +392,14 @@ def fetch_narration_id(conn: psycopg.Connection, difference_id: str) -> str | No
         (difference_id,),
     ).fetchone()
     return row[0] if row is not None else None
+
+
+def insert_diary_question(
+    conn: psycopg.Connection, diary_id: str, difference_id: str, content: str
+) -> None:
+    """일기의 꼬리 질문 하나. replace_diary_sections가 섹션을 지운 뒤에 부른다."""
+    conn.execute(
+        "insert into public.diary_sections (diary_id, difference_id, section_type, content) "
+        "values (%s, %s, '질문', %s)",
+        (diary_id, difference_id, content),
+    )

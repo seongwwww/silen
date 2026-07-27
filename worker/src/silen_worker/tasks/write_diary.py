@@ -8,8 +8,9 @@ import psycopg
 
 from silen_worker.db import (
     fetch_confirmed_differences, fetch_diary_memories, fetch_existing_diary,
-    replace_diary_sections, replace_diary_sources, upsert_diary,
+    insert_diary_question, replace_diary_sections, replace_diary_sources, upsert_diary,
 )
+from silen_worker.diary.question import pick_question_target, question_guardrail
 from silen_worker.diary.service import (
     DiaryDifference, DiaryInput, DiaryMemory, DiaryWriter, guardrail,
 )
@@ -22,6 +23,7 @@ def generate_diary(
     target_date_iso: str,
     force: bool = False,
     writer: DiaryWriter | None = None,
+    asker=None,
 ) -> str | None:
     """일기 diary_id, 또는 None(빈 날/가드레일 탈락). 기존 diary가 있으면
     force=False거나 유저가 손댄 것(status≠draft)이면 그대로 두고 diary_id 반환."""
@@ -76,4 +78,16 @@ def generate_diary(
     recap = [(c.difference_id, c.headline) for c in confirmed]
     replace_diary_sections(conn, diary_id, diary.one_line, diary.body, recap)
     replace_diary_sources(conn, diary_id, diary.used_memory_ids)
+
+    # 꼬리 질문은 하루 한 번, 대상이 있을 때만(prompts-draft §6 "기본은 묻지 않음").
+    target = pick_question_target(confirmed)
+    if target is not None:
+        if asker is None:
+            from silen_worker.diary.gemini import GeminiQuestionWriter
+
+            asker = GeminiQuestionWriter()
+        question = question_guardrail(asker.ask(target), target)
+        if question is not None:
+            insert_diary_question(conn, diary_id, target.difference_id, question)
+
     return diary_id
