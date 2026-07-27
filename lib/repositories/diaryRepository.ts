@@ -19,10 +19,11 @@ export function createDiaryRepository(client: SupabaseClient) {
     async findLatest(): Promise<DiaryView | null> {
       const { data, error } = await client
         .from("diaries")
+        // 한 줄 문자열 리터럴이어야 한다. 문자열을 이어붙이면 리터럴 타입이
+        // 아니라 string이 되어 supabase-js의 select 타입 추론이 깨진다
+        // (row.diary_sections가 GenericStringError가 됨).
         .select(
-          "date, status, generated_text, edited_text, " +
-            "diary_sections(section_type, content), " +
-            "diary_sources(memories(raw_text, is_locked, deleted_at))",
+          "date, status, generated_text, edited_text, diary_sections(section_type, content), diary_sources(memories(raw_text, is_locked, deleted_at))",
         )
         .order("date", { ascending: false })
         .limit(1);
