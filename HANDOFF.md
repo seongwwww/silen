@@ -9,45 +9,47 @@
 
 ## 현재 활성 작업 (Active Work Order)
 
-**목표:** `docs/superpowers/plans/2026-07-26-confirm-ui.md`(확인 UI — 차이 맞아요/아니에요) 구현.
-**성격:** 계획 확정 완료 — **"코드만 짜면 되는" 상태**. 재설계하지 말고 계획을 그대로 따른다(Locked Decisions로 모호함 제거됨).
-**스펙 배경:** `docs/superpowers/specs/2026-07-26-confirm-ui-design.md`.
-**브랜치:** `feat/confirm-ui`.
+**목표:** `docs/superpowers/plans/2026-07-27-record-screen.md`(기록 화면 — 홈을 메모 입력으로) 구현.
+**성격:** 계획 확정 완료 — **"코드만 짜면 되는" 상태**. 재설계하지 말고 계획을 그대로 따른다(13개 Locked Decisions로 모호함 제거됨).
+**스펙 배경:** `docs/superpowers/specs/2026-07-27-record-screen-design.md`.
+**브랜치:** `feat/record-screen`.
+**왜 이게 지금 중요한가:** 백엔드(추출·detector·서술·일기)는 다 있는데 **사람이 기록할 화면이 없어 실데이터가 하나도 안 쌓인다.** 이 화면이 파이프라인 입구를 연다.
 
 ### 실행 방식 (플러그인 없이 수동)
 Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스킬이 없으니 아래를 수동으로** 밟는다. 계획 헤더의 "REQUIRED SUB-SKILL"은 무시. **Task 1 → 6 순서, TDD:**
 - 태스크마다: ① 실패 테스트 작성 → ② 실행해 실패 확인 → ③ 계획의 코드 그대로 구현 → ④ 테스트 통과 → ⑤ lint clean → ⑥ **그 태스크 단위로 1커밋**.
 - 계획 안의 명령을 그대로 실행한다. 코드·테스트를 임의로 바꾸지 않는다.
 
-### 환경 (Windows, 프론트/앱 — 워커 아님)
-- Node/npm. **앱 코드 작성 전 Next.js 16 문서**(`node_modules/next/dist/docs/01-app/`) 필독 — 동적 `params`는 Promise(`await ctx.params`) 등 학습데이터와 다르다.
-- 로컬 Supabase `127.0.0.1:54322`. `npx supabase db reset` 뒤 auth 502 → 반드시 `npx supabase stop` → `npx supabase start` 후 통합 테스트. **로컬만, production 금지.**
-- **Vertex/ADC 불필요**(이 기능은 앱·UI, 워커 아님).
-- 테스트: `npx vitest run`(단위: 서비스·컴포넌트) · `npx vitest run --config vitest.integration.config.mts`(통합: 저장소·RLS, DB 필요) · `npm run lint` · `npm run build`(타입).
-- Task 3 `npx shadcn@latest init -d`가 대화형으로 멈추면 기본값으로 답한다(Tailwind v4 자동 감지).
+### 환경 (Windows, 순수 프론트 슬라이스)
+- Node/npm. **앱 코드 작성 전 Next.js 16 문서**(`node_modules/next/dist/docs/01-app/`) 필독 — 학습데이터와 다르다.
+- **DB·Vertex/ADC 불필요.** 이 기능은 컴포넌트 단위 테스트만으로 검증한다(통합 테스트 추가 없음).
+- 테스트: `npx vitest run`(단위) · `npm run lint` · `npm run build`(타입). 육안 확인은 `npm run dev` 후 `/`.
+- shadcn은 이미 도입돼 있다(button·card·sonner). Task 1에서 `npx shadcn@latest add textarea`만 추가하며, 대화형으로 멈추면 기본값으로 답한다.
+- 전체 회귀가 필요하면 통합도 돌릴 수 있다(로컬 Supabase + 라이브 dev 서버 필요): `npx vitest run --config vitest.integration.config.mts`.
 
 ### 어기면 안 되는 것 (hard rules)
-- **스키마 변경 없음** — 기존 `differences`·`difference_narrations`·`difference_evidence`·`memories`(RLS)를 재사용. 새 마이그레이션 만들지 마라.
+- **백엔드·스키마 변경 없음** — 기존 `POST /api/memories`를 재사용한다. 새 라우트·마이그레이션 만들지 마라.
+- **세션 로직 넣지 마라** — API가 세션 없으면 익명 세션을 자동 생성한다(로그인 없이 기록 가능).
+- ⚠️ **`POST /api/memories`는 멱등이 아니다** — 이중 클릭이 중복 메모를 만든다. `useRef` 동기 가드 + 버튼 disabled **둘 다** 필수(Locked Decision 4).
+- **실패해도 사용자가 쓴 글을 절대 비우지 마라**(최악의 UX).
 - **태스크마다 커밋만. push·merge 금지**(사람이 한다).
-- 이미 병합된 기능(**extraction·detector·narration·diary**)을 수정하지 마라 — 계획이 지정한 파일만 추가한다.
+- 이미 병합된 기능(**extraction·detector·narration·diary·confirm-ui**)을 수정하지 마라 — 계획이 지정한 파일만 추가/교체한다.
 - 커밋 메시지의 `Co-Authored-By` 트레일러는 **네 것으로** 바꿔라(네가 저자다). git.md 규약.
 - 못 고치는 테스트 실패나 모호한 점이 있으면 **멈추고 보고**하라. 추측하거나 테스트를 약화시키지 마라.
-- 완료(DoD) = lint + typecheck(build) + unit + integration.
+- 완료(DoD) = lint + typecheck(build) + unit. (이 기능은 통합 테스트를 추가하지 않는다 — 기존 API 것으로 충분.)
 
 ---
 
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
-- **계획 확정 커밋:** `6b58e49` · **스펙 커밋:** `9a546b1`.
-- **구현 진행:** Task 1~6 완료 + 보안 리뷰 Important 해결. **브랜치 병합 준비 완료**(병합·push는 사람).
-- **커밋된 태스크:** Task 1 `1f0c34a` · Task 2 `f5b409a` · Task 3 `448d201` · Task 4 `e1935e8` · Task 5 `36f8beb` · Task 6 문서 `626d2c2` · 보안 수정 `373b1ac`.
-- **검증(보안 수정 후 전체 재실행):** lint PASS · 앱 단위 **28 PASS** · 통합 **39 PASS**(라이브 포함, TOCTOU 회귀 +1) · production build PASS.
-- **2개 판단 결과:**
-  - **(1) 보안 Important — 해결.** TOCTOU 실증(테스트 RED로 재현: confirmed인데 dismissed로 덮임) 후 `updateStatus(id, target, expected)`에 `.eq("status", expected)` 원자 조건 추가, 0행이면 라우트가 **409 conflict**. 계획 Locked Decision #11. 커밋 `373b1ac`.
-  - **(2) npm audit — 부분 해결·명시 수용.** `shadcn`을 devDep으로 옮기려다 **되돌림**: `app/globals.css`가 `@import "shadcn/tailwind.css"`(패키지 `./tailwind.css` subpath export)를 하는 **빌드타임 CSS 의존성**이라, devDep이면 `npm ci --omit=dev`에서 빌드가 깨진다. → `dependencies` 유지. MODERATE(CLI 전이 의존 MCP SDK/Hono)는 런타임 코드 미포함이라 수용. **HIGH 3은 pinned Next 16.2.11의 내장 sharp/postcss — major 다운그레이드(next@9.3.3)로 "수정"하지 않는다.** Next 패치 릴리스로 해소할 별도 항목. 계획 Locked Decision #12.
-- **다음 시작점:** 사람이 `main` 위로 rebase → `merge --no-ff`(squash 금지) 병합.
-- **참고:** 파이프라인 트리거가 없어 라이브 차이 데이터가 없다 → 통합 테스트는 시드로. 브라우저 종단 육안 확인은 로그인 UI 부재(로컬 매직링크가 implicit hash라 서버 세션 미생성)로 불가 — 인증 우회/테스트 전용 경로는 추가하지 않았다. dev 서버는 npm 재설치 후 재시작이 필요할 수 있다(turbopack 캐시).
+- **계획 확정 커밋:** `d3bb07e` · **스펙 커밋:** `55fc2a4`.
+- **구현 진행:** 0 / 4 태스크.
+- **커밋된 태스크:** (없음)
+- **다음 시작점:** Task 1 — 감정 칩(`app/_components/EmotionChips.tsx`) + shadcn `textarea` 추가. 실패 테스트부터.
+- **참고:** 이 기능은 **순수 프론트**다(DB·Vertex 불필요, 통합 테스트 추가 없음). 육안 확인은 dev 서버에서 `/` 모바일 폭(390px). dev 서버가 안 뜨거나 npm 재설치 직후면 재시작이 필요할 수 있다(turbopack 캐시).
 - **막힘/결정 필요:** (없음)
+
+> 직전 완료: 확인 UI(`feat/confirm-ui`) — 병합됨. TOCTOU 보안 수정 포함. 상세는 git 히스토리.
 
 > 직전 완료: 일기 생성(diary) 기능 — PR 병합됨(`main`). 상세는 git 히스토리.
 
@@ -57,6 +59,6 @@ Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스�
 
 ## 참고 (context)
 
-- **이 기능이 confirmed를 세운다:** 지금까지 `status='confirmed'` 차이를 만드는 경로가 없었다(그래서 일기는 메모-only였다). 확인 UI가 그 경로다 — 병합되면 일기에 차이가 담기기 시작한다. 단, detector가 차이를 자동 생성하는 트리거는 아직 없어 개발/테스트는 시드 데이터로.
-- **이 기능 병합 후 후보:** 프론트 일기·기록 화면 · detector/diary 스케줄 트리거(파이프라인 자동 구동) · offline. 전체 로드맵은 `PROJECT_STATE.md`.
+- **파이프라인 현황:** 워커 진입점 4개(`process`·`detect`·`narrate`·`write_diary`)가 전부 "호출 가능한 함수"일 뿐 **자동 구동(스케줄러·큐 루프)이 없다.** 그래서 기록 화면이 생겨 메모가 쌓여도 차이·일기는 아직 자동 생성되지 않는다 — 다음 기능 후보 1순위.
+- **이 기능 병합 후 후보:** **파이프라인 스케줄 트리거**(자동 구동 — 그래야 실데이터가 흐른다) · 일기 보기 화면 · 기록 열람/목록 · 사진 첨부. 전체 로드맵은 `PROJECT_STATE.md`.
 - Claude 세션이 서브에이전트 주도(SDD)로 돌 땐 `.superpowers/sdd/progress.md`에 더 세밀한 태스크 원장을 둔다(선택). **공용 진행 상태의 기준은 이 파일의 "상태" 절**이다.
