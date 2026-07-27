@@ -43,12 +43,13 @@ Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스�
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
 - **계획 확정 커밋:** `d3bb07e` · **스펙 커밋:** `55fc2a4`.
-- **구현 진행:** 2 / 4 태스크. Task 3 코드는 작업트리에 있으나 모호점 때문에 커밋 전 중단.
-- **커밋된 태스크:** Task 1 감정 칩·textarea `8078556`, Task 2 기록 폼 `a278312`.
-- **다음 시작점:** 아래 44px 결정 후 진행. 44px 준수라면 `EmotionChips.tsx`의 `min-h-9`를 `min-h-11`로 고치고 회귀 검사한 뒤, 현재 작업트리의 Task 3(`app/page.tsx`, `app/layout.tsx`)을 검증·커밋한다. 계획 코드 유지라면 Task 3부터 커밋한다.
-- **검증:** Task 1 테스트 4 PASS, Task 2 테스트 8 PASS, 전체 unit 40 PASS, lint PASS, build PASS. `/` 390×844 육안 확인에서 저장 성공 후 입력 초기화·포커스 유지, textarea 160px 상한·스크롤을 확인했다.
-- **참고:** 육안 저장 검증으로 로컬 개발 DB에 합성 기록 1건(`브라우저 확인용 기록`)이 생성됐다. 안전 가드에 따라 자동 삭제하지 않았다. 사용자 소유 미추적 `.claude/orchestration/`, `.claude/settings.local.json`은 건드리지 않았다.
-- **막힘/결정 필요:** 확정 스펙 §7·계획 완료 기준은 감정 칩 **44px 터치 타깃**을 요구하지만, Task 1의 계획 코드가 `min-h-9`(36px)를 명시한다. 브라우저 실측도 높이 36px였다. “계획 코드 그대로”와 “44px 완료 기준” 중 무엇을 우선할지 결정 필요. 임의 수정 금지 지시에 따라 중단.
+- **구현 진행:** Task 1~4 완료 + 44px 결정 해결. **브랜치 병합 준비 완료**(병합·push는 사람).
+- **커밋된 태스크:** Task 1 `8078556` · Task 2 `a278312` · 44px 수정 `d6b14b8` · Task 3 홈 교체 `bddd33f` · Task 4 문서 `259c2e9`.
+- **44px 판단 — 44px 준수로 확정(Codex 캐치가 옳았음).** 계획 예시 코드의 `min-h-9`가 실수였다. `frontend.md`(터치 타깃 44px 이상)·스펙 §7·완료 기준이 모두 44px을 요구하고, 이미 병합된 `components/common/ConfirmActions.tsx`가 `min-h-11`로 같은 선례를 세웠다. → `EmotionChips`를 `min-h-11`로 수정하고 계획도 갱신, **Locked Decision #14**(“계획 예시 코드와 접근성 규칙이 어긋나면 규칙이 이긴다”) 추가.
+- **검증(수정 후 전체 재실행):** 단위 **40 PASS** · 통합 **39 PASS** · lint PASS · production build PASS. Codex의 육안 확인(390×844)에서 저장 후 초기화·포커스 유지, textarea 160px 상한·스크롤 확인됨.
+- **다음 시작점:** 사람이 `main` 위로 rebase → `merge --no-ff`(squash 금지) 병합.
+- **참고:** 육안 검증으로 로컬 개발 DB에 합성 기록 1건(`브라우저 확인용 기록`)이 남아 있다(로컬 dev DB라 무해, 자동 삭제하지 않음). 사용자 소유 미추적 `.claude/orchestration/`·`.claude/settings.local.json`은 건드리지 않았다.
+- **막힘/결정 필요:** (없음)
 
 > 직전 완료: 확인 UI(`feat/confirm-ui`) — 병합됨. TOCTOU 보안 수정 포함. 상세는 git 히스토리.
 
