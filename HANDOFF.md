@@ -55,7 +55,11 @@ Claude는 Superpowers 스킬로 수행하지만, **다른 AI(Codex 등)는 스�
   - Task 3 `DiaryView.tsx`·`DiaryView.test.tsx`는 미커밋 상태. Task 4·5는 미착수.
 - **시작 전 확인 결과:** 최신 `main`에서 브랜치를 만들었고 로컬 Supabase API·DB가 실행 중이다. 선택 서비스(`imgproxy`·`edge_runtime`·`pooler`) 정지는 Task 1 통합 테스트에 영향 없었다.
 - **검증 결과:** Task 1 통합 **5 PASS**, Task 2 단위 **4 PASS**, 각 태스크 lint PASS. Task 3은 **4 PASS / 1 FAIL**.
-- **막힘/결정 필요:** 계획 Task 3의 테스트는 `getByText("평소보다 일찍 퇴근")`로 정확 일치를 요구하지만, 같은 계획의 구현은 `<li>· {d}</li>`로 불릿을 텍스트에 포함한다. 현재 Testing Library에서는 실제 텍스트가 `· 평소보다 일찍 퇴근`이므로 정확 일치가 실패한다. 계획 코드·테스트 임의 변경 금지 규칙 때문에 우회하지 않고 중단했다. 결정 필요: (A) 불릿을 CSS/pseudo-element로 옮겨 접근 가능한 텍스트를 차이 문장만 남길지, (B) 테스트 matcher를 불릿 포함 또는 부분 일치로 바꿀지.
+- **✅ 해결된 결정 — 불릿 충돌(Codex 캐치가 옳았음).** 계획 Task 3의 테스트는 정확 일치를 요구하는데 같은 계획의 구현이 `<li>· {d}</li>`로 불릿을 텍스트에 넣어 모순이었다. **계획의 버그였고 (A)로 확정** — 불릿을 CSS `::marker`(`list-disc`)로 옮겨 접근 가능한 텍스트에 차이 문장만 남긴다.
+  - 근거: `·`는 장식이라 접근 가능한 텍스트에 있으면 스크린리더가 "가운데점 …"으로 읽는다. `<ul>/<li>`가 이미 목록 의미를 전달하므로 문자 불릿은 중복이다. (B)는 접근성 노이즈를 남기면서 테스트도 약화시켜 둘 다 잃는다.
+  - 조치: 계획 Task 3 구현 코드를 `list-disc pl-5`로 고치고 **Locked Decision #11**("장식 문자를 접근 가능한 텍스트에 넣지 마라 — 계획 예시 코드와 접근성 규칙이 어긋나면 규칙이 이긴다")을 추가했다. record-screen의 44px 선례와 같은 판단이다.
+  - **`app/diary/_components/DiaryView.tsx`에 이 수정을 이미 적용해 검증했다(5/5 PASS).** 미커밋 상태이니 Task 3 커밋에 포함하면 된다.
+- **다음 시작점:** Task 3 커밋(`DiaryView.tsx`·`DiaryView.test.tsx`) → Task 4(페이지 배선) → Task 5(문서). 계획대로 진행하면 된다.
 - **참고:** 로컬 개발 DB에 합성 기록 1건(`브라우저 확인용 기록`)이 남아 있다(로컬 dev DB라 무해). 사용자 소유 미추적 `.claude/orchestration/`·`.claude/settings.local.json`은 건드리지 마라.
 
 > 직전 완료: 파이프라인 트리거(`feat/pipeline-trigger`) — 병합·push 완료(`3c90e5d`). 워커 CLI 3명령, 재실행 시 LLM 재과금 차단.

@@ -37,6 +37,7 @@
 8. **날짜 표시 형식은 `YYYY-MM-DD` 그대로** 쓴다. 상대 표현("어제")을 계산하지 마라 — 사용자 타임존과 어긋날 위험이 있고 이번 범위 밖이다.
 9. **API 라우트를 만들지 마라.** 서버 컴포넌트가 저장소를 직접 부른다(`/review` 선례).
 10. **로그인하지 않았으면 빈 상태**로 처리한다(`/review`가 `user ? ... : []`로 하는 것과 동일). 리다이렉트·로그인 유도를 넣지 마라.
+11. **장식 문자를 접근 가능한 텍스트에 넣지 마라.** 불릿·구분자는 CSS(`list-disc`·`::before`)로 그린다. 문자로 넣으면 스크린리더가 읽고 `getByText` 정확 일치도 깨진다. **계획 예시 코드와 접근성 규칙이 어긋나면 규칙이 이긴다** — 예시 코드는 출발점이지 근거가 아니다(record-screen의 44px 선례와 동일).
 
 ## File Structure
 
@@ -530,10 +531,12 @@ export function DiaryArticle({ diary }: { diary: DiaryView }) {
       </div>
 
       {diary.differences.length > 0 && (
-        <ul className="mt-4 space-y-1">
+        // 불릿은 CSS ::marker(list-disc)로 그린다. 문자 '·'를 텍스트에 넣으면
+        // 스크린리더가 "가운데점 …"으로 읽고 접근 가능한 텍스트가 오염된다.
+        <ul className="mt-4 list-disc space-y-1 pl-5">
           {diary.differences.map((d, i) => (
             <li key={i} className="text-[15px] text-muted-foreground">
-              · {d}
+              {d}
             </li>
           ))}
         </ul>
