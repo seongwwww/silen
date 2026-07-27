@@ -11,6 +11,8 @@ CLAUDE.md               # 항상 적용되는 개발 원칙 (200줄 이하)
 AGENTS.md               # Next.js 16 버전 고지 (코드 작성 전 필독)
 .claude/rules/          # 도메인별 규칙 (프론트/백엔드/DB/프라이버시/AI-eval/테스트/git)
 app/                    # 경계 계층 — Route Handler·페이지
+app/page.tsx            # 홈 = 기록 화면 (한 줄 입력 + 감정 칩)
+app/_components/        # 홈 전용 컴포넌트 — RecordForm·EmotionChips
 app/api/memories/       # 기록 생성 API (텍스트·감정·사진)
 app/api/differences/    # 차이 확인 PATCH API (전이 검증·RLS)
 app/review/             # 오늘의 다른 점 확인 화면
