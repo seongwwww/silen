@@ -43,7 +43,7 @@
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
 - **스펙·계획 커밋:** `docs: 일기 정화·recap·꼬리 질문 설계 스펙` / `docs: 일기 정화·recap·꼬리 질문 구현 계획`. 둘 다 **`main`에 있다**.
-- **진행:** `feat/diary-recap-followup`에서 **Task 1~6 완료**, Task 7(eval·문서) 시작 전 결정 대기.
+- **진행:** `feat/diary-recap-followup`에서 **Task 1~7 구현·검증 완료**. 사람의 리뷰·push·merge만 남았다.
 - **태스크별 커밋:**
   - Task 1 detector description 정화 — `d7d70f2`
   - Task 2 질문 section_type 마이그레이션(up/down) — `202fcd0`
@@ -51,14 +51,13 @@
   - Task 4 메타 서술·엔티티 표현 가드레일 — `b29ed81`
   - Task 5 꼬리 질문 생성·저장 — `343e3e9`
   - Task 6 recap·질문 카드·기록 화면 맥락 — `e79f952`
-- **현재 검증:** 워커 **131 PASS** · ruff clean · 프론트 단위 **59 PASS** · 통합 **49 PASS** · lint clean · build/TypeScript PASS(`/` 동적 렌더 포함).
+  - Task 7 eval 보강·문서 — `104ebcd`
+- **최종 검증:** 워커 **131 PASS** · ruff clean · 프론트 단위 **59 PASS** · 통합 **49 PASS** · lint clean · build/TypeScript PASS(`/` 동적 렌더 포함).
+- **실 Vertex eval:** 승인된 env로 **정확히 1회** 실행했고 **5/5 PASS**. `ordinary-with-diff` fixture를 `(id, headline, entity_name)` 3필드로 맞췄고, `many-firsts-no-repetition` 및 메타 서술·`처음` 반복 검사를 추가했다. 합성 eval의 `one_line`·`body` 출력은 품질 판정을 위해 유지했다.
 - **DB:** 승인 후 로컬 Supabase를 초기화해 `20260727070737_diary_question.sql`까지 적용했고, stop/start로 auth를 복구했다. 기존 로컬 사용자·큐·일기 데이터는 초기화됐다.
 - **파이프라인은 실데이터로 완주 검증됨:** 메모 4 → entities 7 → differences 7 → narrations 7 → 확정 6 → 일기 1건(다른점 6·근거 4). 서술 품질(엔티티명 정합·조언/인과 0)도 실출력에서 통과. **다만 일기 본문 품질이 무너져 이번 작업으로 고친다.**
-- **막힘/결정 필요(Task 7 실행 전):**
-  1. `DiaryDifference`가 Task 3에서 `(id, headline, entity_name)` 3필드가 됐지만 `evals/diary/run.py`와 fixture는 여전히 2필드라 현재 계획 코드로는 LLM 호출 전에 TypeError가 난다. fixture 차이를 `[id, headline, entity_name]`으로 확장하고 러너를 맞출지 승인 필요.
-  2. 기존 eval 러너가 `one_line`·`body`를 stdout에 출력한다. 이번 작업의 hard rule “로그에 일기 텍스트 금지”와 충돌한다. 케이스명·PASS/FAIL·실패 유형·카운트만 출력하도록 바꿀지 승인 필요.
-  - **실 Vertex eval은 아직 실행하지 않았다(0회).** 결정 뒤 코드를 고치고 계획된 1회만 실행한다.
-- **다음 시작점:** 위 두 수정 방향을 사람에게 확인받은 뒤 Task 7 fixture·러너·문서를 구현하고 실 eval 1회 → 전체 검사 → Task 7 커밋 → HANDOFF 최종 갱신.
+- **막힘:** 없음.
+- **다음 시작점:** 사람이 `104ebcd`까지 리뷰한 뒤 push·merge한다. AI는 push·merge하지 않았다.
 - **알려진 문제(이번 범위 밖):** ① 통합 테스트가 개발 DB의 auth 사용자 전체와 큐를 지운다(`schema.integration.test.ts`·`queue.integration.test.ts`) — 실데이터 검증 재료가 날아간다. ② 워커 CLI가 stdout을 UTF-8로 reconfigure하지 않아 cp949 콘솔에서 한글 출력이 깨진다. ③ 엔티티 추출이 `시간` 같은 일반명사도 잡는다.
 
 > 직전 완료: 일기 날짜 이동(`feat/diary-navigation`) — 병합·push 완료(`d0b5aed`).
