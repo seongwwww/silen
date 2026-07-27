@@ -1,5 +1,6 @@
 import type { DiaryView } from "@/lib/services/diary";
 import { EvidenceDisclosure } from "./EvidenceDisclosure";
+import { FollowUpCard } from "./FollowUpCard";
 
 /** 일기 한 편. AI 생성물임을 라벨·배경으로 밝히고(frontend.md), 근거는 접어 둔다.
  * 사용자가 고친 일기를 '초안'이라 부르지 않는다. */
@@ -22,13 +23,23 @@ export function DiaryArticle({ diary }: { diary: DiaryView }) {
       </div>
 
       {diary.differences.length > 0 && (
-        <ul className="mt-4 list-disc space-y-1 pl-5">
-          {diary.differences.map((difference, index) => (
-            <li key={index} className="text-[15px] text-muted-foreground">
-              {difference}
-            </li>
-          ))}
-        </ul>
+        <section className="mt-4">
+          <h3 className="mb-1 text-xs text-muted-foreground">오늘 처음</h3>
+          <ul className="list-disc space-y-1 pl-5">
+            {diary.differences.map((d, i) => (
+              <li key={i} className="text-[15px] text-muted-foreground">
+                {d}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {diary.question && (
+        <FollowUpCard
+          sectionId={diary.question.sectionId}
+          text={diary.question.text}
+        />
       )}
 
       <EvidenceDisclosure items={diary.evidence} />
