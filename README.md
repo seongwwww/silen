@@ -16,6 +16,7 @@ app/_components/        # 홈 전용 컴포넌트 — RecordForm·EmotionChips
 app/api/memories/       # 기록 생성 API (텍스트·감정·사진)
 app/api/differences/    # 차이 확인 PATCH API (전이 검증·RLS)
 app/review/             # 오늘의 다른 점 확인 화면
+app/diary/              # 일기 보기 화면 (최신 일기 · 근거 접기)
 lib/time/               # "하루" 경계 단일 유틸
 lib/services/           # 서비스 계층 (프레임워크 타입을 모름)
 lib/repositories/       # 저장소 계층 (쿼리·user 스코프 강제)
@@ -41,6 +42,7 @@ docs/
 ```
 
 확인 UI(`/review`)는 narrated 후보를 보여주고 [맞아요]/[아니에요]로 확정하며, 실패 복구와 5초 undo를 제공한다.
+일기 화면(`/diary`)은 가장 최근 일기를 읽기 전용으로 보여주고, 무엇을 보고 썼는지(근거 메모)를 접어서 함께 제공한다. 일기 생성은 `run-diary`(§4)가 하며 화면에서 트리거하지 않는다.
 
 ## 개발 환경 세팅
 
