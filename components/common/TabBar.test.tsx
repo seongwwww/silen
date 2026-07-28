@@ -15,10 +15,10 @@ describe("TabBar", () => {
     pathname = "/";
   });
 
-  it("실제로 존재하는 세 화면만 보여준다", () => {
+  it("실제로 존재하는 네 화면을 보여준다", () => {
     render(<TabBar />);
 
-    expect(screen.getAllByRole("link")).toHaveLength(3);
+    expect(screen.getAllByRole("link")).toHaveLength(4);
     expect(screen.getByRole("link", { name: "오늘" })).toHaveAttribute(
       "href",
       "/",
@@ -31,7 +31,10 @@ describe("TabBar", () => {
       "href",
       "/settings",
     );
-    expect(screen.queryByRole("link", { name: "회고" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "회고" })).toHaveAttribute(
+      "href",
+      "/recall",
+    );
   });
 
   it("현재 경로를 aria-current와 글자 굵기로 구분한다", () => {

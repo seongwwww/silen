@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const TABS = [
   { href: "/", label: "오늘", mark: "○" },
   { href: "/diary", label: "일기", mark: "▤" },
+  { href: "/recall", label: "회고", mark: "⌕" },
   { href: "/settings", label: "설정", mark: "···" },
 ] as const;
 
@@ -21,7 +22,7 @@ export function TabBar() {
       aria-label="주요 화면"
       className="fixed inset-x-0 bottom-0 z-50 border-t bg-background/95 backdrop-blur"
     >
-      <div className="mx-auto grid h-14 max-w-lg grid-cols-3 px-4">
+      <div className="mx-auto grid h-14 max-w-lg grid-cols-4 px-4">
         {TABS.map((tab) => {
           const active = isActive(pathname, tab.href);
           return (
