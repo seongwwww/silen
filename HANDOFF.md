@@ -12,19 +12,18 @@
 **목표:** `docs/superpowers/plans/2026-07-28-mvp-full-build.md`의 Phase 0~6을
 검증 게이트까지 닫고 `feat/mvp-shell`을 main 병합 가능한 상태로 만든다.
 
-**성격:** Phase -1은 `main`의 `d9a18ff`에 병합됐다. 현재
-`feat/mvp-shell`에는 **Phase 0~6 제품 코드와 프런트 목데이터까지 전부
-커밋**돼 있다. 남은 것은 사람 승인이 필요한 스키마·파괴 테스트·실 LLM eval이다.
+**성격:** Phase -1은 `main`의 `d9a18ff`에 병합됐다. `feat/mvp-shell`에서
+Phase 0~6과 실제 삭제·Vertex 검증에서 발견한 보강까지 구현·커밋·검증했다.
+마스터 계획의 구현 게이트는 모두 닫혔다.
 
 **왜:** 화면과 기능이 존재하는 것만으로 삭제 완전성·감정축 멱등성과 모델 품질이
 검증되지는 않는다. 코드 완료를 MVP 완료로 과장하지 않고 남은 게이트를 명시한다.
 
 ### 다음 시작점
 
-1. 명시 승인 후 격리된 `destructive` 삭제 통합 테스트·잔존 검증
-2. 비용 승인 후 실제 Vertex diary eval 실행
-3. production 전에는 두 신규 마이그레이션을 staging dry-run
-4. 최종 리뷰 후 사용자 요청 시 main 위 rebase → `merge --no-ff` → push
+1. production 전 신규 마이그레이션 2건 staging dry-run
+2. 사용자 요청 시 main 위 rebase → `merge --no-ff` → push
+3. 별도 베타 운영 계획으로 야간 스케줄러·알림·PWA·계정 연결 진행
 
 ### v2 검토에서 바로잡은 결정
 
@@ -60,18 +59,23 @@
 - **웹 확인:** `/demo` Daily Wrap 8상태와 `/report?demo=1` 완성 리포트는
   실제 API 없이 볼 수 있다. `/settings` 내보내기·2단계 삭제 확인,
   `/report` 빈 상태와 목데이터 상태를 375px 모바일에서 확인했다.
-- **현재 작업트리:** 제품 변경은 모두 커밋됐다. `.claude/orchestration/`,
-  `.claude/settings.local.json`만 기존 사용자/도구의 untracked 파일이라
-  건드리지 않는다.
+- **현재 작업트리:** 제품·테스트 변경은 `ed0e75f`, `ef4dcb2`까지 커밋됐다.
+  `.claude/orchestration/`, `.claude/settings.local.json`은 기존 사용자/도구
+  파일이므로 건드리지 않는다.
 - **검증:** `npm run check` 37 files/**167 tests**, production build 17 pages,
-  worker ruff·단위 **139**, 프런트 통합 **62/62**, worker 비파괴 통합
+  worker ruff·단위 **143**, 프런트 통합 **62/62**, worker 비파괴 통합
   **92/92** 통과.
 - **로컬 스키마:** 승인 후 `20260728170000`, `20260728230000`을 적용했고
   local migration list가 19/19 일치한다.
-- **대기:** 실제 Vertex eval은 비용, `destructive` 삭제 통합은 격리 fixture라도
-  실제 DB·Storage 삭제를 수반하므로 실행하지 않았다.
-- **막힘/결정 필요:** AGENTS 규칙상 파괴 테스트와 유료 eval은 각각 명시
-  승인이 필요하다. 두 게이트 전에는 Phase 6/MVP 완료로 표시하지 않는다.
+- **파괴 테스트:** 승인 후 격리 사용자와 실제 로컬 Storage 파일을 생성해
+  DB·Storage를 삭제했다. 계정·삭제 원장은 남고 다른 격리 사용자는 보존됨을
+  **1/1 통과**했다.
+- **Vertex eval:** 첫 실행 자동 6/6이었으나 사람이 `"다른 일은 없었다"` 환각을
+  발견해 차단했다. 두 번째 자동 6/6에서 유머 톤의 `"에너지 충전/소비"` 효과
+  해석을 발견해 다시 차단했다. 두 회귀를 단위·eval 자동 게이트에 넣은 뒤
+  최종 실제 Vertex **6/6**과 수동 검토를 통과했다.
+- **완료 판단:** Phase 0~6 구현·비파괴/파괴 통합·실제 LLM eval이 모두
+  통과했다. MVP 구현 계획은 완료다. 자동 운영·배포는 별도 베타 게이트다.
 
 > 직전 완료: 질문 세션 이어 쓰기(`feat/question-session`) — 병합·push 완료(PR #9, `02e0add`).
 
