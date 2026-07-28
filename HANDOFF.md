@@ -44,11 +44,12 @@
 
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
-- **진행:** `feat/diary-loop` 브랜치 생성. Task 1 실패 테스트와 up/down 마이그레이션 작성 완료(미커밋).
-- **Task 1 TDD:** `test_톤주문과_재생성요청을_저장한다`가 새 컬럼 미적용 상태에서 `UndefinedColumn`로 예상대로 실패함.
+- **진행:** Task 1~6 완료. 다음은 Task 7 워커이나 계획 충돌 판단 대기.
+- **완료 커밋:** Task 1 `fff4639` · Task 2 `0b4c52f` · Task 3 `5c2f625` · Task 4 `23e50d3` · Task 5 `9497f57` · Task 6 `51cb268`.
+- **검증:** Task 1 스키마 통합 1 PASS. Task 3 편집 통합 4 PASS. Task 6 시점 프론트 단위 84 PASS · lint PASS · build PASS(`/settings`, `/api/users/me` 포함).
 - **기준선(main):** 프론트 단위 **63** · 통합 **49** · 워커 **131** · lint·build·ruff clean.
 - **로드맵:** `PROJECT_STATE.md`를 기획서 §13 순서로 재정렬했다. 이 작업은 **F1~F3**이며 다음은 F4(일기 시간·알림)다.
-- **막힘/결정 필요:** 계획의 `npx supabase db reset`은 현재 로컬 DB 데이터를 삭제하고 마이그레이션을 재적용한다. 안전 정책이 실행을 차단했으므로, 위험 고지 후 사람의 별도 명시 승인이 필요하다. 승인 뒤 `db reset` → stop/start → Task 1 통합 테스트부터 재개.
+- **막힘/결정 필요:** Task 7 계획의 새 `upsert_diary` SQL은 `reset_edit=False`여도 충돌 행의 `generated_text`를 덮고 `status='draft'`로 바꾼다. 그러면 기존 `test_upsert는_편집된_일기를_덮지_않는다`가 보장하는 force 경쟁 조건 보호가 사라진다. 계획은 동시에 “기존 테스트 약화 금지”라고 명시해 충돌한다. 제안: `reset_edit=True`일 때만 status 무관 덮어쓰고, `False`이면 기존 `where diaries.status='draft'` 보호를 유지하는 조건부 upsert로 계획을 수정한다.
 - **미루는 것(기능 아님):** 통합 테스트 격리 · 워커 CLI UTF-8 · 추출 일반명사 억제 · z-score. 스펙·계획 문서는 `docs/superpowers/`에 있으니 필요할 때 꺼내 쓴다.
 
 > 직전 완료: 질문 세션 이어 쓰기(`feat/question-session`) — 병합·push 완료(PR #9, `02e0add`).
