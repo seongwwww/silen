@@ -21,7 +21,11 @@ import json
 import sys
 from pathlib import Path
 
-from silen_worker.diary.constants import META_PHRASES
+from silen_worker.diary.constants import (
+    META_PHRASES,
+    UNSUPPORTED_ABSENCE_PHRASES,
+    UNSUPPORTED_INTERPRETATION_PHRASES,
+)
 from silen_worker.diary.gemini import GeminiDiaryWriter
 from silen_worker.diary.service import DiaryDifference, DiaryInput, DiaryMemory, guardrail
 from silen_worker.narration.constants import FORBIDDEN_PHRASES
@@ -62,6 +66,18 @@ def validate(raw: dict, facts: DiaryInput) -> list[str]:
     meta_hit = [p for p in META_PHRASES if p in blob]
     if meta_hit:
         failures.append(f"메타 서술 혼입: {meta_hit}")
+    absence_hit = [
+        phrase for phrase in UNSUPPORTED_ABSENCE_PHRASES if phrase in blob
+    ]
+    if absence_hit:
+        failures.append(f"입력 밖 사건 부재 단정: {absence_hit}")
+    interpretation_hit = [
+        phrase
+        for phrase in UNSUPPORTED_INTERPRETATION_PHRASES
+        if phrase in blob
+    ]
+    if interpretation_hit:
+        failures.append(f"입력 밖 기능·효과 해석: {interpretation_hit}")
     if blob.count("처음") > 1:
         failures.append(f"'처음' 반복 {blob.count('처음')}회 — 나열은 recap이 담당한다")
     if not one_line or not body:

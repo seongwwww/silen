@@ -53,6 +53,30 @@ def test_인과_창작은_폐기한다():
     assert out is None
 
 
+def test_메모_밖의_사건_부재_단정은_폐기한다():
+    out = guardrail(
+        _raw(
+            body="시험 결과가 나왔다. 다른 일은 없었다.",
+            used_difference_ids=[],
+        ),
+        _facts(differences=[]),
+    )
+
+    assert out is None
+
+
+def test_톤이_입력_사실을_효과로_해석하면_폐기한다():
+    out = guardrail(
+        _raw(
+            body="점심에 에너지를 충전하고 저녁 산책으로 소비했다.",
+            used_difference_ids=[],
+        ),
+        _facts(differences=[]),
+    )
+
+    assert out is None
+
+
 def test_빈_출력은_폐기한다():
     out = guardrail(_raw(body="  "), _facts())
     assert out is None
@@ -150,6 +174,9 @@ def test_프롬프트는_차이가_생활_전체가_아닌_기록_범위라고_�
 
     assert "사용자의 확인 여부와 관계없이" in prompt
     assert "생활 전체가 아니라 최근 기록의 범위" in prompt
+    assert "메모는 하루 전체가 아니다" in prompt
+    assert "입력에 없는 사건의 부재를 단정하지 마라" in prompt
+    assert "기능·효과·비유로 해석하지 마라" in prompt
     assert "기각하지 않은 다른 점" in prompt
     assert "유저가 확인한" not in prompt
 
