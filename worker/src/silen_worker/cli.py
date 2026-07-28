@@ -17,6 +17,7 @@ from silen_worker.tasks.detect import detect_day
 from silen_worker.tasks.narrate import narrate_difference
 from silen_worker.tasks.process import process_pending
 from silen_worker.tasks.write_diary import generate_diary
+from silen_worker.tasks.write_weekly import generate_weekly_report
 from silen_worker.time import local_date_for
 
 
@@ -41,6 +42,24 @@ def build_targets(
     ]
 
 
+def build_weekly_targets(
+    users: list[tuple[str, str]],
+    user: str | None,
+    date_iso: str | None,
+    now: datetime,
+) -> list[tuple[str, str]]:
+    """Weekly targets use each user's local today, the block boundary."""
+
+    selected = [(uid, tz) for uid, tz in users if user is None or uid == user]
+    return [
+        (
+            uid,
+            date_iso if date_iso is not None else local_date_for(now, tz),
+        )
+        for uid, tz in selected
+    ]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="silen-worker", description="실은 워커 파이프라인 실행"
@@ -60,10 +79,16 @@ def build_parser() -> argparse.ArgumentParser:
     for name, help_text in (
         ("run-daily", "차이 검출 → 서술"),
         ("run-diary", "일기 생성(기각하지 않은 차이 반영)"),
+        ("run-weekly", "막 끝난 7일 블록의 주간 리포트 생성"),
     ):
         p = sub.add_parser(name, help=help_text)
         p.add_argument("--user", default=None, help="이 사용자만 처리(기본: 전체)")
-        p.add_argument("--date", default=None, help="YYYY-MM-DD(기본: 각자 로컬 어제)")
+        default_day = "오늘" if name == "run-weekly" else "어제"
+        p.add_argument(
+            "--date",
+            default=None,
+            help=f"YYYY-MM-DD(기본: 각자 로컬 {default_day})",
+        )
         if name == "run-diary":
             p.add_argument(
                 "--force",
@@ -84,6 +109,19 @@ def resolve_targets(
 ) -> list[tuple[str, str]]:
     """DB에서 사용자를 읽어 처리 대상 (user_id, date_iso) 목록을 만든다."""
     return build_targets(
+        fetch_active_users(conn),
+        user,
+        date_iso,
+        now or datetime.now(timezone.utc),
+    )
+
+
+def resolve_weekly_targets(
+    conn, user: str | None, date_iso: str | None, now: datetime | None = None
+) -> list[tuple[str, str]]:
+    """Build report-boundary targets from each user's current local date."""
+
+    return build_weekly_targets(
         fetch_active_users(conn),
         user,
         date_iso,
@@ -174,6 +212,35 @@ def run_diary(
     return ok, fail
 
 
+def run_weekly(conn, targets: list[tuple[str, str]]) -> tuple[int, int]:
+    """Generate eligible weekly reports, isolating failures per user."""
+
+    ok = fail = 0
+    for user_id, date_iso in targets:
+        try:
+            report_id = generate_weekly_report(conn, user_id, date_iso)
+            _emit(
+                {
+                    "event": "run_weekly.user",
+                    "user_id": user_id,
+                    "date": date_iso,
+                    "created": report_id is not None,
+                }
+            )
+            ok += 1
+        except Exception as exc:
+            fail += 1
+            _emit(
+                {
+                    "event": "run_weekly.error",
+                    "user_id": user_id,
+                    "date": date_iso,
+                    "error": type(exc).__name__,
+                }
+            )
+    return ok, fail
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -182,13 +249,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     with connect() as conn:
-        targets = resolve_targets(conn, args.user, args.date)
+        targets = (
+            resolve_weekly_targets(conn, args.user, args.date)
+            if args.command == "run-weekly"
+            else resolve_targets(conn, args.user, args.date)
+        )
         if args.user is not None and not targets:
             print(f"사용자를 찾을 수 없습니다: {args.user}", file=sys.stderr)
             return 1
 
         if args.command == "run-daily":
             ok, fail = run_daily(conn, targets)
+        elif args.command == "run-weekly":
+            ok, fail = run_weekly(conn, targets)
         else:
             ok, fail = run_diary(conn, targets, force=args.force)
 

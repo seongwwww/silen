@@ -262,6 +262,7 @@ def upsert_difference(
     dimension: str,
     description: str,
     confidence: float,
+    category: str = "오늘의다른점",
 ) -> str:
     """(user_id, date, entity_id, detection_method) 부분 자연키로 멱등 upsert.
     재실행 시 근거를 되살린다(evidence_state=intact)."""
@@ -270,16 +271,26 @@ def upsert_difference(
         insert into public.differences
           (user_id, date, entity_id, dimension, description,
            detection_method, confidence, category, status, evidence_state)
-        values (%s, %s, %s, %s, %s, %s, %s, '오늘의다른점', 'candidate', 'intact')
+        values (%s, %s, %s, %s, %s, %s, %s, %s, 'candidate', 'intact')
         on conflict (user_id, date, entity_id, detection_method) where entity_id is not null
         do update set description = excluded.description,
                       confidence = excluded.confidence,
                       dimension = excluded.dimension,
+                      category = excluded.category,
                       evidence_state = 'intact',
                       staled_at = null
         returning id::text
         """,
-        (user_id, target_date, entity_id, dimension, description, detection_method, confidence),
+        (
+            user_id,
+            target_date,
+            entity_id,
+            dimension,
+            description,
+            detection_method,
+            confidence,
+            category,
+        ),
     ).fetchone()
     return row[0]
 
@@ -685,6 +696,244 @@ def replace_diary_sources(
             "on conflict (diary_id, memory_id) do nothing",
             (diary_id, memory_id),
         )
+
+
+@dataclass(frozen=True)
+class WeeklyMemoryRow:
+    memory_id: str
+    local_date: date
+
+
+@dataclass(frozen=True)
+class WeeklyOccurrenceRow:
+    entity_id: str
+    entity_type: str
+    normalized_name: str
+    memory_id: str
+    local_date: date
+
+
+@dataclass(frozen=True)
+class WeeklyFirstOccurrenceRow:
+    difference_id: str
+    local_date: date
+    entity_id: str
+    normalized_name: str
+
+
+@dataclass(frozen=True)
+class WeeklyEmotionRow:
+    memory_id: str
+    local_date: date
+    valence: float
+
+
+@dataclass(frozen=True)
+class WeeklyEmotionDifferenceRow:
+    difference_id: str
+    local_date: date
+
+
+def fetch_weekly_anchor(conn: psycopg.Connection, user_id: str) -> date | None:
+    """Return the owner's first active memory date in their own timezone."""
+
+    row = conn.execute(
+        """
+        select min((m.captured_at at time zone u.timezone)::date)
+        from public.memories m
+        join public.users u on u.id = m.user_id
+        where m.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+        """,
+        (user_id,),
+    ).fetchone()
+    return row[0] if row and row[0] is not None else None
+
+
+def fetch_weekly_memories(
+    conn: psycopg.Connection,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+) -> list[WeeklyMemoryRow]:
+    rows = conn.execute(
+        """
+        select m.id::text, (m.captured_at at time zone u.timezone)::date
+        from public.memories m
+        join public.users u on u.id = m.user_id
+        where m.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+          and (m.captured_at at time zone u.timezone)::date between %s and %s
+        order by (m.captured_at at time zone u.timezone)::date, m.id
+        """,
+        (user_id, start_date, end_date),
+    ).fetchall()
+    return [WeeklyMemoryRow(row[0], row[1]) for row in rows]
+
+
+def fetch_weekly_occurrences(
+    conn: psycopg.Connection,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+) -> list[WeeklyOccurrenceRow]:
+    rows = conn.execute(
+        """
+        select e.id::text, e.entity_type, e.normalized_name, m.id::text,
+               (m.captured_at at time zone u.timezone)::date
+        from public.memory_entities me
+        join public.memories m on m.id = me.memory_id
+        join public.entities e on e.id = me.entity_id
+        join public.users u on u.id = m.user_id
+        where m.user_id = %s
+          and e.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+          and (m.captured_at at time zone u.timezone)::date between %s and %s
+        order by (m.captured_at at time zone u.timezone)::date, m.id, e.id
+        """,
+        (user_id, user_id, start_date, end_date),
+    ).fetchall()
+    return [WeeklyOccurrenceRow(*row) for row in rows]
+
+
+def fetch_weekly_first_occurrences(
+    conn: psycopg.Connection,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+) -> list[WeeklyFirstOccurrenceRow]:
+    rows = conn.execute(
+        """
+        select d.id::text, d.date, e.id::text, e.normalized_name
+        from public.differences d
+        join public.entities e
+          on e.id = d.entity_id and e.user_id = d.user_id
+        where d.user_id = %s
+          and d.date between %s and %s
+          and d.detection_method = 'first_occurrence'
+          and d.status <> 'dismissed'
+          and d.evidence_state = 'intact'
+        order by d.date, e.normalized_name, e.id, d.id
+        """,
+        (user_id, start_date, end_date),
+    ).fetchall()
+    return [WeeklyFirstOccurrenceRow(*row) for row in rows]
+
+
+def fetch_weekly_emotions(
+    conn: psycopg.Connection,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+) -> list[WeeklyEmotionRow]:
+    rows = conn.execute(
+        """
+        select m.id::text, (m.captured_at at time zone u.timezone)::date,
+               e.valence
+        from public.emotions e
+        join public.memories m on m.id = e.memory_id
+        join public.users u on u.id = m.user_id
+        where m.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+          and e.confirmed_by_user = true
+          and e.valence is not null
+          and (m.captured_at at time zone u.timezone)::date between %s and %s
+        order by (m.captured_at at time zone u.timezone)::date, m.id
+        """,
+        (user_id, start_date, end_date),
+    ).fetchall()
+    return [WeeklyEmotionRow(row[0], row[1], float(row[2])) for row in rows]
+
+
+def fetch_weekly_existing_emotion_differences(
+    conn: psycopg.Connection,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+) -> list[WeeklyEmotionDifferenceRow]:
+    rows = conn.execute(
+        """
+        select id::text, date
+        from public.differences
+        where user_id = %s
+          and date between %s and %s
+          and entity_id is null
+          and dimension = 'emotion'
+          and detection_method = 'zscore'
+          and status <> 'dismissed'
+          and evidence_state = 'intact'
+        order by date, id
+        """,
+        (user_id, start_date, end_date),
+    ).fetchall()
+    return [WeeklyEmotionDifferenceRow(*row) for row in rows]
+
+
+def upsert_weekly_report(
+    conn: psycopg.Connection,
+    user_id: str,
+    week_start: date,
+) -> str:
+    row = conn.execute(
+        """
+        insert into public.weekly_reports (user_id, week)
+        values (%s, %s)
+        on conflict (user_id, week) do update set week = excluded.week
+        returning id::text
+        """,
+        (user_id, week_start.isoformat()),
+    ).fetchone()
+    return row[0]
+
+
+def replace_weekly_highlights(
+    conn: psycopg.Connection,
+    user_id: str,
+    report_id: str,
+    highlights: list[tuple[str, str, int]],
+) -> None:
+    """Atomically replace highlights, linking only same-owner differences."""
+
+    with conn.transaction():
+        conn.execute(
+            """
+            delete from public.weekly_report_highlights h
+            using public.weekly_reports w
+            where h.report_id = w.id
+              and w.id = %s
+              and w.user_id = %s
+            """,
+            (report_id, user_id),
+        )
+        for difference_id, slot, rank in highlights:
+            conn.execute(
+                """
+                insert into public.weekly_report_highlights
+                  (report_id, difference_id, slot, rank)
+                select w.id, d.id, %s, %s
+                from public.weekly_reports w
+                join public.differences d on d.id = %s
+                where w.id = %s
+                  and w.user_id = %s
+                  and d.user_id = %s
+                  and d.status <> 'dismissed'
+                  and d.evidence_state = 'intact'
+                on conflict (report_id, difference_id) do update
+                  set slot = excluded.slot, rank = excluded.rank
+                """,
+                (
+                    slot,
+                    rank,
+                    difference_id,
+                    report_id,
+                    user_id,
+                    user_id,
+                ),
+            )
 
 
 def fetch_active_users(conn: psycopg.Connection) -> list[tuple[str, str]]:

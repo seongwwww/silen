@@ -26,7 +26,7 @@ components/common/      # 실은 도메인 공통 컴포넌트
 worker/                 # Python 워커 (차이 탐지·AI 잡)
 worker/src/silen_worker/tasks/        # 큐 소비 잡 진입점(process_pending)
 worker/src/silen_worker/extraction/   # 엔티티 추출 (가드레일·정규화·Vertex Gemini)
-worker/src/silen_worker/cli.py        # 파이프라인 CLI(run-pending·run-daily·run-diary)
+worker/src/silen_worker/cli.py        # 파이프라인 CLI(run-pending·run-daily·run-diary·run-weekly)
 worker/src/silen_worker/db.py         # 워커 DB 접근(user 스코프 강제)
 fixtures/               # 두 자산이 공유하는 골든 케이스
 evals/entities/         # 엔티티 추출 골든셋 (환각·빈날·조사·병합·4종)
@@ -112,14 +112,21 @@ worker\.venv\Scripts\python.exe -m silen_worker run-daily
 # 일기 생성 (candidate·confirmed 중 기각하지 않은 intact 차이 반영)
 worker\.venv\Scripts\python.exe -m silen_worker run-diary
 
+# 주간 리포트 (첫 기록일 기준 방금 끝난 7일 블록만, 기본: 각자 로컬 오늘)
+worker\.venv\Scripts\python.exe -m silen_worker run-weekly
+
 # 특정 사용자·날짜만 (디버깅·재실행)
 worker\.venv\Scripts\python.exe -m silen_worker run-daily --user <uuid> --date 2026-07-26
+worker\.venv\Scripts\python.exe -m silen_worker run-weekly --user <uuid> --date 2026-07-29
 ```
 
 전제: Vertex ADC env 3종(`GOOGLE_GENAI_USE_VERTEXAI`·`GOOGLE_CLOUD_PROJECT`·`GOOGLE_CLOUD_LOCATION`).
 
 `run-diary`는 사용자의 확인을 기다리지 않는다. `run-daily`가 만든 candidate도
 바로 일기 재료가 되며, [아니에요]로 기각한 차이와 근거가 stale인 차이만 빠진다.
+`run-weekly`는 첫 활성 메모의 로컬 날짜를 기준으로 완결된 7일 블록만 집계한다.
+매일 실행해도 경계가 아닌 날은 건너뛰며, 같은 블록 재실행은 기존 리포트와
+하이라이트를 멱등 갱신한다.
 차이를 먼저 계산하려면 아래 순서로 실행하되, 사이에 사람의 확인 단계는 필요 없다:
 
 ```
@@ -150,6 +157,10 @@ schtasks /create /tn "silen-run-daily" /sc daily /st 00:30 ^
 # 매일 22:00 일기 생성
 schtasks /create /tn "silen-run-diary" /sc daily /st 22:00 ^
   /tr "C:\workspace\silen\worker\.venv\Scripts\python.exe -m silen_worker run-diary"
+
+# 매일 01:00, 해당 사용자에게 막 끝난 7일 블록이 있으면 주간 리포트 생성
+schtasks /create /tn "silen-run-weekly" /sc daily /st 01:00 ^
+  /tr "C:\workspace\silen\worker\.venv\Scripts\python.exe -m silen_worker run-weekly"
 ```
 
 작업 스케줄러는 작업의 "시작 위치"를 저장소 루트로 두고, ADC env가 필요한 작업은 사용자 계정 컨텍스트로 실행해야 한다.
