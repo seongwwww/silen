@@ -12,6 +12,7 @@ let admin: SupabaseClient, db: Client, alice: string, bob: string;
 async function clientFor(email: string): Promise<SupabaseClient> {
   const { data } = await admin.auth.admin.generateLink({ type: "magiclink", email });
   const c = createClient(SUPABASE_URL, ANON_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
+  if (!data.properties) throw new Error("magiclink 발급 실패");
   await c.auth.verifyOtp({ token_hash: data.properties.hashed_token, type: "magiclink" });
   return c;
 }

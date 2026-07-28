@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { DiaryView } from "@/lib/services/diary";
+import type { DiaryStatus, DiaryView } from "@/lib/services/diary";
 
 type SectionRow = { id: string; section_type: string; content: string };
 type SourceRow = {
@@ -14,10 +14,11 @@ type SourceRow = {
 // 타입을 잃으면 supabase-js의 select 타입 추론이 깨져 row.diary_sections가
 // GenericStringError가 된다(tsc에서만 드러남).
 const DIARY_SELECT =
-  "date, status, generated_text, edited_text, diary_sections(id, section_type, content), diary_sources(memories(raw_text, is_locked, deleted_at))" as const;
+  "id, date, status, generated_text, edited_text, diary_sections(id, section_type, content), diary_sources(memories(raw_text, is_locked, deleted_at))" as const;
 
 /** 조회 행 하나를 표시용 뷰로 옮긴다. findLatest·findByDate가 공유한다. */
 function toDiaryView(row: {
+  id: unknown;
   date: unknown;
   status: unknown;
   generated_text: unknown;
@@ -29,7 +30,9 @@ function toDiaryView(row: {
   const sources = (row.diary_sources ?? []) as unknown as SourceRow[];
 
   return {
+    id: row.id as string,
     date: row.date as string,
+    status: (row.status as DiaryStatus) ?? "draft",
     oneLine:
       sections.find((section) => section.section_type === "오늘의한문장")
         ?.content ?? "",
@@ -145,6 +148,57 @@ export function createDiaryRepository(client: SupabaseClient) {
         .not("raw_text", "is", null)
         .neq("raw_text", "")
         .limit(1);
+      if (error) throw error;
+      return (data?.length ?? 0) > 0;
+    },
+
+    /** 편집 본문과 상태를 함께 바꾼다. 기대 상태와 다르면 0행 → false(TOCTOU).
+     * generated_text(AI 초안)는 절대 건드리지 않는다 — 원본↔생성물 분리. */
+    async updateDraft(
+      id: string,
+      editedText: string,
+      status: DiaryStatus,
+      expected: DiaryStatus,
+    ): Promise<boolean> {
+      const { data, error } = await client
+        .from("diaries")
+        .update({ edited_text: editedText, status })
+        .eq("id", id)
+        .eq("status", expected)
+        .select("id");
+      if (error) throw error;
+      return (data?.length ?? 0) > 0;
+    },
+
+    /** 상태만 바꾼다(본문 수정 없이 확정·되돌리기). */
+    async updateStatus(
+      id: string,
+      status: DiaryStatus,
+      expected: DiaryStatus,
+    ): Promise<boolean> {
+      const { data, error } = await client
+        .from("diaries")
+        .update({ status })
+        .eq("id", id)
+        .eq("status", expected)
+        .select("id");
+      if (error) throw error;
+      return (data?.length ?? 0) > 0;
+    },
+
+    /** 재생성 요청을 남긴다. 다음 생성이 1회 소비한다. */
+    async requestRegenerate(
+      id: string,
+      toneInstruction: string | null,
+    ): Promise<boolean> {
+      const { data, error } = await client
+        .from("diaries")
+        .update({
+          tone_instruction: toneInstruction,
+          regenerate_requested_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .select("id");
       if (error) throw error;
       return (data?.length ?? 0) > 0;
     },

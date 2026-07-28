@@ -20,6 +20,16 @@ class StubWriter:
         return r
 
 
+class RecordingWriter(StubWriter):
+    def __init__(self, raw):
+        super().__init__(raw)
+        self.facts = None
+
+    def write(self, facts):
+        self.facts = facts
+        return super().write(facts)
+
+
 _GOOD = {"one_line": "비슷한 하루.", "body": "특별할 것 없는 하루였다. 점심은 김밥."}
 
 
@@ -89,6 +99,57 @@ def test_유저편집_일기는_force여도_보존(conn):
         assert d2 == d1
         row = conn.execute("select status, edited_text from public.diaries where id = %s", (d1,)).fetchone()
         assert row[0] == "edited" and row[1] == "내 손으로 고침"  # 보존
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_재생성요청은_확정일기도_다시쓰고_요청을_비운다(conn):
+    user = seed_user(conn)
+    try:
+        seed_memory(conn, user, "점심 김밥")
+        did = generate_diary(conn, user, _today_iso(), writer=StubWriter(_GOOD))
+        conn.execute(
+            "update public.diaries set status='confirmed', edited_text='내 손으로 고침', "
+            "tone_instruction='더 짧게', regenerate_requested_at=now() where id = %s",
+            (did,),
+        )
+        writer = RecordingWriter(
+            {"one_line": "새 문장.", "body": "새 본문 내용. 점심은 김밥."}
+        )
+
+        regenerated = generate_diary(conn, user, _today_iso(), writer=writer)
+
+        assert regenerated == did
+        assert writer.facts is not None
+        assert writer.facts.tone_instruction == "더 짧게"
+        row = conn.execute(
+            "select generated_text, edited_text, status, tone_instruction, "
+            "regenerate_requested_at from public.diaries where id = %s",
+            (did,),
+        ).fetchone()
+        assert row == ("새 본문 내용. 점심은 김밥.", None, "draft", None, None)
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_사용자_톤프리셋을_writer에_전달한다(conn):
+    user = seed_user(conn)
+    try:
+        seed_memory(conn, user, "점심 김밥")
+        conn.execute(
+            "update public.users set style_profile = '{\"preset\":\"따뜻\"}'::jsonb "
+            "where id = %s",
+            (user,),
+        )
+        writer = RecordingWriter(_GOOD)
+
+        did = generate_diary(conn, user, _today_iso(), writer=writer)
+
+        assert did is not None
+        assert writer.facts is not None
+        assert writer.facts.tone_preset == "따뜻"
     finally:
         delete_user(conn, user)
 

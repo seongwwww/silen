@@ -35,17 +35,16 @@ except AttributeError:
 FIXTURES_PATH = Path(__file__).parent / "fixtures.json"
 
 
-def _facts(case: dict) -> DiaryInput:
+def _facts(case: dict, tone_preset: str = "담백") -> DiaryInput:
     return DiaryInput(
         date_iso="2026-07-24", user_id="eval",
         memories=[DiaryMemory(mid, text) for mid, text in case["memories"]],
         differences=[DiaryDifference(did, h, name) for did, h, name in case["differences"]],
+        tone_preset=tone_preset,
     )
 
 
-def run_case(case: dict, writer: GeminiDiaryWriter) -> tuple[bool, list[str]]:
-    facts = _facts(case)
-    raw = writer.write(facts)
+def validate(raw: dict, facts: DiaryInput) -> list[str]:
     failures: list[str] = []
 
     one_line = str(raw.get("one_line") or "").strip()
@@ -75,7 +74,38 @@ def run_case(case: dict, writer: GeminiDiaryWriter) -> tuple[bool, list[str]]:
     if not failures and guardrail(raw, facts) is None:
         failures.append("정상 출력인데 guardrail 탈락(길이 등 확인)")
 
+    return failures
+
+
+def run_case(
+    case: dict, writer: GeminiDiaryWriter
+) -> tuple[bool, list[str], dict]:
+    facts = _facts(case)
+    raw = writer.write(facts)
+    failures = validate(raw, facts)
     return (not failures, failures, raw)
+
+
+def run_tone_case(
+    case: dict, writer: GeminiDiaryWriter
+) -> tuple[bool, list[str], dict[str, dict]]:
+    raws: dict[str, dict] = {}
+    failures: list[str] = []
+    used_by_tone: dict[str, list[str]] = {}
+    for tone in ("담백", "따뜻"):
+        facts = _facts(case, tone)
+        raw = writer.write(facts)
+        raws[tone] = raw
+        failures.extend(f"{tone}: {failure}" for failure in validate(raw, facts))
+        used_by_tone[tone] = sorted(
+            str(x) for x in (raw.get("used_memory_ids") or [])
+        )
+    if used_by_tone["담백"] != used_by_tone["따뜻"]:
+        failures.append(
+            "톤에 따라 쓴 메모 집합이 달라짐: "
+            f"담백={used_by_tone['담백']}, 따뜻={used_by_tone['따뜻']}"
+        )
+    return (not failures, failures, raws)
 
 
 def main() -> int:
@@ -85,6 +115,17 @@ def main() -> int:
     n_pass = 0
     print("=== 일기 생성 골든셋 결과 ===")
     for case in fixtures["cases"]:
+        if case.get("tone_invariance"):
+            passed, failures, raws = run_tone_case(case, writer)
+            n_pass += 1 if passed else 0
+            print(f"[{'PASS' if passed else 'FAIL'}] {case['name']}  ({case.get('reason', '')})")
+            for tone, raw in raws.items():
+                print(f"    {tone} one_line: {str(raw.get('one_line') or '').strip()}")
+                print(f"    {tone} body: {str(raw.get('body') or '').strip()}")
+            for f in failures:
+                print(f"    - {f}")
+            continue
+
         passed, failures, raw = run_case(case, writer)
         n_pass += 1 if passed else 0
         print(f"[{'PASS' if passed else 'FAIL'}] {case['name']}  ({case.get('reason', '')})")

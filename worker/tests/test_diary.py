@@ -76,6 +76,20 @@ def test_프롬프트에_메모본문과_차이가_들어간다():
     assert "2026-07-24" in p
 
 
+def test_프롬프트에_톤프리셋과_주문이_들어간다():
+    facts = DiaryInput(
+        "2026-07-24",
+        "u1",
+        [DiaryMemory("m1", "점심 김밥")],
+        [],
+        tone_preset="따뜻",
+        tone_instruction="더 짧게",
+    )
+    p = build_prompt(facts)
+    assert "톤: 따뜻" in p
+    assert "이번 요청: 더 짧게" in p
+
+
 def test_메타_서술은_폐기한다():
     out = guardrail(_raw(body="일기에 출근이라는 행동이 기록된 것도 오늘이 처음이다."), _facts())
     assert out is None

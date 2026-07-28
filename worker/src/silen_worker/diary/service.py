@@ -29,6 +29,8 @@ class DiaryInput:
     user_id: str
     memories: list[DiaryMemory]
     differences: list[DiaryDifference]
+    tone_preset: str = "담백"
+    tone_instruction: str | None = None
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,14 @@ def build_prompt(facts: DiaryInput) -> str:
         "다른 점에 적힌 표현을 그대로 써라. 다른 말로 바꾸지 마라"
         "(예: '여친'을 '여자친구'로 바꾸지 마라).\n"
         "one_line은 60자 이내, body는 2000자 이내로 쓴다.\n\n"
+        f"톤: {facts.tone_preset}(담백=건조·짧은 호흡, 따뜻=부드러운 말투). "
+        "톤은 문체만 바꾼다. 사실을 바꾸거나 없는 감정을 더하지 마라.\n"
+        + (
+            f"이번 요청: {facts.tone_instruction}\n"
+            if facts.tone_instruction
+            else ""
+        )
+        + "\n"
         f"날짜: {facts.date_iso}\n"
         f"메모(시간순):\n{mem_lines}\n\n"
         f"확인된 다른 점:\n{diff_lines}\n\n"
