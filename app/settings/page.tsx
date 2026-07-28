@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createServerSupabase } from "@/lib/repositories/supabase";
 import { createUserRepository } from "@/lib/repositories/userRepository";
+import { DataDeletionCard } from "./_components/DataDeletionCard";
+import { DataExportCard } from "./_components/DataExportCard";
 import { TonePicker } from "./_components/TonePicker";
 
 export default async function SettingsPage() {
@@ -20,6 +22,8 @@ export default async function SettingsPage() {
       <p className="mt-2 text-xs text-muted-foreground">
         문체만 바뀌어요. 사실은 그대로예요.
       </p>
+      <DataExportCard />
+      <DataDeletionCard />
       <section className="mt-10 border-t pt-6">
         <h2 className="text-[15px] font-medium">화면 테스트</h2>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">

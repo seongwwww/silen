@@ -35,10 +35,12 @@ afterAll(async () => {
 });
 
 async function userClient() {
-  const { data } = await admin.auth.admin.generateLink({
+  const { data, error } = await admin.auth.admin.generateLink({
     type: "magiclink",
     email: "account-delete@example.com",
   });
+  if (error) throw error;
+  if (!data.properties) throw new Error("magiclink_missing");
   const client = createClient(SUPABASE_URL, ANON_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
