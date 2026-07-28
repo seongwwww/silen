@@ -19,6 +19,11 @@
     {"name": "many-firsts-no-repetition",
      "memories": [["m1", "빵빠래 먹었다"], ["m2", "출근해서 놀았다"], ["m3", "여친이랑 싸웠다"]],
      "differences": [],
-     "reason": "처음 등장은 본문 재료가 아니다 — '처음'이 반복되면 안 된다"}
+     "reason": "처음 등장은 본문 재료가 아니다 — '처음'이 반복되면 안 된다"},
+    {"name": "tone-fact-invariance",
+     "memories": [["m1", "점심 김밥"], ["m2", "저녁에 산책함"]],
+     "differences": [],
+     "tone_invariance": true,
+     "reason": "톤이 바뀌어도 실제 근거로 쓴 메모 집합은 같아야 한다"}
   ]
 }
