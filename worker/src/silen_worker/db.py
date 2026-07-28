@@ -85,6 +85,14 @@ class ActiveMemoryRow:
     timezone: str
 
 
+@dataclass
+class EmotionRow:
+    memory_id: str
+    captured_at: datetime
+    timezone: str
+    valence: float
+
+
 def fetch_window_active_memories(
     conn: psycopg.Connection,
     user_id: str,
@@ -120,6 +128,42 @@ def fetch_window_active_memories(
         (user_id, lower, upper),
     ).fetchall()
     return [ActiveMemoryRow(r[0], r[1], r[2]) for r in rows]
+
+
+def fetch_window_emotions(
+    conn: psycopg.Connection,
+    user_id: str,
+    target_date: date,
+    window_days: int,
+) -> list[EmotionRow]:
+    """창 안의 잠기지 않은 본인 감정 값만 반환한다."""
+    lower = datetime.combine(
+        target_date - timedelta(days=window_days + 2),
+        datetime.min.time(),
+        timezone.utc,
+    )
+    upper = datetime.combine(
+        target_date + timedelta(days=2),
+        datetime.min.time(),
+        timezone.utc,
+    )
+    rows = conn.execute(
+        """
+        select m.id::text, m.captured_at, u.timezone, e.valence
+        from public.emotions e
+        join public.memories m on m.id = e.memory_id
+        join public.users u on u.id = m.user_id
+        where m.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+          and e.valence is not null
+          and m.captured_at >= %s
+          and m.captured_at < %s
+        order by m.captured_at
+        """,
+        (user_id, lower, upper),
+    ).fetchall()
+    return [EmotionRow(r[0], r[1], r[2], float(r[3])) for r in rows]
 
 
 def fetch_window_occurrences(
@@ -237,6 +281,65 @@ def upsert_difference(
         (user_id, target_date, entity_id, dimension, description, detection_method, confidence),
     ).fetchone()
     return row[0]
+
+
+def upsert_dimension_difference(
+    conn: psycopg.Connection,
+    user_id: str,
+    target_date: date,
+    dimension: str,
+    detection_method: str,
+    category: str,
+    description: str,
+    confidence: float,
+) -> str:
+    """엔티티 없는 차원을 부분 자연키로 멱등 upsert한다."""
+    row = conn.execute(
+        """
+        insert into public.differences
+          (user_id, date, entity_id, dimension, description,
+           detection_method, confidence, category, status, evidence_state)
+        values (%s, %s, null, %s, %s, %s, %s, %s, 'candidate', 'intact')
+        on conflict (user_id, date, dimension, detection_method)
+          where entity_id is null
+        do update set description = excluded.description,
+                      confidence = excluded.confidence,
+                      category = excluded.category,
+                      evidence_state = 'intact',
+                      staled_at = null
+        returning id::text
+        """,
+        (
+            user_id,
+            target_date,
+            dimension,
+            description,
+            detection_method,
+            confidence,
+            category,
+        ),
+    ).fetchone()
+    return row[0]
+
+
+def fetch_dismiss_counts(
+    conn: psycopg.Connection,
+    user_id: str,
+    since_date: date,
+) -> dict[tuple[str | None, str, str], int]:
+    """최근 기각 횟수를 엔티티/차원/방법 자연키로 반환한다."""
+    rows = conn.execute(
+        """
+        select entity_id::text, dimension, detection_method, count(*)::int
+        from public.differences
+        where user_id = %s
+          and date >= %s
+          and status = 'dismissed'
+        group by entity_id, dimension, detection_method
+        """,
+        (user_id, since_date),
+    ).fetchall()
+    return {(row[0], row[1], row[2]): row[3] for row in rows}
 
 
 def link_difference_evidence(

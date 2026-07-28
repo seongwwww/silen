@@ -30,6 +30,8 @@ class EmotionDifference:
     baseline_mean: float
     today_mean: float
     baseline_days: int
+    entity_id: None = None
+    dimension: str = "emotion"
 
 
 @dataclass(frozen=True)

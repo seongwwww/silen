@@ -1,9 +1,17 @@
 """결정적 엔티티 차이 규칙과 일일 카드 랭킹."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
+from typing import Protocol, TypeVar
 
-from silen_worker.detection.constants import REEMERGENCE_GAP_MIN
+from silen_worker.detection.constants import (
+    DAILY_DIFFERENCE_LIMIT,
+    DISMISS_EXCLUDE_COUNT,
+    MIN_ACTIVE_HISTORY_DAYS,
+    REEMERGENCE_GAP_MIN,
+    SURPRISAL_MIN_BITS,
+)
 from silen_worker.detection.surprisal import surprisal_bits
 
 
@@ -23,6 +31,22 @@ class DetectedDifference:
     method: str
     description: str
     confidence: float
+
+    @property
+    def dimension(self) -> str:
+        return self.entity_type
+
+
+class RankableDifference(Protocol):
+    entity_id: str | None
+    method: str
+    confidence: float
+
+    @property
+    def dimension(self) -> str: ...
+
+
+RankableT = TypeVar("RankableT", bound=RankableDifference)
 
 
 def detect_differences(
@@ -107,3 +131,44 @@ def detect_differences(
             )
 
     return out
+
+
+def rank_differences(
+    candidates: list[RankableT],
+    dismiss_counts: Mapping[tuple[str | None, str, str], int],
+    *,
+    active_history_days: int,
+) -> list[RankableT]:
+    """놀라움과 최근 기각 이력으로 오늘 노출할 최대 3건을 고른다."""
+    if active_history_days < MIN_ACTIVE_HISTORY_DAYS:
+        return []
+
+    ranked: list[tuple[float, RankableT]] = []
+    for candidate in candidates:
+        if candidate.method == "first_occurrence":
+            continue
+        if candidate.confidence < SURPRISAL_MIN_BITS:
+            continue
+        dismissed = dismiss_counts.get(
+            (
+                candidate.entity_id,
+                candidate.dimension,
+                candidate.method,
+            ),
+            0,
+        )
+        if dismissed >= DISMISS_EXCLUDE_COUNT:
+            continue
+        ranked.append(
+            (candidate.confidence / (1 + dismissed), candidate)
+        )
+
+    ranked.sort(
+        key=lambda item: (
+            -item[0],
+            item[1].entity_id or "",
+            item[1].dimension,
+            item[1].method,
+        )
+    )
+    return [item[1] for item in ranked[:DAILY_DIFFERENCE_LIMIT]]

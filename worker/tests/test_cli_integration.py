@@ -1,10 +1,10 @@
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
 from silen_worker.cli import run_daily, run_diary
 from silen_worker.db import fetch_existing_diary, fetch_narration_id
-from tests.conftest import seed_user, seed_memory, delete_user
+from tests.conftest import delete_user, seed_memory, seed_memory_at, seed_user
 
 
 class CountingNarrator:
@@ -16,9 +16,9 @@ class CountingNarrator:
     def narrate(self, facts):
         self.calls += 1
         return {
-            "headline": f"{facts.entity_name} 반복",
-            "body": f"{facts.entity_name}을 최근 3일 연속으로 남기셨네요.",
-            "evidence_text": "요즘 자주 등장해서 찾았어요.",
+            "headline": f"{facts.entity_name} 기록 변화",
+            "body": f"{facts.entity_name}: {facts.description}",
+            "evidence_text": facts.description,
         }
 
 
@@ -36,9 +36,9 @@ class BoomNarrator:
         if facts.user_id == self.boom_user:
             raise RuntimeError("boom")
         return {
-            "headline": f"{facts.entity_name} 반복",
-            "body": f"{facts.entity_name}을 최근 3일 연속으로 남기셨네요.",
-            "evidence_text": "요즘 자주 등장해서 찾았어요.",
+            "headline": f"{facts.entity_name} 기록 변화",
+            "body": f"{facts.entity_name}: {facts.description}",
+            "evidence_text": facts.description,
         }
 
 
@@ -56,9 +56,8 @@ class StubWriter:
         }
 
 
-def _entity_mention(conn, user_id, text="김밥 먹음", name="김밥"):
-    """메모 + 그 메모가 언급한 엔티티를 만든다(detect_day가 볼 재료)."""
-    mem = seed_memory(conn, user_id, text)
+def _absence_materials(conn, user_id, name="김밥"):
+    """두 활성일에 언급하고 오늘은 다른 메모를 남겨 기록 부재를 만든다."""
     ent = conn.execute(
         "insert into public.entities (user_id, entity_type, name, normalized_name) "
         "values (%s, 'thing', %s, %s) "
@@ -67,12 +66,20 @@ def _entity_mention(conn, user_id, text="김밥 먹음", name="김밥"):
         "returning id::text",
         (user_id, name, name),
     ).fetchone()[0]
-    conn.execute(
-        "insert into public.memory_entities (memory_id, entity_id, relation_type) "
-        "values (%s, %s, 'mentioned') on conflict do nothing",
-        (mem, ent),
-    )
-    return mem, ent
+    for offset in (2, 1):
+        day = date.today() - timedelta(days=offset)
+        memory_id = seed_memory_at(
+            conn,
+            user_id,
+            f"{day.isoformat()}T02:00:00+00",
+        )
+        conn.execute(
+            "insert into public.memory_entities "
+            "(memory_id, entity_id, relation_type) "
+            "values (%s, %s, 'mentioned')",
+            (memory_id, ent),
+        )
+    seed_memory(conn, user_id, "오늘의 다른 기록")
 
 
 def _today():
@@ -83,7 +90,7 @@ def _today():
 def test_run_daily가_차이를_검출하고_서술한다(conn):
     user = seed_user(conn)
     try:
-        _entity_mention(conn, user)
+        _absence_materials(conn, user)
         narrator = CountingNarrator()
         ok, fail = run_daily(conn, [(user, _today())], narrator=narrator)
 
@@ -102,7 +109,7 @@ def test_run_daily를_두번_돌려도_LLM은_한번만(conn):
     """핵심 회귀: 스케줄러 반복 실행이 재과금을 만들지 않는다."""
     user = seed_user(conn)
     try:
-        _entity_mention(conn, user)
+        _absence_materials(conn, user)
         narrator = CountingNarrator()
 
         run_daily(conn, [(user, _today())], narrator=narrator)
@@ -120,8 +127,8 @@ def test_한_사용자_실패가_다른_사용자를_막지_않는다(conn):
     user_a = seed_user(conn)
     user_b = seed_user(conn)
     try:
-        _entity_mention(conn, user_a)
-        _entity_mention(conn, user_b)
+        _absence_materials(conn, user_a)
+        _absence_materials(conn, user_b)
         narrator = BoomNarrator(boom_user=user_a)
 
         ok, fail = run_daily(

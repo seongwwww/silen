@@ -110,9 +110,9 @@ def run_daily(conn, targets: list[tuple[str, str]], narrator=None) -> tuple[int,
     ok = fail = 0
     for user_id, date_iso in targets:
         try:
-            difference_ids = detect_day(conn, user_id, date_iso)
+            result = detect_day(conn, user_id, date_iso)
             narrated = 0
-            for difference_id in difference_ids:
+            for difference_id in result.narration_ids:
                 if (
                     narrate_difference(conn, difference_id, narrator=narrator)
                     is not None
@@ -123,7 +123,7 @@ def run_daily(conn, targets: list[tuple[str, str]], narrator=None) -> tuple[int,
                     "event": "run_daily.user",
                     "user_id": user_id,
                     "date": date_iso,
-                    "differences": len(difference_ids),
+                    "differences": len(result.saved_ids),
                     "narrated": narrated,
                 }
             )

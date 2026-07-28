@@ -3,8 +3,10 @@ from datetime import date, timedelta
 import pytest
 
 from silen_worker.detection.service import (
+    DetectedDifference,
     EntityWindow,
     detect_differences,
+    rank_differences,
 )
 
 TARGET = date(2026, 7, 23)
@@ -113,6 +115,76 @@ def test_연속_등장은_매일_차이에서_제외한다():
         [_win({TARGET - timedelta(days=1), TARGET}, occurred_before=True)],
         active_history_dates=history,
         today_is_active=True,
+    )
+
+    assert out == []
+
+
+def _candidate(
+    confidence: float,
+    *,
+    eid: str = "e1",
+    method: str = "freq_shift",
+) -> DetectedDifference:
+    return DetectedDifference(eid, "thing", method, "통계 근거", confidence)
+
+
+def test_랭킹은_놀라움_상위_3개만_남긴다():
+    candidates = [
+        _candidate(2.1, eid="e1"),
+        _candidate(4.0, eid="e2"),
+        _candidate(3.0, eid="e3"),
+        _candidate(2.5, eid="e4"),
+    ]
+
+    out = rank_differences(candidates, {}, active_history_days=2)
+
+    assert [item.entity_id for item in out] == ["e2", "e3", "e4"]
+
+
+def test_랭킹은_2_bits_미만을_버린다():
+    out = rank_differences(
+        [_candidate(1.9, eid="low"), _candidate(2.1, eid="high")],
+        {},
+        active_history_days=2,
+    )
+
+    assert [item.entity_id for item in out] == ["high"]
+
+
+def test_기각_2회는_점수를_3분의_1로_낮춘다():
+    out = rank_differences(
+        [_candidate(4.0, eid="plain"), _candidate(6.0, eid="dismissed")],
+        {("dismissed", "thing", "freq_shift"): 2},
+        active_history_days=2,
+    )
+
+    assert [item.entity_id for item in out] == ["plain", "dismissed"]
+
+
+def test_기각_3회면_후보에서_제외한다():
+    out = rank_differences(
+        [_candidate(5.0, eid="hidden")],
+        {("hidden", "thing", "freq_shift"): 3},
+        active_history_days=2,
+    )
+
+    assert out == []
+
+
+def test_과거_활성일이_한_날이면_카드를_열지_않는다():
+    assert rank_differences(
+        [_candidate(5.0)],
+        {},
+        active_history_days=1,
+    ) == []
+
+
+def test_first_occurrence는_랭킹에_들어가지_않는다():
+    out = rank_differences(
+        [_candidate(8.0, method="first_occurrence")],
+        {},
+        active_history_days=10,
     )
 
     assert out == []

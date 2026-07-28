@@ -30,6 +30,15 @@ def _mention(conn, user_id, entity_id, day):
     return memory_id
 
 
+def _emotion(conn, user_id, day, valence):
+    memory_id = _memory(conn, user_id, day)
+    conn.execute(
+        "insert into public.emotions (memory_id, valence) values (%s, %s)",
+        (memory_id, valence),
+    )
+    return memory_id
+
+
 def _diffs(conn, user_id):
     return conn.execute(
         "select id::text, detection_method, description, confidence "
@@ -45,9 +54,10 @@ def test_첫_등장은_저장하고_오늘_근거를_연결한다(conn):
         entity_id = _entity(conn, user, "낯선카페", "place")
         memory_id = _mention(conn, user, entity_id, TARGET)
 
-        written = detect_day(conn, user, TARGET.isoformat())
+        result = detect_day(conn, user, TARGET.isoformat())
 
-        assert len(written) == 1
+        assert len(result.saved_ids) == 1
+        assert result.narration_ids == []
         difference = _diffs(conn, user)[0]
         assert difference[1:3] == ("first_occurrence", "처음 등장")
         evidence = conn.execute(
@@ -71,9 +81,10 @@ def test_기록_부재는_과거_언급과_오늘_활성_메모를_근거로_삼
         ]
         today_id = _memory(conn, user, TARGET)
 
-        written = detect_day(conn, user, TARGET.isoformat())
+        result = detect_day(conn, user, TARGET.isoformat())
 
-        assert len(written) == 1
+        assert len(result.saved_ids) == 1
+        assert result.narration_ids == result.saved_ids
         difference = _diffs(conn, user)[0]
         assert difference[1] == "freq_shift"
         assert "오늘 기록에는 언급 없음" in difference[2]
@@ -96,7 +107,7 @@ def test_한_번만_기록된_엔티티의_부재는_만들지_않는다(conn):
         _mention(conn, user, entity_id, TARGET - timedelta(days=1))
         _memory(conn, user, TARGET)
 
-        assert detect_day(conn, user, TARGET.isoformat()) == []
+        assert detect_day(conn, user, TARGET.isoformat()).saved_ids == []
         assert _diffs(conn, user) == []
     finally:
         delete_user(conn, user)
@@ -110,7 +121,7 @@ def test_빈_날은_부재를_억지로_만들지_않는다(conn):
         _mention(conn, user, entity_id, TARGET - timedelta(days=2))
         _mention(conn, user, entity_id, TARGET - timedelta(days=1))
 
-        assert detect_day(conn, user, TARGET.isoformat()) == []
+        assert detect_day(conn, user, TARGET.isoformat()).saved_ids == []
         assert _diffs(conn, user) == []
     finally:
         delete_user(conn, user)
@@ -129,9 +140,9 @@ def test_오랜만의_재등장은_활성일_기준_bits를_저장한다(conn):
                 _memory(conn, user, day)
         _mention(conn, user, entity_id, TARGET)
 
-        written = detect_day(conn, user, TARGET.isoformat())
+        result = detect_day(conn, user, TARGET.isoformat())
 
-        assert len(written) == 1
+        assert len(result.saved_ids) == 1
         difference = _diffs(conn, user)[0]
         assert difference[1] == "freq_shift"
         assert difference[2] == (
@@ -150,8 +161,68 @@ def test_연속_등장은_매일_차이로_저장하지_않는다(conn):
         _mention(conn, user, entity_id, TARGET - timedelta(days=1))
         _mention(conn, user, entity_id, TARGET)
 
-        assert detect_day(conn, user, TARGET.isoformat()) == []
+        assert detect_day(conn, user, TARGET.isoformat()).saved_ids == []
         assert _diffs(conn, user) == []
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_일일_노출_차이는_놀라움_상위_3건으로_제한한다(conn):
+    user = seed_user(conn)
+    try:
+        for index in range(4):
+            entity_id = _entity(conn, user, f"항목{index}")
+            _mention(conn, user, entity_id, TARGET - timedelta(days=2))
+            _mention(conn, user, entity_id, TARGET - timedelta(days=1))
+        _memory(conn, user, TARGET)
+
+        result = detect_day(conn, user, TARGET.isoformat())
+
+        assert len(result.saved_ids) == 3
+        assert result.narration_ids == result.saved_ids
+        assert len(_diffs(conn, user)) == 3
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_감정_전환은_엔티티_없이_멱등_저장하고_근거를_연결한다(conn):
+    user = seed_user(conn)
+    try:
+        memory_ids = [
+            _emotion(
+                conn,
+                user,
+                TARGET - timedelta(days=offset),
+                0.5,
+            )
+            for offset in range(5, 0, -1)
+        ]
+        memory_ids.append(_emotion(conn, user, TARGET, -1.0))
+
+        first = detect_day(conn, user, TARGET.isoformat())
+        second = detect_day(conn, user, TARGET.isoformat())
+
+        assert first.saved_ids == second.saved_ids
+        difference = conn.execute(
+            "select id::text, entity_id, dimension, detection_method, "
+            "category, confidence from public.differences where user_id = %s",
+            (user,),
+        ).fetchone()
+        assert difference[1:5] == (
+            None,
+            "emotion",
+            "zscore",
+            "감정전환",
+        )
+        assert difference[5] == pytest.approx(8.0)
+        evidence = conn.execute(
+            "select memory_id::text from public.difference_evidence "
+            "where difference_id = %s",
+            (difference[0],),
+        ).fetchall()
+        assert {row[0] for row in evidence} == set(memory_ids)
     finally:
         delete_user(conn, user)
 
@@ -166,12 +237,12 @@ def test_재실행은_차이와_근거를_중복하지_않는다(conn):
         first = detect_day(conn, user, TARGET.isoformat())
         second = detect_day(conn, user, TARGET.isoformat())
 
-        assert first == second
+        assert first.saved_ids == second.saved_ids
         assert len(_diffs(conn, user)) == 1
         evidence_count = conn.execute(
             "select count(*)::int from public.difference_evidence "
             "where difference_id = %s",
-            (first[0],),
+            (first.saved_ids[0],),
         ).fetchone()[0]
         assert evidence_count == 1
     finally:
