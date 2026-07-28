@@ -27,7 +27,10 @@ export function RecallScreen({
         </p>
       </header>
 
-      <form role="search" className="mt-8 flex gap-2">
+      <form
+        role="search"
+        className="mt-8 grid grid-cols-[minmax(0,1fr)_auto] gap-2"
+      >
         <label className="sr-only" htmlFor="recall-query">
           기록 검색
         </label>
