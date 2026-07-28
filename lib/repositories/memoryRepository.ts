@@ -1,6 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MemoryRepository } from "@/lib/services/memory";
+import {
+  RECALL_RESULT_LIMIT,
+  type RecallSearchPort,
+} from "@/lib/services/recall";
 import type { TodayMemoryPort } from "@/lib/services/today";
+
+function escapeIlikeLiteral(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
+}
 
 /**
  * authenticated 세션 클라이언트로 MemoryRepository를 구현한다.
@@ -9,7 +17,7 @@ import type { TodayMemoryPort } from "@/lib/services/today";
  */
 export function createMemoryRepository(
   client: SupabaseClient,
-): MemoryRepository & TodayMemoryPort {
+): MemoryRepository & TodayMemoryPort & RecallSearchPort {
   return {
     async insertMemory(row) {
       const { data, error } = await client
@@ -73,6 +81,26 @@ export function createMemoryRepository(
         .neq("raw_text", "");
       if (error) throw error;
       return (data ?? []).map((row) => row.captured_at as string);
+    },
+
+    async search(userId, query) {
+      const pattern = `%${escapeIlikeLiteral(query)}%`;
+      const { data, error } = await client
+        .from("memories")
+        .select("id, raw_text, captured_at")
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .eq("is_locked", false)
+        .not("raw_text", "is", null)
+        .ilike("raw_text", pattern)
+        .order("captured_at", { ascending: false })
+        .limit(RECALL_RESULT_LIMIT);
+      if (error) throw error;
+      return (data ?? []).map((row) => ({
+        id: row.id as string,
+        rawText: row.raw_text as string,
+        capturedAt: row.captured_at as string,
+      }));
     },
   };
 }
