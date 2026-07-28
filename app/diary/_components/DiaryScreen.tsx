@@ -1,5 +1,6 @@
 import type { DiaryView } from "@/lib/services/diary";
 import { EmptyState } from "@/components/common/StateView";
+import Link from "next/link";
 import { DiaryArticle } from "./DiaryView";
 import { DiaryNav } from "./DiaryNav";
 
@@ -16,7 +17,15 @@ export function DiaryScreen({
 }) {
   return (
     <main className="mx-auto max-w-md p-4">
-      <h1 className="mb-4 text-lg font-medium">일기</h1>
+      <header className="mb-4 flex items-center justify-between gap-3">
+        <h1 className="text-lg font-medium">일기</h1>
+        <Link
+          href="/report"
+          className="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          7일 리포트
+        </Link>
+      </header>
       {diary ? (
         <>
           <DiaryArticle diary={diary} />
