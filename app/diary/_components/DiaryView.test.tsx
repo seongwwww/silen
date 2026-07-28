@@ -6,7 +6,9 @@ import { DiaryArticle } from "./DiaryView";
 import type { DiaryView } from "@/lib/services/diary";
 
 const base: DiaryView = {
+  id: "d1",
   date: "2026-07-26",
+  status: "draft",
   oneLine: "비슷한 하루, 그래도 조금 일찍.",
   body: "특별할 것 없는 하루였다. 점심은 김밥.",
   differences: ["평소보다 일찍 퇴근"],
