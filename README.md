@@ -26,7 +26,7 @@ components/common/      # 실은 도메인 공통 컴포넌트
 worker/                 # Python 워커 (차이 탐지·AI 잡)
 worker/src/silen_worker/tasks/        # 큐 소비 잡 진입점(process_pending)
 worker/src/silen_worker/extraction/   # 엔티티 추출 (가드레일·정규화·Vertex Gemini)
-worker/src/silen_worker/cli.py        # 파이프라인 CLI(run-pending·run-daily·run-diary·run-weekly)
+worker/src/silen_worker/cli.py        # 파이프라인 CLI(run-pending·run-daily·run-diary·run-weekly·stats)
 worker/src/silen_worker/db.py         # 워커 DB 접근(user 스코프 강제)
 fixtures/               # 두 자산이 공유하는 골든 케이스
 evals/entities/         # 엔티티 추출 골든셋 (환각·빈날·조사·병합·4종)
@@ -114,6 +114,9 @@ worker\.venv\Scripts\python.exe -m silen_worker run-diary
 
 # 주간 리포트 (첫 기록일 기준 방금 끝난 7일 블록만, 기본: 각자 로컬 오늘)
 worker\.venv\Scripts\python.exe -m silen_worker run-weekly
+
+# 읽기 전용 MVP 운영 지표(명시적 피드백·차이 수·일기·관측일수)
+worker\.venv\Scripts\python.exe -m silen_worker stats
 
 # 특정 사용자·날짜만 (디버깅·재실행)
 worker\.venv\Scripts\python.exe -m silen_worker run-daily --user <uuid> --date 2026-07-26

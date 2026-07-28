@@ -49,12 +49,13 @@ def test_없는_user면_빈_목록():
     assert build_targets(_USERS, user="없음", date_iso=None, now=now) == []
 
 
-def test_파서가_네_명령을_안다():
+def test_파서가_다섯_명령을_안다():
     parser = build_parser()
     assert parser.parse_args(["run-pending"]).command == "run-pending"
     assert parser.parse_args(["run-daily"]).command == "run-daily"
     assert parser.parse_args(["run-diary"]).command == "run-diary"
     assert parser.parse_args(["run-weekly"]).command == "run-weekly"
+    assert parser.parse_args(["stats"]).command == "stats"
 
 
 def test_파서_기본값과_옵션():

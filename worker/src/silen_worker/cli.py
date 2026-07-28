@@ -13,6 +13,8 @@ import sys
 from datetime import date, datetime, timedelta, timezone
 
 from silen_worker.db import connect, fetch_active_users
+from silen_worker.stats.repository import fetch_stats
+from silen_worker.stats.service import format_stats
 from silen_worker.tasks.detect import detect_day
 from silen_worker.tasks.narrate import narrate_difference
 from silen_worker.tasks.process import process_pending
@@ -75,6 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=50,
         help="무한 루프 방지 상한",
     )
+    sub.add_parser("stats", help="읽기 전용 MVP 운영 지표 출력")
 
     for name, help_text in (
         ("run-daily", "차이 검출 → 서술"),
@@ -241,6 +244,14 @@ def run_weekly(conn, targets: list[tuple[str, str]]) -> tuple[int, int]:
     return ok, fail
 
 
+def run_stats(conn) -> list[str]:
+    """쓰기 없이 네 MVP 운영 지표와 해석 주의를 출력한다."""
+    lines = format_stats(fetch_stats(conn))
+    for line in lines:
+        print(line)
+    return lines
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -249,6 +260,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     with connect() as conn:
+        if args.command == "stats":
+            run_stats(conn)
+            return 0
+
         targets = (
             resolve_weekly_targets(conn, args.user, args.date)
             if args.command == "run-weekly"
