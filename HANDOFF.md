@@ -44,15 +44,17 @@
 
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
-- **진행:** Task 1~6 완료. 다음은 Task 7 워커이나 계획 충돌 판단 대기.
-- **완료 커밋:** Task 1 `fff4639` · Task 2 `0b4c52f` · Task 3 `5c2f625` · Task 4 `23e50d3` · Task 5 `9497f57` · Task 6 `51cb268`.
-- **검증:** Task 1 스키마 통합 1 PASS. Task 3 편집 통합 4 PASS. Task 6 시점 프론트 단위 84 PASS · lint PASS · build PASS(`/settings`, `/api/users/me` 포함).
+- **진행:** Task 1~8 완료. `feat/diary-loop`은 사람의 리뷰·병합 대기.
+- **완료 커밋:** Task 1 `fff4639` · Task 2 `0b4c52f` · Task 3 `5c2f625` · Task 4 `23e50d3` · Task 5 `9497f57` · Task 6 `51cb268` · Task 7 `2a40c94` · Task 8 `3113e36`.
+- **검증:** 실 Vertex eval **6/6 PASS(1회 실행)** · 워커 **135 PASS** · 프론트 단위 **84 PASS** · 프론트 통합 **53 PASS** · ruff·lint·build clean.
 - **기준선(main):** 프론트 단위 **63** · 통합 **49** · 워커 **131** · lint·build·ruff clean.
-- **로드맵:** `PROJECT_STATE.md`를 기획서 §13 순서로 재정렬했다. 이 작업은 **F1~F3**이며 다음은 F4(일기 시간·알림)다.
-- **막힘/결정 필요:** Task 7 계획의 새 `upsert_diary` SQL은 `reset_edit=False`여도 충돌 행의 `generated_text`를 덮고 `status='draft'`로 바꾼다. 그러면 기존 `test_upsert는_편집된_일기를_덮지_않는다`가 보장하는 force 경쟁 조건 보호가 사라진다. 계획은 동시에 “기존 테스트 약화 금지”라고 명시해 충돌한다. 제안: `reset_edit=True`일 때만 status 무관 덮어쓰고, `False`이면 기존 `where diaries.status='draft'` 보호를 유지하는 조건부 upsert로 계획을 수정한다.
+- **로드맵:** **F1~F3 완료.** 다음은 F4(일기 시간 설정·알림)다.
+- **막힘/결정 필요:** (없음) 사용자가 경고를 확인해 다시 만들기를 요청한 경우만 편집본을 교체하고, 요청 없는 force는 저장 시점에도 draft일 때만 갱신하도록 확정·구현했다(계획 결정 고정 13).
 - **미루는 것(기능 아님):** 통합 테스트 격리 · 워커 CLI UTF-8 · 추출 일반명사 억제 · z-score. 스펙·계획 문서는 `docs/superpowers/`에 있으니 필요할 때 꺼내 쓴다.
 
 > 직전 완료: 질문 세션 이어 쓰기(`feat/question-session`) — 병합·push 완료(PR #9, `02e0add`).
+
+> 직전 완료: 일기 루프(`feat/diary-loop`) — 초안 편집·확정·재생성 요청·기본 톤, 워커 요청 소비와 톤 사실 불변성 eval까지 완료. 리뷰·병합 대기.
 
 > 직전 완료: 일기 품질 실데이터 재검증 — entities 6 → differences 6 →
 > narrations 6 → 확정 6 → 일기 생성. 본문 `"처음"` 0회·메타 표현 0건,
