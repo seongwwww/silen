@@ -78,6 +78,50 @@ class OccurrenceRow:
     timezone: str
 
 
+@dataclass
+class ActiveMemoryRow:
+    memory_id: str
+    captured_at: datetime
+    timezone: str
+
+
+def fetch_window_active_memories(
+    conn: psycopg.Connection,
+    user_id: str,
+    target_date: date,
+    window_days: int,
+) -> list[ActiveMemoryRow]:
+    """오늘과 앞선 ``window_days``를 덮는 활성 메모를 반환한다.
+
+    엔티티가 추출되지 않은 메모도 활성 기록일 분모와 오늘 부재 근거에 포함한다.
+    """
+    lower = datetime.combine(
+        target_date - timedelta(days=window_days + 2),
+        datetime.min.time(),
+        timezone.utc,
+    )
+    upper = datetime.combine(
+        target_date + timedelta(days=2),
+        datetime.min.time(),
+        timezone.utc,
+    )
+    rows = conn.execute(
+        """
+        select m.id::text, m.captured_at, u.timezone
+        from public.memories m
+        join public.users u on u.id = m.user_id
+        where m.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+          and m.captured_at >= %s
+          and m.captured_at < %s
+        order by m.captured_at
+        """,
+        (user_id, lower, upper),
+    ).fetchall()
+    return [ActiveMemoryRow(r[0], r[1], r[2]) for r in rows]
+
+
 def fetch_window_occurrences(
     conn: psycopg.Connection, user_id: str, target_date: date, window_days: int
 ) -> list[OccurrenceRow]:
@@ -107,6 +151,36 @@ def fetch_window_occurrences(
         (user_id, lower, upper, user_id),
     ).fetchall()
     return [OccurrenceRow(r[0], r[1], r[2], r[3], r[4]) for r in rows]
+
+
+def fetch_latest_prior_occurrences(
+    conn: psycopg.Connection,
+    user_id: str,
+    entity_ids: list[str],
+    target_date: date,
+) -> dict[str, tuple[datetime, str]]:
+    """대상 로컬 날짜보다 앞선 마지막 활성 언급을 엔티티별로 반환한다."""
+    if not entity_ids:
+        return {}
+    rows = conn.execute(
+        """
+        select distinct on (me.entity_id)
+               me.entity_id::text, m.captured_at, u.timezone
+        from public.memory_entities me
+        join public.memories m on m.id = me.memory_id
+        join public.users u on u.id = m.user_id
+        join public.entities e on e.id = me.entity_id
+        where m.user_id = %s
+          and e.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+          and me.entity_id = any(%s::uuid[])
+          and (m.captured_at at time zone u.timezone)::date < %s
+        order by me.entity_id, m.captured_at desc
+        """,
+        (user_id, user_id, entity_ids, target_date),
+    ).fetchall()
+    return {r[0]: (r[1], r[2]) for r in rows}
 
 
 def fetch_earliest_occurrence(
@@ -174,6 +248,20 @@ def link_difference_evidence(
         "values (%s, %s) on conflict (difference_id, memory_id) do nothing",
         (difference_id, memory_id),
     )
+
+
+def replace_difference_evidence(
+    conn: psycopg.Connection,
+    difference_id: str,
+    memory_ids: list[str],
+) -> None:
+    """재탐지 시 현재 근거 집합으로 교체해 잠금·삭제된 옛 링크를 남기지 않는다."""
+    conn.execute(
+        "delete from public.difference_evidence where difference_id = %s",
+        (difference_id,),
+    )
+    for memory_id in dict.fromkeys(memory_ids):
+        link_difference_evidence(conn, difference_id, memory_id)
 
 
 @dataclass
