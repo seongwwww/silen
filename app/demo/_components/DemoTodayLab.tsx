@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { TodayScreen } from "@/app/_components/TodayScreen";
 import {
@@ -40,6 +41,12 @@ export function DemoTodayLab({
           <p className="mt-2 text-xs text-muted-foreground">
             실제 사용자 데이터나 서버 요청을 사용하지 않는 화면 테스트용입니다.
           </p>
+          <Link
+            href="/report?demo=1"
+            className="mt-2 inline-flex min-h-11 items-center text-sm font-medium underline-offset-4 hover:underline"
+          >
+            주간 리포트 목데이터 보기
+          </Link>
         </div>
       </div>
       <TodayScreen

@@ -15,6 +15,9 @@ describe("DemoTodayLab", () => {
     render(<DemoTodayLab initialState="arrived" />);
 
     expect(screen.getByText("DAILY WRAP")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "주간 리포트 목데이터 보기" }),
+    ).toHaveAttribute("href", "/report?demo=1");
   });
 
   it("목 데이터 상태를 바꿔 Daily Wrap 도착 화면을 확인한다", async () => {

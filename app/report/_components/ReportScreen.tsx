@@ -1,24 +1,9 @@
-type Slot = "가장많이한것" | "처음한것" | "감정순간";
+import type {
+  WeeklyReportView,
+  WeeklySlot,
+} from "@/lib/repositories/weeklyRepository";
 
-type Report = {
-  id: string;
-  weekStart: string;
-  weekEnd: string;
-  days: {
-    date: string;
-    count: number;
-    isSurprising: boolean;
-  }[];
-  highlights: Record<
-    Slot,
-    {
-      headline: string;
-      detail: string;
-    } | null
-  >;
-};
-
-const SLOT_LABELS: { slot: Slot; label: string }[] = [
+const SLOT_LABELS: { slot: WeeklySlot; label: string }[] = [
   { slot: "가장많이한것", label: "가장 많이 기록한 것" },
   { slot: "처음한것", label: "이번 주 처음 기록한 것" },
   { slot: "감정순간", label: "감정이 크게 달랐던 날" },
@@ -41,7 +26,11 @@ function weekdayLabel(date: string): string {
   }).format(new Date(`${date}T00:00:00Z`));
 }
 
-export function ReportScreen({ report }: { report: Report | null }) {
+export function ReportScreen({
+  report,
+}: {
+  report: WeeklyReportView | null;
+}) {
   return (
     <main className="mx-auto min-h-[calc(100svh-3.5rem)] w-full max-w-md px-5 py-10">
       <header className="pt-4">
