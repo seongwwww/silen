@@ -104,6 +104,68 @@ describe("RecordForm", () => {
 
   it("질문이 주어지면 맥락으로 보여준다", () => {
     render(<RecordForm question="지은은 어떤 사람이었어요?" />);
+    expect(screen.getByText("이 질문에서 이어 쓰는 중")).toBeInTheDocument();
+    expect(screen.getByText("지은은 어떤 사람이었어요?")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "한 번에 다 적지 않아도 괜찮아요. 같은 질문에서 여러 번 이어 쓸 수 있어요.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "이렇게 남긴 기록도 쌓여, 나중에 작은 차이를 찾는 단서가 돼요.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("원할 때만 생각 단서를 한 가지씩 바꿔 보여준다", async () => {
+    render(<RecordForm question="지은은 어떤 사람이었어요?" />);
+
+    const cueButton = screen.getByRole("button", {
+      name: "다른 각도로 떠올려보기",
+    });
+    expect(
+      screen.queryByText("같이 떠오르는 장면이 있나요?"),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(cueButton);
+    expect(
+      screen.getByText("같이 떠오르는 장면이 있나요?"),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "다른 단서 보기" }),
+    );
+    expect(
+      screen.getByText("미처 남기지 않은 부분이 있나요?"),
+    ).toBeInTheDocument();
+  });
+
+  it("일반 기록에는 질문 세션 단서를 보여주지 않는다", () => {
+    render(<RecordForm />);
+    expect(
+      screen.queryByRole("button", { name: "다른 각도로 떠올려보기" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "이렇게 남긴 기록도 쌓여, 나중에 작은 차이를 찾는 단서가 돼요.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("같은 질문에서 여러 번 기록해도 질문 맥락이 남는다", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<RecordForm question="지은은 어떤 사람이었어요?" />);
+
+    await userEvent.type(input(), "첫 번째 기록");
+    await userEvent.click(sendButton());
+    await waitFor(() => expect(input()).toHaveValue(""));
+
+    await userEvent.type(input(), "두 번째 기록");
+    await userEvent.click(sendButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
     expect(screen.getByText("지은은 어떤 사람이었어요?")).toBeInTheDocument();
   });
 });

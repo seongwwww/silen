@@ -19,6 +19,10 @@ export function FollowUpCard({
       >
         {text}
       </Link>
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+        한 번에 다 적지 않아도 괜찮아요. 같은 질문에서 여러 번 이어 쓸 수
+        있어요.
+      </p>
     </section>
   );
 }
