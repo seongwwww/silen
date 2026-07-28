@@ -46,3 +46,6 @@ export function assertValidDiaryTransition(
     throw new InvalidDiaryTransitionError();
   }
 }
+
+export type TonePreset = "담백" | "따뜻";
+export const TONE_PRESETS: TonePreset[] = ["담백", "따뜻"];
