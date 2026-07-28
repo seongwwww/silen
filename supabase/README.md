@@ -32,6 +32,8 @@ Supabase CLI에는 down 마이그레이션 개념이 없다. `database.md`가 �
 - 이메일 변경에 확인이 필요하다(`enable_confirmations = true`). 끄면 익명
   사용자가 남의 주소를 자기 계정에 등록할 수 있다.
 - 메일은 Mailpit(`http://127.0.0.1:54324`)으로 간다. 실제 발송되지 않는다.
+  통합 테스트는 공유 사서함 전체를 비우지 않고 UUID 기반 수신 주소의 메일만
+  조회한다.
 - RLS 정책은 소유자 직접과 부모 경유 EXISTS 두 형태뿐이다. 새 테이블을
   추가하면 둘 중 하나를 골라 정책을 함께 넣는다. 정책 없이 RLS만 켜면
   그 테이블은 앱에서 전혀 보이지 않는다.
@@ -57,6 +59,12 @@ Supabase CLI에는 down 마이그레이션 개념이 없다. `database.md`가 �
 - 워커는 특권 역할(로컬 postgres)로 psycopg 직접 접속해 RLS를 우회하므로,
   워커 쿼리가 user_id 필터를 지키는 것이 유일한 격리 방어선이다.
 - 새 잡을 추가하면 이 큐를 재사용하고, 처리는 멱등(자연키 upsert)해야 한다.
+- 큐는 전역이다. 통합 테스트는 `purge_queue`로 비우지 않고
+  `process_pending(only_user_id=...)`로 자기 잡만 claim·처리한다. 남의 `read_ct`와
+  visibility timeout도 바꾸지 않는다. 큐 상태 단언은 `pgmq.read` 대신 큐 테이블을
+  직접 조회하고, 전달 의미 테스트는 임시 큐를 쓴다.
+- 테스트 사용자를 지울 때는 FK cascade 밖의 대기·아카이브 메시지와 삭제 원장,
+  Storage 사용자 폴더를 `user_id`로 먼저 지운다.
 
 ## 엔티티
 

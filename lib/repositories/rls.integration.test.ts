@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { adminClient, SUPABASE_URL, ANON_KEY } from "./testSupport";
+import {
+  adminClient,
+  cleanupTestUser,
+  SUPABASE_URL,
+  ANON_KEY,
+} from "./testSupport";
 
 let admin: SupabaseClient;
 let alice: string;
@@ -87,8 +92,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await admin.auth.admin.deleteUser(alice);
-  await admin.auth.admin.deleteUser(bob);
+  await cleanupTestUser(alice);
+  await cleanupTestUser(bob);
 });
 
 describe("교차 사용자 격리 — 소유자 직접", () => {

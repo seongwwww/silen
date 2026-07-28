@@ -25,3 +25,15 @@ Definition of Done = **lint + typecheck + unit + integration + eval 전부 통�
 - 버그 수정 시 **재현 테스트를 먼저** 추가(systematic-debugging).
 - 외부 의존(LLM·STT)은 계약 기반 목/스텁. eval만 실제 모델 사용.
 - 커버리지는 목적이 아니라 신뢰의 지표 — 위 필수 시나리오는 100% 커버.
+- **통합 테스트는 DB를 소유하지 않는다.** 자기가 만든 것만 만들고·지우고·단언한다.
+  전역 사용자 삭제, 전역 `purge_queue`, "큐 전체가 비었다" 같은 전역 상태 단언을
+  쓰지 않는다.
+- 테스트 사용자 정리는 Auth 계정 삭제로 끝내지 않는다. FK 밖에 있는 pgmq
+  대기열·아카이브, `deletions` 원장, Storage 사용자 폴더를 `user_id`로 먼저
+  정리한 뒤 계정을 삭제한다.
+- 큐를 소비하는 통합 테스트는 `process_pending(only_user_id=...)`로 자기 사용자만
+  claim·처리한다. 다른 사용자의 `read_ct`·visibility timeout도 바꾸면 안 된다.
+  큐 상태 단언은 visibility timeout을 바꾸는 `pgmq.read` 대신 큐 테이블을 직접
+  조회한다. 큐 자체의 전달 의미를 검사할 때는 테스트 전용 임시 큐를 쓴다.
+- 공유 Mailpit 사서함 전체를 비우지 않는다. 테스트마다 고유한 수신 주소를 쓰고
+  그 주소의 메일만 조회한다.

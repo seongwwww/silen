@@ -6,15 +6,29 @@ timeout으로 재시도, 상한 초과 시 데드레터.
 
 from silen_worker.db import connect, fetch_memory, upsert_entity, link_memory_entity
 from silen_worker.extraction.service import LLMExtractor, guardrail
-from silen_worker.queue import QUEUE, archive_message, delete_message, read_messages
+from silen_worker.queue import (
+    QUEUE,
+    archive_message,
+    delete_message,
+    read_messages,
+    read_messages_for_user,
+)
 
 VISIBILITY_TIMEOUT = 60  # 초. LLM 호출이 있어 A보다 넉넉히.
 MAX_READS = 5
 
 
-def process_pending(limit: int = 10, extractor: LLMExtractor | None = None) -> list[str]:
+def process_pending(
+    limit: int = 10,
+    extractor: LLMExtractor | None = None,
+    only_user_id: str | None = None,
+) -> list[str]:
     """큐에서 최대 limit개 처리하고 처리한 memory_id를 반환한다.
-    extractor는 LLMExtractor 포트. 테스트는 스텁, 프로덕션은 Gemini를 주입한다."""
+    extractor는 LLMExtractor 포트. 테스트는 스텁, 프로덕션은 Gemini를 주입한다.
+
+    only_user_id를 주면 그 사용자의 메시지만 처리하고 나머지는 삭제·아카이브하지
+    않는다. None이면 프로덕션 기본 동작대로 읽은 메시지를 모두 처리한다.
+    """
     if extractor is None:
         from silen_worker.extraction.gemini import GeminiExtractor
 
@@ -22,7 +36,18 @@ def process_pending(limit: int = 10, extractor: LLMExtractor | None = None) -> l
 
     processed: list[str] = []
     with connect() as conn:
-        for msg_id, read_ct, payload in read_messages(conn, QUEUE, VISIBILITY_TIMEOUT, limit):
+        messages = (
+            read_messages(conn, QUEUE, VISIBILITY_TIMEOUT, limit)
+            if only_user_id is None
+            else read_messages_for_user(
+                conn,
+                QUEUE,
+                only_user_id,
+                VISIBILITY_TIMEOUT,
+                limit,
+            )
+        )
+        for msg_id, read_ct, payload in messages:
             try:
                 memory = fetch_memory(conn, payload["memory_id"], payload["user_id"])
                 if memory is None:
