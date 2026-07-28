@@ -35,12 +35,17 @@ except AttributeError:
 FIXTURES_PATH = Path(__file__).parent / "fixtures.json"
 
 
-def _facts(case: dict, tone_preset: str = "담백") -> DiaryInput:
+def _facts(
+    case: dict,
+    tone_preset: str = "담백",
+    tone_instruction: str | None = None,
+) -> DiaryInput:
     return DiaryInput(
         date_iso="2026-07-24", user_id="eval",
         memories=[DiaryMemory(mid, text) for mid, text in case["memories"]],
         differences=[DiaryDifference(did, h, name) for did, h, name in case["differences"]],
         tone_preset=tone_preset,
+        tone_instruction=tone_instruction,
     )
 
 
@@ -91,20 +96,28 @@ def run_tone_case(
 ) -> tuple[bool, list[str], dict[str, dict]]:
     raws: dict[str, dict] = {}
     failures: list[str] = []
-    used_by_tone: dict[str, list[str]] = {}
-    for tone in ("담백", "따뜻"):
-        facts = _facts(case, tone)
+    used_by_tone: dict[str, tuple[list[str], list[str]]] = {}
+    variants = [("담백", "담백", None), ("따뜻", "따뜻", None)]
+    variants.extend(
+        (f"주문:{instruction}", "담백", instruction)
+        for instruction in case.get("tone_instructions", [])
+    )
+    for label, tone, instruction in variants:
+        facts = _facts(case, tone, instruction)
         raw = writer.write(facts)
-        raws[tone] = raw
-        failures.extend(f"{tone}: {failure}" for failure in validate(raw, facts))
-        used_by_tone[tone] = sorted(
-            str(x) for x in (raw.get("used_memory_ids") or [])
+        raws[label] = raw
+        failures.extend(f"{label}: {failure}" for failure in validate(raw, facts))
+        used_by_tone[label] = (
+            sorted(str(x) for x in (raw.get("used_memory_ids") or [])),
+            sorted(str(x) for x in (raw.get("used_difference_ids") or [])),
         )
-    if used_by_tone["담백"] != used_by_tone["따뜻"]:
-        failures.append(
-            "톤에 따라 쓴 메모 집합이 달라짐: "
-            f"담백={used_by_tone['담백']}, 따뜻={used_by_tone['따뜻']}"
-        )
+    baseline = used_by_tone["담백"]
+    for label, used in used_by_tone.items():
+        if used != baseline:
+            failures.append(
+                "톤에 따라 메모·차이 근거 집합이 달라짐: "
+                f"담백={baseline}, {label}={used}"
+            )
     return (not failures, failures, raws)
 
 

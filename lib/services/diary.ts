@@ -19,6 +19,10 @@ export interface DiaryView {
   isEdited: boolean;
   /** 꼬리 질문(없으면 null). id는 기록 화면 링크에 쓴다 — URL엔 id만 넣는다. */
   question: { sectionId: string; text: string } | null;
+  /** 다음 재생성 한 번에 적용할 자유/빠른 톤 주문. */
+  toneInstruction: string | null;
+  /** 재생성 요청이 저장돼 다음 워커 실행을 기다리는가. */
+  regenerateRequested: boolean;
 }
 
 export type DiaryStatus = "draft" | "edited" | "confirmed";
@@ -49,3 +53,12 @@ export function assertValidDiaryTransition(
 
 export type TonePreset = "담백" | "따뜻";
 export const TONE_PRESETS: TonePreset[] = ["담백", "따뜻"];
+
+export type QuickToneOrder = "짧게" | "유머";
+export const QUICK_TONE_ORDERS: readonly QuickToneOrder[] = [
+  "짧게",
+  "유머",
+];
+
+/** API와 UI가 함께 쓰는 자유 톤 주문 상한. */
+export const TONE_INSTRUCTION_MAX_LENGTH = 160;

@@ -15,6 +15,8 @@ const base: DiaryView = {
   evidence: ["점심 김밥"],
   isEdited: false,
   question: null,
+  toneInstruction: null,
+  regenerateRequested: false,
 };
 
 describe("DiaryArticle", () => {
@@ -67,5 +69,22 @@ describe("DiaryArticle", () => {
     expect(
       screen.getByRole("link", { name: "지은은 어떤 사람이었어요?" }),
     ).toBeInTheDocument();
+  });
+
+  it("저장된 재생성 요청 상태를 톤 UI에 전달한다", () => {
+    render(
+      <DiaryArticle
+        diary={{
+          ...base,
+          toneInstruction: "짧게",
+          regenerateRequested: true,
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText("다음 일기를 만들 때 반영돼요."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("주문: 짧게")).toBeInTheDocument();
   });
 });

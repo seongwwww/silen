@@ -14,7 +14,7 @@ type SourceRow = {
 // 타입을 잃으면 supabase-js의 select 타입 추론이 깨져 row.diary_sections가
 // GenericStringError가 된다(tsc에서만 드러남).
 const DIARY_SELECT =
-  "id, date, status, generated_text, edited_text, diary_sections(id, section_type, content), diary_sources(memories(raw_text, is_locked, deleted_at))" as const;
+  "id, date, status, generated_text, edited_text, tone_instruction, regenerate_requested_at, diary_sections(id, section_type, content), diary_sources(memories(raw_text, is_locked, deleted_at))" as const;
 
 /** 조회 행 하나를 표시용 뷰로 옮긴다. findLatest·findByDate가 공유한다. */
 function toDiaryView(row: {
@@ -23,6 +23,8 @@ function toDiaryView(row: {
   status: unknown;
   generated_text: unknown;
   edited_text: unknown;
+  tone_instruction: unknown;
+  regenerate_requested_at: unknown;
   diary_sections: unknown;
   diary_sources: unknown;
 }): DiaryView {
@@ -66,6 +68,8 @@ function toDiaryView(row: {
       const found = sections.find((section) => section.section_type === "질문");
       return found ? { sectionId: found.id, text: found.content } : null;
     })(),
+    toneInstruction: (row.tone_instruction as string | null) ?? null,
+    regenerateRequested: row.regenerate_requested_at != null,
   };
 }
 

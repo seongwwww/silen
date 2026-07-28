@@ -24,6 +24,7 @@
      "memories": [["m1", "점심 김밥"], ["m2", "저녁에 산책함"]],
      "differences": [],
      "tone_invariance": true,
-     "reason": "톤이 바뀌어도 실제 근거로 쓴 메모 집합은 같아야 한다"}
+     "tone_instructions": ["짧게", "유머", "문장을 세 개 이하로 써줘"],
+     "reason": "기본·빠른·자유 톤이 달라도 메모와 차이 근거 집합은 같아야 한다"}
   ]
 }
