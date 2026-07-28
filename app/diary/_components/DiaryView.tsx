@@ -2,6 +2,7 @@ import type { DiaryView } from "@/lib/services/diary";
 import { EvidenceDisclosure } from "./EvidenceDisclosure";
 import { FollowUpCard } from "./FollowUpCard";
 import { DiaryEditor } from "./DiaryEditor";
+import { RegenerateButton } from "./RegenerateButton";
 
 /** 일기 한 편. AI 생성물임을 라벨·배경으로 밝히고(frontend.md), 근거는 접어 둔다.
  * 사용자가 고친 일기를 '초안'이라 부르지 않는다. */
@@ -28,6 +29,7 @@ export function DiaryArticle({ diary }: { diary: DiaryView }) {
         body={diary.body}
         status={diary.status}
       />
+      <RegenerateButton id={diary.id} status={diary.status} />
 
       {diary.differences.length > 0 && (
         <section className="mt-4">
