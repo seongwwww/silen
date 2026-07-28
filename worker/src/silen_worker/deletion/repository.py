@@ -9,20 +9,29 @@ class PostgresDeletionRepository:
     def __init__(self, conn: psycopg.Connection):
         self.conn = conn
 
-    def fetch_pending(self, limit: int = 20) -> list[DeletionJob]:
-        rows = self.conn.execute(
-            """
+    def fetch_pending(
+        self,
+        limit: int = 20,
+        only_user_id: str | None = None,
+    ) -> list[DeletionJob]:
+        query = """
             select id::text, user_id::text, steps_done
             from public.deletions
             where trigger = 'account'
               and target_type = 'user'
               and target_id = user_id
               and status in ('running', 'failed')
+        """
+        params: list[object] = []
+        if only_user_id is not None:
+            query += " and user_id = %s"
+            params.append(only_user_id)
+        query += """
             order by created_at
             limit %s
-            """,
-            (limit,),
-        ).fetchall()
+        """
+        params.append(limit)
+        rows = self.conn.execute(query, params).fetchall()
         return [
             DeletionJob(row[0], row[1], frozenset(row[2] or ()))
             for row in rows
