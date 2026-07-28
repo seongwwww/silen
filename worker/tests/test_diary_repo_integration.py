@@ -1,15 +1,24 @@
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
 from silen_worker.db import (
-    fetch_confirmed_differences, fetch_diary_memories, fetch_existing_diary,
+    fetch_usable_differences, fetch_diary_memories, fetch_existing_diary,
     replace_diary_sections, replace_diary_sources, upsert_diary,
 )
 from tests.conftest import seed_user, seed_memory, delete_user
 
 
-def _confirmed_difference(conn, user_id, name="김밥", headline="3일째 김밥"):
+def _difference(
+    conn,
+    user_id,
+    *,
+    name="김밥",
+    headline="최근 기록에서 3일째 김밥",
+    status="confirmed",
+    evidence_state="intact",
+    target_date=None,
+):
     # 날짜는 Python date.today()로 명시 — SQL current_date(DB tz)와 date.today()(로컬)가
     # UTC/KST 경계에서 어긋나 테스트가 flaky해지는 걸 막는다(결정적 시드).
     ent = conn.execute(
@@ -23,10 +32,10 @@ def _confirmed_difference(conn, user_id, name="김밥", headline="3일째 김밥
           (user_id, date, entity_id, dimension, description, detection_method,
            confidence, category, status, evidence_state)
         values (%s, %s, %s, 'thing', '최근 3일 연속 등장', 'freq_shift',
-                0.5, '오늘의다른점', 'confirmed', 'intact')
+                0.5, '오늘의다른점', %s, %s)
         returning id::text
         """,
-        (user_id, date.today(), ent),
+        (user_id, target_date or date.today(), ent, status, evidence_state),
     ).fetchone()[0]
     conn.execute(
         "insert into public.difference_narrations "
@@ -64,11 +73,11 @@ def test_빈본문_메모는_제외(conn):
 def test_confirmed_차이와_headline을_조회한다(conn):
     user = seed_user(conn)
     try:
-        diff = _confirmed_difference(conn, user, headline="3일째 김밥")
-        got = fetch_confirmed_differences(conn, user, date.today())
+        diff = _difference(conn, user, headline="최근 기록에서 3일째 김밥")
+        got = fetch_usable_differences(conn, user, date.today())
         assert len(got) == 1
         assert got[0].difference_id == diff
-        assert got[0].headline == "3일째 김밥"
+        assert got[0].headline == "최근 기록에서 3일째 김밥"
         assert got[0].detection_method == "freq_shift"
         assert got[0].entity_type == "thing"
         assert got[0].entity_name == "김밥"
@@ -77,22 +86,55 @@ def test_confirmed_차이와_headline을_조회한다(conn):
 
 
 @pytest.mark.integration
-def test_candidate_차이는_조회안됨(conn):
+def test_candidate_차이도_사용할_수_있다(conn):
     user = seed_user(conn)
     try:
-        ent = conn.execute(
-            "insert into public.entities (user_id, entity_type, name, normalized_name) "
-            "values (%s, 'thing', '김밥', '김밥') returning id::text", (user,)
-        ).fetchone()[0]
-        conn.execute(
-            "insert into public.differences (user_id, date, entity_id, dimension, description, "
-            "detection_method, confidence, category, status, evidence_state) "
-            "values (%s, %s, %s, 'thing', 'x', 'freq_shift', 0.5, '오늘의다른점', "
-            "'candidate', 'intact')", (user, date.today(), ent),
-        )
-        assert fetch_confirmed_differences(conn, user, date.today()) == []
+        diff = _difference(conn, user, status="candidate")
+
+        assert [
+            item.difference_id
+            for item in fetch_usable_differences(conn, user, date.today())
+        ] == [diff]
     finally:
         delete_user(conn, user)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("status", "evidence_state"),
+    [("dismissed", "intact"), ("candidate", "stale")],
+)
+def test_기각되거나_stale인_차이는_제외한다(conn, status, evidence_state):
+    user = seed_user(conn)
+    try:
+        _difference(
+            conn,
+            user,
+            status=status,
+            evidence_state=evidence_state,
+        )
+
+        assert fetch_usable_differences(conn, user, date.today()) == []
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_사용자와_날짜가_다른_차이는_섞이지_않는다(conn):
+    alice = seed_user(conn)
+    bob = seed_user(conn)
+    yesterday = date.today() - timedelta(days=1)
+    try:
+        mine = _difference(conn, alice, name="김밥")
+        _difference(conn, alice, name="라면", target_date=yesterday)
+        _difference(conn, bob, name="산책")
+
+        got = fetch_usable_differences(conn, alice, date.today())
+
+        assert [item.difference_id for item in got] == [mine]
+    finally:
+        delete_user(conn, alice)
+        delete_user(conn, bob)
 
 
 @pytest.mark.integration
@@ -100,7 +142,7 @@ def test_일기_저장과_섹션_출처_교체(conn):
     user = seed_user(conn)
     try:
         mem = seed_memory(conn, user, "점심 김밥")
-        diff = _confirmed_difference(conn, user, headline="3일째 김밥")
+        diff = _difference(conn, user, headline="최근 기록에서 3일째 김밥")
         did = upsert_diary(conn, user, date.today(), "본문 v1")
         replace_diary_sections(conn, did, "한 문장 v1", "본문 v1", [(diff, "3일째 김밥")])
         replace_diary_sources(conn, did, [mem])

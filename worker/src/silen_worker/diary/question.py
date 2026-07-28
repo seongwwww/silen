@@ -6,7 +6,7 @@
 
 from typing import Protocol
 
-from silen_worker.db import ConfirmedDifference
+from silen_worker.db import UsableDifference
 
 # 사람·장소·활동이 이야기가 된다. 사물은 묻지 않는다.
 QUESTION_TARGET_TYPES = ("person", "place", "activity")
@@ -25,12 +25,12 @@ FORBIDDEN_QUESTION_PHRASES = (
 
 
 def pick_question_target(
-    confirmed: list[ConfirmedDifference],
-) -> ConfirmedDifference | None:
+    usable: list[UsableDifference],
+) -> UsableDifference | None:
     """질문 대상 하나. 처음 등장한 사람 > 장소 > 활동 순. 없으면 None(묻지 않는다)."""
     firsts = [
         c
-        for c in confirmed
+        for c in usable
         if c.detection_method == "first_occurrence"
         and c.entity_type in QUESTION_TARGET_TYPES
         and isinstance(c.entity_name, str)
@@ -43,7 +43,7 @@ def pick_question_target(
     return None
 
 
-def build_question_prompt(target: ConfirmedDifference) -> str:
+def build_question_prompt(target: UsableDifference) -> str:
     if (
         target.entity_type not in QUESTION_TARGET_TYPES
         or not isinstance(target.entity_name, str)
@@ -62,7 +62,7 @@ def build_question_prompt(target: ConfirmedDifference) -> str:
     )
 
 
-def question_guardrail(raw: dict, target: ConfirmedDifference) -> str | None:
+def question_guardrail(raw: dict, target: UsableDifference) -> str | None:
     """통과한 질문 문자열, 아니면 None(저장하지 않는다)."""
     if not isinstance(raw, dict):
         return None
@@ -81,6 +81,6 @@ def question_guardrail(raw: dict, target: ConfirmedDifference) -> str | None:
 
 
 class QuestionWriter(Protocol):
-    def ask(self, target: ConfirmedDifference) -> dict:
+    def ask(self, target: UsableDifference) -> dict:
         """{"question": "..."} 원시 출력. 가드레일 전."""
         ...

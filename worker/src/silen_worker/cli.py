@@ -59,7 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     for name, help_text in (
         ("run-daily", "차이 검출 → 서술"),
-        ("run-diary", "일기 생성(확정 차이 반영)"),
+        ("run-diary", "일기 생성(기각하지 않은 차이 반영)"),
     ):
         p = sub.add_parser(name, help=help_text)
         p.add_argument("--user", default=None, help="이 사용자만 처리(기본: 전체)")

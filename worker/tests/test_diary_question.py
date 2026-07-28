@@ -1,13 +1,13 @@
 import pytest
 
-from silen_worker.db import ConfirmedDifference
+from silen_worker.db import UsableDifference
 from silen_worker.diary.question import (
     build_question_prompt, pick_question_target, question_guardrail,
 )
 
 
 def _diff(method="first_occurrence", etype="person", name="지은", did="d1"):
-    return ConfirmedDifference(did, f"{name} 처음", method, etype, name)
+    return UsableDifference(did, f"{name} 처음", method, etype, name)
 
 
 def test_사람이_있으면_사람을_고른다():

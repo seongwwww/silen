@@ -559,7 +559,7 @@ def fetch_diary_memories(
 
 
 @dataclass
-class ConfirmedDifference:
+class UsableDifference:
     difference_id: str
     headline: str
     detection_method: str
@@ -567,11 +567,14 @@ class ConfirmedDifference:
     entity_name: str | None
 
 
-def fetch_confirmed_differences(
+def fetch_usable_differences(
     conn: psycopg.Connection, user_id: str, target_date: date
-) -> list[ConfirmedDifference]:
-    """그날 confirmed(intact) 차이. detection_method로 본문용(freq_shift)과
-    recap용(first_occurrence)을 가르고, entity_name은 가드레일에 쓴다."""
+) -> list[UsableDifference]:
+    """그날 기각되지 않은 intact 차이.
+
+    candidate와 confirmed는 사용하고 dismissed·stale은 제외한다. user_id와 날짜를
+    함께 강제해 특권 워커의 교차 사용자·교차 날짜 조회를 막는다.
+    """
     rows = conn.execute(
         """
         select d.id::text, coalesce(n.headline, d.description, ''),
@@ -579,16 +582,17 @@ def fetch_confirmed_differences(
         from public.differences d
         left join public.entities e
           on e.id = d.entity_id and e.user_id = d.user_id
-        left join public.difference_narrations n on n.difference_id = d.id
+        left join public.difference_narrations n
+          on n.difference_id = d.id and n.user_id = d.user_id
         where d.user_id = %s
           and d.date = %s
-          and d.status = 'confirmed'
+          and d.status <> 'dismissed'
           and d.evidence_state = 'intact'
         order by d.id
         """,
         (user_id, target_date),
     ).fetchall()
-    return [ConfirmedDifference(r[0], r[1], r[2], r[3], r[4]) for r in rows]
+    return [UsableDifference(r[0], r[1], r[2], r[3], r[4]) for r in rows]
 
 
 def fetch_existing_diary(

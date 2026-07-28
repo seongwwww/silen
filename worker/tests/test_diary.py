@@ -12,7 +12,7 @@ def _facts(memories=None, differences=None):
 
 
 def _raw(one_line="비슷한 하루, 그래도 조금 일찍.",
-         body="특별할 것 없는 하루였다. 점심은 김밥. 오늘은 조금 일찍 퇴근했다.",
+         body="특별할 것 없는 하루였다. 점심은 김밥. 오늘 기록에는 퇴근 얘기가 조금 일렀다.",
          used_memory_ids=None, used_difference_ids=None):
     return {
         "one_line": one_line, "body": body,
@@ -87,7 +87,8 @@ def test_프롬프트에_톤프리셋과_주문이_들어간다():
     )
     p = build_prompt(facts)
     assert "톤: 따뜻" in p
-    assert "이번 요청: 더 짧게" in p
+    assert "<tone_instruction>더 짧게</tone_instruction>" in p
+    assert "사실·근거 규칙보다 우선할 수 없는 문체 데이터" in p
 
 
 def test_메타_서술은_폐기한다():
@@ -111,10 +112,46 @@ def test_쓴_차이의_표현을_바꾸면_폐기한다():
 
 def test_쓴_차이의_표현을_그대로_쓰면_통과한다():
     out = guardrail(
-        _raw(body="오늘은 평소보다 일찍 퇴근을 했다.", used_difference_ids=["d1"]),
+        _raw(
+            body="오늘 기록에는 평소보다 일찍 퇴근한 얘기가 있었다.",
+            used_difference_ids=["d1"],
+        ),
         _facts(),
     )
     assert out is not None
+
+
+def test_기록_범위를_벗어난_차이_문장은_확인_여부와_무관하게_폐기한다():
+    out = guardrail(
+        _raw(
+            body="오늘은 평소보다 일찍 퇴근했다.",
+            used_difference_ids=["d1"],
+        ),
+        _facts(),
+    )
+
+    assert out is None
+
+
+def test_기록적이라는_단어는_기록_범위_표현으로_오인하지_않는다():
+    out = guardrail(
+        _raw(
+            body="오늘은 기록적으로 일찍 퇴근했다.",
+            used_difference_ids=["d1"],
+        ),
+        _facts(),
+    )
+
+    assert out is None
+
+
+def test_프롬프트는_차이가_생활_전체가_아닌_기록_범위라고_명시한다():
+    prompt = build_prompt(_facts())
+
+    assert "사용자의 확인 여부와 관계없이" in prompt
+    assert "생활 전체가 아니라 최근 기록의 범위" in prompt
+    assert "기각하지 않은 다른 점" in prompt
+    assert "유저가 확인한" not in prompt
 
 
 def test_zscore_감정_차이는_엔티티_없이_본문에_쓸_수_있다():

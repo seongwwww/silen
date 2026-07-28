@@ -64,3 +64,10 @@ def test_파서_기본값과_옵션():
 
     args = parser.parse_args(["run-pending"])
     assert args.limit == 10 and args.max_batches == 50
+
+
+def test_run_diary_도움말은_확정이_관문이라고_말하지_않는다():
+    help_text = build_parser().format_help()
+
+    assert "기각하지 않은 차이 반영" in help_text
+    assert "확정 차이 반영" not in help_text

@@ -42,7 +42,9 @@ docs/
   superpowers/               # 스펙·구현 계획
 ```
 
-확인 UI(`/review`)는 narrated 후보를 보여주고 [맞아요]/[아니에요]로 확정하며, 실패 복구와 5초 undo를 제공한다.
+확인 UI(`/review`)는 narrated 후보를 보여주고 [맞아요]/[아니에요] 피드백과
+5초 undo를 제공한다. 확인은 일기 반영의 관문이 아니며, [아니에요]로 기각한
+차이만 일기에서 제외한다.
 일기 화면(`/diary`)은 가장 최근 일기와 무엇을 보고 썼는지(근거 메모)를 접어서 함께 보여준다. AI 초안을 고치거나 확정할 수 있고, 늦은 기록을 반영하려면 다시 만들기를 요청할 수 있다. 이전/다음 버튼으로 과거 일기(`/diary/[date]`)를 오갈 수 있으며, 일기가 없는 날은 건너뛰고 실제 일기가 있는 날짜로 점프한다. 처음 등장한 것은 "오늘 처음" 목록으로 모아 보여주고, 그중 하나에 대해 부담 없는 질문을 한 번 건넨다(답하면 새 기록이 된다). 일기 생성은 `run-diary`(§4)가 하며 화면의 다시 만들기는 즉시 생성하지 않고 다음 실행에 반영할 요청만 남긴다.
 
 ## 개발 환경 세팅
@@ -107,7 +109,7 @@ worker\.venv\Scripts\python.exe -m silen_worker run-pending
 # 차이 검출 → 서술 (실 Vertex 호출·비용). 기본 대상: 전체 사용자 × 각자 로컬 어제
 worker\.venv\Scripts\python.exe -m silen_worker run-daily
 
-# 일기 생성 (확정 차이 반영). 사람이 확인 UI에서 맞아요/아니에요를 누른 뒤 실행
+# 일기 생성 (candidate·confirmed 중 기각하지 않은 intact 차이 반영)
 worker\.venv\Scripts\python.exe -m silen_worker run-diary
 
 # 특정 사용자·날짜만 (디버깅·재실행)
@@ -116,11 +118,17 @@ worker\.venv\Scripts\python.exe -m silen_worker run-daily --user <uuid> --date 2
 
 전제: Vertex ADC env 3종(`GOOGLE_GENAI_USE_VERTEXAI`·`GOOGLE_CLOUD_PROJECT`·`GOOGLE_CLOUD_LOCATION`).
 
-**순서가 중요하다.** `run-daily`는 차이 카드를 준비만 하고, 일기는 사람이 확정한 차이만 녹인다:
+`run-diary`는 사용자의 확인을 기다리지 않는다. `run-daily`가 만든 candidate도
+바로 일기 재료가 되며, [아니에요]로 기각한 차이와 근거가 stale인 차이만 빠진다.
+차이를 먼저 계산하려면 아래 순서로 실행하되, 사이에 사람의 확인 단계는 필요 없다:
 
 ```
-run-daily (자정 이후)  →  사람이 확인 UI에서 확정  →  run-diary (그날 밤)
+run-daily (자정 이후)  →  run-diary (그날 밤)
 ```
+
+차이를 일기에 쓸 때는 생활 전체의 사실로 승격하지 않고 반드시
+*"최근 기록에서"*처럼 기록 범위를 유지한다. 이 가드레일을 통과하지 못한 출력은
+status와 관계없이 저장하지 않는다.
 
 **재실행 안전:** 이미 서술된 차이는 LLM을 다시 부르지 않는다. 스케줄러가 자주 돌아도 새 차이에만 비용이 든다.
 
