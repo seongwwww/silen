@@ -1,6 +1,5 @@
 import pytest
 
-from silen_worker.queue import QUEUE
 from silen_worker.tasks.process import process_pending
 from tests.conftest import seed_user, seed_memory, delete_user
 
@@ -24,14 +23,17 @@ def _entities_of(conn, user):
 
 @pytest.mark.integration
 def test_추출_결과가_entities_memory_entities로_저장된다(conn):
-    conn.execute("select pgmq.purge_queue(%s)", (QUEUE,))
     user = seed_user(conn)
     try:
         mem = seed_memory(conn, user, "민수랑 김밥 먹음")  # 트리거가 큐에 넣음
         stub = StubExtractor(
             [{"type": "person", "name": "민수"}, {"type": "thing", "name": "김밥"}]
         )
-        processed = process_pending(limit=10, extractor=stub)
+        processed = process_pending(
+            limit=10,
+            extractor=stub,
+            only_user_id=user,
+        )
 
         assert mem in processed
         rows = _entities_of(conn, user)
@@ -47,12 +49,15 @@ def test_추출_결과가_entities_memory_entities로_저장된다(conn):
 
 @pytest.mark.integration
 def test_환각_후보는_저장되지_않는다(conn):
-    conn.execute("select pgmq.purge_queue(%s)", (QUEUE,))
     user = seed_user(conn)
     try:
         seed_memory(conn, user, "스벅에서 커피")
         stub = StubExtractor([{"type": "place", "name": "스타벅스"}])  # 원문에 없음
-        process_pending(limit=10, extractor=stub)
+        process_pending(
+            limit=10,
+            extractor=stub,
+            only_user_id=user,
+        )
         assert _entities_of(conn, user) == []
     finally:
         delete_user(conn, user)
@@ -60,15 +65,25 @@ def test_환각_후보는_저장되지_않는다(conn):
 
 @pytest.mark.integration
 def test_재처리해도_중복이_생기지_않는다(conn):
-    conn.execute("select pgmq.purge_queue(%s)", (QUEUE,))
     user = seed_user(conn)
     try:
         mem = seed_memory(conn, user, "민수 또 봄")
         stub = StubExtractor([{"type": "person", "name": "민수"}])
-        process_pending(limit=10, extractor=stub)
+        process_pending(
+            limit=10,
+            extractor=stub,
+            only_user_id=user,
+        )
         # 같은 메모를 다시 큐에 넣어 재처리
-        conn.execute("select pgmq.send(%s, %s)", (QUEUE, f'{{"memory_id":"{mem}","user_id":"{user}"}}'))
-        process_pending(limit=10, extractor=stub)
+        conn.execute(
+            "select pgmq.send(%s, %s)",
+            ("memory_jobs", f'{{"memory_id":"{mem}","user_id":"{user}"}}'),
+        )
+        process_pending(
+            limit=10,
+            extractor=stub,
+            only_user_id=user,
+        )
 
         ent_count = conn.execute(
             "select count(*)::int from public.entities where user_id = %s", (user,)
@@ -84,12 +99,15 @@ def test_재처리해도_중복이_생기지_않는다(conn):
 
 @pytest.mark.integration
 def test_메모_삭제시_고아_entity가_사라진다(conn):
-    conn.execute("select pgmq.purge_queue(%s)", (QUEUE,))
     user = seed_user(conn)
     try:
         mem = seed_memory(conn, user, "민수 혼자 언급")
         stub = StubExtractor([{"type": "person", "name": "민수"}])
-        process_pending(limit=10, extractor=stub)
+        process_pending(
+            limit=10,
+            extractor=stub,
+            only_user_id=user,
+        )
         assert len(_entities_of(conn, user)) == 1
 
         conn.execute("delete from public.memories where id = %s", (mem,))  # 링크 CASCADE → 트리거

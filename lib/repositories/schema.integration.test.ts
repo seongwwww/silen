@@ -1,11 +1,13 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { Client } from "pg";
-import { adminClient } from "./testSupport";
+import { adminClient, cleanupTestUser } from "./testSupport";
 
 const CONNECTION_STRING =
   process.env.SUPABASE_DB_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
 const db = new Client({ connectionString: CONNECTION_STRING });
+const createdUsers: string[] = [];
+const mailRecipients: string[] = [];
 
 beforeAll(async () => {
   await db.connect();
@@ -15,14 +17,14 @@ afterAll(async () => {
   await db.end();
 });
 
-// 각 테스트는 깨끗한 상태에서 시작한다. auth.users를 지우면 CASCADE로
-// public.users와 그 하위가 따라 사라지지만, ledger는 FK가 없으므로 따로 지운다.
-beforeEach(async () => {
-  await db.query("delete from public.deletions");
-  const admin = adminClient();
-  const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  for (const user of data?.users ?? []) {
-    await admin.auth.admin.deleteUser(user.id);
+afterEach(async () => {
+  const userIds = createdUsers.splice(0);
+  for (const userId of userIds) {
+    await cleanupTestUser(userId, db);
+  }
+  const { deleteMessagesTo } = await import("./testSupport");
+  for (const address of mailRecipients.splice(0)) {
+    await deleteMessagesTo(address);
   }
 });
 
@@ -34,6 +36,7 @@ async function createUser(label: string): Promise<string> {
     email_confirm: true,
   });
   if (error) throw error;
+  createdUsers.push(data.user.id);
   return data.user.id;
 }
 
@@ -242,14 +245,14 @@ describe("프로필 자동 생성", () => {
 
   it("익명 전환 전에 남긴 기록이 전환 후에도 같은 사용자 것이다", async () => {
     // Task 1에서 옮겨왔다. 프로필 트리거가 있어야 memories 삽입이 가능하다.
-    const { anonClient, latestMessageTo, extractTokenHash, clearMailbox } = await import(
+    const { anonClient, latestMessageTo, extractTokenHash } = await import(
       "./testSupport"
     );
-    await clearMailbox();
 
     const client = anonClient();
     const { data: anon } = await client.auth.signInAnonymously();
     const anonymousId = anon.user!.id;
+    createdUsers.push(anonymousId);
 
     const admin = adminClient();
     const { error: insertError } = await admin
@@ -258,6 +261,7 @@ describe("프로필 자동 생성", () => {
     expect(insertError).toBeNull();
 
     const address = `keep-${anonymousId.slice(0, 8)}@test.local`;
+    mailRecipients.push(address);
     await client.auth.updateUser({ email: address });
     const tokenHash = extractTokenHash(await latestMessageTo(address));
     await client.auth.verifyOtp({ token_hash: tokenHash, type: "email_change" });

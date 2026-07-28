@@ -59,5 +59,19 @@ def seed_memory_at(
 
 
 def delete_user(conn: psycopg.Connection, user_id: str) -> None:
+    # 큐는 FK 밖에 있어 사용자를 지워도 메시지가 남는다. 이 테스트 사용자의
+    # 메시지만 먼저 정리한다. 전역 purge는 다른 사용자의 잡을 파괴한다.
+    rows = conn.execute(
+        "select msg_id from pgmq.q_memory_jobs "
+        "where (message->>'user_id') = %s",
+        (user_id,),
+    ).fetchall()
+    for (msg_id,) in rows:
+        conn.execute("select pgmq.delete('memory_jobs', %s)", (msg_id,))
+    conn.execute(
+        "delete from pgmq.a_memory_jobs where (message->>'user_id') = %s",
+        (user_id,),
+    )
+
     # auth.users 삭제가 CASCADE로 public.users·memories를 지운다.
     conn.execute("delete from auth.users where id = %s", (user_id,))

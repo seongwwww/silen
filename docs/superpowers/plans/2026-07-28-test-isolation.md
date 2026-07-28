@@ -1,10 +1,27 @@
 # 통합 테스트 격리 구현 계획
 
+> **상태:** `fix/test-isolation` 구현·전체 DoD 검증 완료. 사용자 요청 전이라
+> 커밋·push·병합하지 않았다.
+>
+> **실제 코드 대조로 보완한 사항(아래 초기 예시보다 우선):**
+> - `only_user_id=None`은 공유 큐에서 통합 테스트하지 않는다. 기존 잡을 소비할 수
+>   있으므로 monkeypatch 단위 테스트로 기본 동작을 증명한다.
+> - `delete_user()`는 테스트 사용자의 큐·아카이브 메시지만 함께 정리한다.
+> - visibility timeout 의미는 전역 `memory_jobs`가 아니라 테스트 전용 임시 큐로
+>   검증한다.
+> - 사용자 스코프는 `pgmq.read` 뒤 필터가 아니라 **큐 claim 쿼리 자체**에 건다.
+>   남의 메시지는 삭제·아카이브뿐 아니라 `read_ct`·`vt`도 바뀌지 않는다.
+> - Auth 사용자 삭제만으로 남지 않는 pgmq·삭제 원장·Storage를 공통 cleanup으로
+>   정리하고, Mailpit도 전체 삭제 없이 고유 수신자의 메시지만 지운다.
+
 > **실행 주체:** Codex가 구현한다. 태스크마다 ① 실패 테스트 → ② 실패 확인 → ③ 계획의 코드 그대로 → ④ 통과 → ⑤ ruff/lint → ⑥ 그 태스크 단위로 1커밋.
 
 **Goal:** 통합 테스트가 개발 DB의 다른 데이터를 파괴하지 않게 한다. 테스트를 돌린 뒤에도 실데이터 검증 재료가 살아남아야 한다.
 
-**Architecture:** 테스트는 DB를 소유하지 않는다. 전역 삭제·purge를 없애고, 그것만으로 위험해지는 큐는 `process_pending(only_user_id=...)`로 남의 메시지를 건너뛰어 보호한다. 전역 상태 단언은 자기 것 단언으로 바꾼다.
+**Architecture:** 테스트는 DB를 소유하지 않는다. 전역 삭제·purge를 없애고,
+큐는 `process_pending(only_user_id=...)`가 읽기 단계부터 자기 메시지만 claim한다.
+전역 상태 단언은 자기 것 단언으로 바꾸고, 테스트가 만든 외부 리소스는 사용자
+스코프로 모두 회수한다.
 
 **Tech Stack:** Python 3.12(pytest) · TypeScript(Vitest) · pgmq · Supabase
 
@@ -24,8 +41,10 @@
 
 ## 결정 고정
 
-1. **`only_user_id` 검사는 `try` 블록 앞에 둔다.** 그래야 예외 경로의 아카이브(데드레터)가 남의 메시지에 절대 닿지 않는다.
-2. **건너뛴 메시지는 삭제도 아카이브도 하지 않는다.** `continue`만 한다. 읽기로 vt(60초) 동안 안 보이지만 그 뒤 되돌아온다 — 의도된 동작이다.
+1. **`only_user_id` 조건은 큐 claim 쿼리에 둔다.** `pgmq.read` 뒤에
+   `continue`하면 남의 `read_ct`와 `vt`를 이미 바꾼 뒤라 격리가 아니다.
+2. **남의 메시지는 어떤 전달 상태도 바꾸지 않는다.** 회귀 테스트는 메시지 생존뿐
+   아니라 `read_ct`·`vt` 불변까지 단언한다.
 3. **`only_user_id=None`이 기본**이고, 그때는 지금과 동일하게 전부 처리한다.
 4. **큐 상태를 단언할 땐 `pgmq.read`를 쓰지 마라.** `read`는 vt를 세팅하는 **부작용**이 있어 남의 메시지를 60초 숨긴다. 단언에는 큐 테이블을 직접 조회한다(`select message from pgmq.q_memory_jobs`).
 5. **`purge_queue` 호출을 전부 제거한다**(워커 7곳 + 프론트 1곳). 남기지 마라.
@@ -33,17 +52,27 @@
 7. **`queue.integration.test.ts`의 "메모가 없으면 메시지도 없다"** 는 전역 빈 상태를 단언한다. **이 테스트 사용자의 메모를 참조하는 메시지가 없다**로 좁힌다.
 8. **핵심 회귀 테스트는 새 파일**(`worker/tests/test_queue_isolation_integration.py`)에 둔다. 눈에 띄어야 회귀를 막는다.
 9. **`.claude/rules/testing.md`에 규칙 한 줄을 추가**한다. 문서가 아니라 규칙이어야 다음 에이전트가 지킨다.
+10. **테스트가 만든 큐 메시지는 사용자 스코프로 정리한다.** 사용자를 지워도 pgmq
+    메시지는 FK cascade되지 않는다.
+11. **`only_user_id=None` 회귀는 단위 테스트로 검증한다.** 공유 큐 통합 테스트로
+    기본 동작을 호출하면 남의 메시지를 실제로 소비한다.
+12. **큐 자체의 전달 의미는 임시 큐에서 검증한다.** 전역 큐를 읽어 남의 메시지에
+    visibility timeout을 걸지 않는다.
 
 ## File Structure
 
 | 경로 | 책임 |
 |------|------|
 | `worker/src/silen_worker/tasks/process.py`(수정) | `only_user_id` 파라미터 |
-| `worker/tests/test_queue_isolation_integration.py` | **핵심 회귀** — 남의 메시지 생존 |
+| `worker/src/silen_worker/queue.py`(수정) | 사용자 조건을 건 원자적 queue claim |
+| `worker/tests/conftest.py`(수정) | 테스트 사용자 큐 메시지의 스코프 정리 |
+| `worker/tests/test_queue_isolation_integration.py` | **핵심 회귀** — 남의 메시지·전달 상태 불변 |
 | `worker/tests/test_process.py`(수정) | purge 제거·자기 것 단언·스코프 전달 |
 | `worker/tests/test_extraction_integration.py`(수정) | purge 제거·스코프 전달 |
+| `lib/repositories/testSupport.ts`(수정) | 사용자별 pgmq·원장·Storage·Auth·메일 정리 |
 | `lib/repositories/queue.integration.test.ts`(수정) | purge 제거·자기 것 단언 |
-| `lib/repositories/schema.integration.test.ts`(수정) | 전역 사용자 삭제 제거 |
+| `lib/repositories/*.integration.test.ts`(수정) | 전역 삭제 제거·소유 리소스 정리 |
+| `app/api/memories/route.integration.test.ts`(수정) | 익명 세션 재사용·생성 사용자 정리 |
 | `.claude/rules/testing.md`(수정) | 규칙 한 줄 |
 
 ---

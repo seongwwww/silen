@@ -8,7 +8,12 @@ import {
 } from "vitest";
 import { Client } from "pg";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { adminClient, SUPABASE_URL, ANON_KEY } from "./testSupport";
+import {
+  adminClient,
+  cleanupTestUser,
+  SUPABASE_URL,
+  ANON_KEY,
+} from "./testSupport";
 import { createDiaryRepository } from "./diaryRepository";
 
 const CONNECTION_STRING =
@@ -77,8 +82,8 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  await admin.auth.admin.deleteUser(alice);
-  await admin.auth.admin.deleteUser(bob);
+  await cleanupTestUser(alice, db);
+  await cleanupTestUser(bob, db);
   await db.end();
 });
 

@@ -1,14 +1,29 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { anonClient, latestMessageTo, extractTokenHash, clearMailbox } from "./testSupport";
+import { describe, it, expect, afterEach } from "vitest";
+import {
+  anonClient,
+  cleanupTestUser,
+  deleteMessagesTo,
+  latestMessageTo,
+  extractTokenHash,
+} from "./testSupport";
 
-beforeEach(async () => {
-  await clearMailbox();
+const createdUsers: string[] = [];
+const mailRecipients: string[] = [];
+
+afterEach(async () => {
+  for (const userId of createdUsers.splice(0)) {
+    await cleanupTestUser(userId);
+  }
+  for (const address of mailRecipients.splice(0)) {
+    await deleteMessagesTo(address);
+  }
 });
 
 describe("스펙 §9 가정", () => {
   it("익명 로그인이 활성화되어 있다", async () => {
     const client = anonClient();
     const { data, error } = await client.auth.signInAnonymously();
+    if (data.user) createdUsers.push(data.user.id);
 
     expect(error).toBeNull();
     expect(data.user?.id).toBeTruthy();
@@ -20,8 +35,10 @@ describe("스펙 §9 가정", () => {
     const client = anonClient();
     const { data: anon } = await client.auth.signInAnonymously();
     const anonymousId = anon.user!.id;
+    createdUsers.push(anonymousId);
 
     const address = `link-${anonymousId.slice(0, 8)}@test.local`;
+    mailRecipients.push(address);
     const { error: updateError } = await client.auth.updateUser({ email: address });
     expect(updateError).toBeNull();
 

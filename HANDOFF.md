@@ -9,50 +9,68 @@
 
 ## 현재 활성 작업 (Active Work Order)
 
-**목표:** `docs/superpowers/plans/2026-07-28-diary-loop.md`(일기 루프 완성 — 기획서 §6) 구현.
-**성격:** 계획 확정 — **"코드만 짜면 되는" 상태**. 재설계하지 말고 계획을 그대로 따른다(결정 고정 12항).
-**스펙:** `docs/superpowers/specs/2026-07-28-diary-loop-design.md`.
-**브랜치:** **`feat/diary-loop`을 `main`에서 새로 만들어** 작업한다.
-**왜:** 일기가 **생성만** 된다. 고칠 수도, 톤을 정할 수도, 다시 만들 수도 없다. `diaries.edited_text`·`status`·`style_profile` 컬럼은 **이미 있는데 아무도 쓰지 않고**, 워커는 톤을 `담백`으로 하드코딩한다. 기획서 §6 루프가 반쪽이다.
+**목표:** 와이어프레임 7화면과 핵심 탐지 루프를
+`docs/superpowers/plans/2026-07-28-mvp-full-build.md` 순서로 구현한다.
 
-**F1~F3을 하나로 묶었다:** 초안 수정·확정 + 다시 만들기 + 톤. 기획서 §6이 원래 한 덩어리다.
+**성격:** **v2 설계 승인 완료, Phase -1 구현·검증 완료.** 현재
+`fix/test-isolation` 변경은 아직 커밋하지 않았다.
+
+**왜:** 기반 파이프라인과 일기 루프는 완료됐지만 화면 간 이동이 없고, 홈은 발견
+중심이 아니며, 현재 detector는 first occurrence·반복만 다룬다. 와이어프레임의
+주간 리포트·회고·데이터 제어 화면도 아직 없다.
+
+### 다음 시작점
+
+1. `fix/test-isolation` 변경 리뷰
+2. 사용자 요청 시 커밋 → `main`에 `merge --no-ff`
+3. `feat/mvp-shell`에서 Phase 0~1 시작
+4. 이후 detector → diary opt-out → weekly → recall → data controls를
+   **각각 짧은 브랜치**로 진행
+
+### v2 검토에서 바로잡은 결정
+
+- 부재는 생활의 부재가 아니라 **기록 부재**다. 빈 날에는 탐지하지 않는다.
+- surprisal의 분모는 달력 경과일이 아니라 **과거 활성 기록일**이다.
+- `first_occurrence`는 저장하되 매일 카드 랭킹·서술에서만 제외한다.
+- 감정 차이(`entity_id is null`) 멱등성을 위해 부분 유니크 인덱스가 필요하다.
+- `weekly_report_highlights`는 `difference_id`를 요구하므로 주간 패턴도
+  deterministic difference+evidence로 먼저 저장한다.
+- 사진은 Storage 기반만 있고 완성된 업로드 UI가 없어 이번 범위에서 뺀다.
+- 담백·따뜻은 기본 프리셋, 짧게·유머는 1회 재생성 주문이다.
+- 삭제 요청은 앱 service role이 아니라 security-definer RPC로 만든다.
+- 야간 스케줄러·잡 상태·알림·PWA·계정 연결은 화면 구현 뒤의 베타 운영 게이트다.
 
 ### 실행 방식
-**Task 1 → 8 순서, TDD.** 태스크마다 ① 실패 테스트 → ② 실패 확인 → ③ 계획 코드 그대로 → ④ 통과 → ⑤ lint/ruff + build → ⑥ 1커밋.
 
-### 환경 (Windows)
-- 파이썬 `worker\.venv\Scripts\python.exe` 직접 호출. 프론트는 Node/npm.
-- **로컬 Supabase 필요.** `db reset` 후엔 `npx supabase stop; Start-Sleep -Seconds 3; npx supabase start`.
-- **앱 코드 전 Next.js 16 문서** 확인 — `params`·`searchParams`는 **Promise**.
-- Vertex/ADC는 **Task 8(eval)에만**. Task 1~7은 스텁으로 검증한다.
-
-### 어기면 안 되는 것 (hard rules)
-- ⚠️ **편집은 `edited_text`에만.** `generated_text`(AI 초안)를 **절대 덮어쓰지 마라** — 원본↔생성물 분리 원칙이다.
-- ⚠️ **TOCTOU 방어**: 읽은 status를 기대값으로 넘겨 원자적 업데이트, 0행이면 **409**(`differences` 선례).
-- ⚠️ **재생성은 요청만 남긴다.** 즉시 재생성·큐·폴링·처리중 UI를 만들지 마라. 다음 `run-diary`가 1회 반영하고 **요청을 비운다**.
-- ⚠️ **편집본에 다시 만들기를 누르면** "고친 내용이 사라져요"를 알리고 **한 번 더 확인**받는다.
-- ⚠️ **톤은 문체만 바꾼다. 사실은 그대로다**(기획서 §4-9). 기존 가드레일(근거 정합·메타 표현·엔티티 표현)을 **약화하지 마라**.
-- ⚠️ **프리셋은 `담백`·`따뜻` 둘뿐.** 늘리지 마라.
-- ⚠️ **`supabase.select()` 인자는 리터럴 타입 유지**(상수면 `as const`). lint·단위로 안 잡히고 **`build`(tsc)에서만** 드러난다 → 프론트 태스크마다 build.
-- ⚠️ **터치 타깃 44px**(`min-h-11`). 색만으로 의미 전달 금지. 죄책감·독려 문구 금지.
-- **저장소는 세션 클라이언트 + RLS.** `service_role` 금지.
-- 🚫 **실 LLM 호출 금지**(스텁). eval만 Task 8에서 1회.
-- **태스크마다 커밋만. push·merge 금지.** `Co-Authored-By`는 네 것으로.
-- 못 고치는 실패·모호한 점은 **멈추고 보고**하라.
+- Phase -1→6 의존 순서. 각 브랜치에서 TDD → 검증 → 리뷰 → `merge --no-ff`.
+- 통합 테스트를 생략한 Phase는 완료가 아니다. 먼저 테스트 격리를 끝낸다.
+- 실제 Vertex eval과 삭제 파괴 테스트는 사람의 명시적 승인을 받아 실행한다.
+- 커밋·push·병합은 사람이 요청할 때만 한다.
 
 ---
 
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
-- **진행:** **Task 1~8 완료. DoD 전 항목 통과.** 병합 준비 완료.
-- **최종 검증:** 프론트 단위 **84** · 통합 **53** · 워커 **135** · lint · **typecheck** · build · **eval 6/6**(실 Vertex 1회).
-- **톤 불변성 확인:** 담백/따뜻이 문체만 다르고 **사실 집합은 동일**했다(같은 메모·같은 근거).
-- **고친 것:** `tsc --noEmit`이 통합 테스트 3곳의 `data.properties` nullable에서 실패했다. `next build`는 테스트 파일을 타입체크하지 않아 그동안 안 잡혔고 `main`에도 같은 패턴이 있었다 — 링크 발급 실패 시 던지도록 고쳤다(`d0fc5cf`).
-- **막힘/결정 필요:** (없음)
+- **진행:** v2 설계 승인 후 `fix/test-isolation` Phase -1 구현·검증 완료.
+  전역 사용자 삭제·큐 purge·Mailpit 전체 삭제를 제거했고, 사용자별 cleanup과
+  큐 claim 단계의 `user_id` 필터를 추가했다. 남의 큐 메시지는 생존뿐 아니라
+  `read_ct`·`vt`도 바뀌지 않는다.
+- **현재 변경:** 위 설계·계획·상태 문서와 Phase -1 코드/테스트가 모두
+  **미커밋** 상태다. `.claude/orchestration/`, `.claude/settings.local.json`은
+  기존 사용자/도구 파일이므로 건드리지 않는다.
+- **검증:** 프론트 단위 **84**, 통합 **53**, 워커 **137**, lint, typecheck,
+  ruff, build 통과. 통합 테스트 전후 DB 8지표
+  (`users/auth_users/memories/diaries/queue/archive/deletions/storage`)와 Mailpit
+  메시지 수가 모두 동일했다
+  (`5/5/2/0/0/0/1/4`, Mailpit `1`). 실 Vertex eval은 변경 범위 밖이며
+  기존 **6/6**, 명시 승인 없이 재실행하지 않았다.
+- **다음:** 사용자 요청 시 Phase -1 커밋·병합 → `feat/mvp-shell` Phase 0~1.
+- **막힘/결정 필요:** 커밋·push·병합 권한.
 
 > 직전 완료: 질문 세션 이어 쓰기(`feat/question-session`) — 병합·push 완료(PR #9, `02e0add`).
 
-> 직전 완료: 일기 루프(`feat/diary-loop`) — 초안 편집·확정·재생성 요청·기본 톤, 워커 요청 소비와 톤 사실 불변성 eval까지 완료. 리뷰·병합 대기.
+> 직전 완료: 일기 루프(`feat/diary-loop`) — 초안 편집·확정·재생성 요청·기본 톤,
+> 워커 요청 소비와 톤 사실 불변성 eval까지 완료·`main` 병합(`16a676c`).
 
 > 직전 완료: 일기 품질 실데이터 재검증 — entities 6 → differences 6 →
 > narrations 6 → 확정 6 → 일기 생성. 본문 `"처음"` 0회·메타 표현 0건,
@@ -78,8 +96,11 @@
 
 ## 참고 (context)
 
-- **파이프라인 순서(이 기능이 여는 것):** 메모 insert → DB 트리거가 pgmq `memory_jobs`에 적재 → `run-pending`이 소비해 엔티티 추출 → `run-daily`가 차이 검출·서술 → **사람이 확인 UI에서 확정** → `run-diary`가 확정 차이를 녹인 일기 생성.
-  일기는 `status='confirmed'` 차이만 쓰므로 `run-daily`와 `run-diary` 사이에 **사람의 확정**이 들어가야 한다. 그래서 명령이 둘로 나뉜다.
-- **이 화면이 "지금 만들기" 버튼을 두지 않는 이유:** `backend.md` — 앱과 워커는 큐·DB로만 통신하고 서로 직접 호출하지 않는다. 현재 큐(`memory_jobs`)는 추출 전용이고 일기 잡 큐가 없다. 일기 생성은 사람이 `run-diary`를 실행하거나 스케줄러가 돈다.
-- **이 기능 병합 후 후보:** 일기 편집·확정 · 날짜 이동/목록 · 기록 열람 · 사진 첨부. 전체 로드맵은 `PROJECT_STATE.md`.
+- **현재 파이프라인:** 메모 insert → pgmq `memory_jobs` → `run-pending` 엔티티 추출
+  → `run-daily` 차이 검출·서술 → 사람이 확인·기각 → `run-diary` 일기 생성.
+  Phase 3에서 candidate도 일기에 쓰고 dismissed만 제외하는 opt-out으로 바꿀 계획이다.
+- **앱과 워커 경계:** 둘은 큐·DB로만 통신한다. 현재 일기·주간 잡 큐와 잡 상태는
+  없다. 화면에 실제로 알 수 없는 processing/failed 상태를 추측해 표시하지 않는다.
+- **계획 완료와 베타 완료는 다르다:** 7화면 뒤에도 야간 자동 실행·잡 재시도·알림·
+  PWA·계정 연결이 베타 운영 게이트로 남는다.
 - Claude 세션이 서브에이전트 주도(SDD)로 돌 땐 `.superpowers/sdd/progress.md`에 더 세밀한 태스크 원장을 둔다(선택). **공용 진행 상태의 기준은 이 파일의 "상태" 절**이다.

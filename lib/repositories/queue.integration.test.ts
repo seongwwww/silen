@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { randomUUID } from "node:crypto";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Client } from "pg";
-import { adminClient } from "./testSupport";
+import { adminClient, cleanupTestUser } from "./testSupport";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const CONNECTION_STRING =
@@ -14,24 +15,28 @@ beforeAll(async () => {
   admin = adminClient();
   db = new Client({ connectionString: CONNECTION_STRING });
   await db.connect();
-  const { data } = await admin.auth.admin.createUser({
-    email: "queue-test@example.com",
+  const { data, error } = await admin.auth.admin.createUser({
+    email: `queue-${randomUUID()}@test.local`,
     email_confirm: true,
   });
-  user = data.user!.id;
+  if (error || !data.user) throw error ?? new Error("테스트 사용자 생성 실패");
+  user = data.user.id;
 });
 
 afterAll(async () => {
-  await admin.auth.admin.deleteUser(user);
+  await cleanupTestUser(user, db);
   await db.end();
 });
 
-// 큐를 비워 테스트 간 간섭을 없앤다.
-beforeEach(async () => {
-  await db.query("select pgmq.purge_queue('memory_jobs')");
-});
-
 describe("적재 트리거", () => {
+  it("메모를 만들지 않으면 이 사용자의 메시지도 없다", async () => {
+    const res = await db.query(
+      "select msg_id from pgmq.q_memory_jobs where (message->>'user_id') = $1",
+      [user],
+    );
+    expect(res.rowCount).toBe(0);
+  });
+
   it("메모가 생기면 큐에 {memory_id, user_id} 메시지가 들어간다", async () => {
     const { data } = await admin
       .from("memories")
@@ -40,13 +45,11 @@ describe("적재 트리거", () => {
       .single();
     const memoryId = data!.id;
 
-    const res = await db.query("select message from pgmq.read('memory_jobs', 30, 10)");
+    const res = await db.query(
+      "select message from pgmq.q_memory_jobs where (message->>'memory_id') = $1",
+      [memoryId],
+    );
     const messages = res.rows.map((r) => r.message);
     expect(messages).toContainEqual({ memory_id: memoryId, user_id: user });
-  });
-
-  it("메모가 없으면 메시지도 없다", async () => {
-    const res = await db.query("select msg_id from pgmq.read('memory_jobs', 30, 10)");
-    expect(res.rowCount).toBe(0);
   });
 });

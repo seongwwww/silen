@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { Client } from "pg";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { adminClient, SUPABASE_URL, ANON_KEY } from "./testSupport";
+import { adminClient, cleanupTestUser, SUPABASE_URL, ANON_KEY } from "./testSupport";
 import { createDifferenceRepository } from "./differenceRepository";
 
 const CONNECTION_STRING =
@@ -40,7 +40,9 @@ beforeAll(async () => {
   bob = (await admin.auth.admin.createUser({ email: "bob-diff@example.com", email_confirm: true })).data.user!.id;
 });
 afterAll(async () => {
-  await admin.auth.admin.deleteUser(alice); await admin.auth.admin.deleteUser(bob); await db.end();
+  await cleanupTestUser(alice, db);
+  await cleanupTestUser(bob, db);
+  await db.end();
 });
 
 describe("차이 확인 저장소", () => {

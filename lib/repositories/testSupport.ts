@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { Client } from "pg";
 
 // Supabase 로컬 스택의 공개 기본값. 루프백 전용이며 비밀이 아니다.
 // 원격을 대상으로 돌릴 때는 환경변수로 덮어쓴다.
@@ -25,6 +26,66 @@ export function anonClient(): SupabaseClient {
   });
 }
 
+const CONNECTION_STRING =
+  process.env.SUPABASE_DB_URL ??
+  "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+
+type QueryClient = Pick<Client, "query">;
+
+/**
+ * 통합 테스트가 만든 한 사용자의 외부 리소스와 계정을 정리한다.
+ *
+ * public.users 아래의 행은 Auth 사용자 삭제로 cascade되지만 pgmq, 삭제 원장,
+ * Storage 객체는 그 FK 바깥에 있다. 따라서 테스트는 user_id 경계로 이 함수만
+ * 사용하고 전역 purge나 전체 사용자 삭제를 하지 않는다.
+ */
+export async function cleanupTestUser(
+  userId: string,
+  existingDb?: QueryClient,
+): Promise<void> {
+  const admin = adminClient();
+
+  const { data: objects, error: listError } = await admin.storage
+    .from("memories")
+    .list(userId, { limit: 1_000 });
+  if (listError) throw listError;
+  if (objects && objects.length > 0) {
+    const { error: removeError } = await admin.storage
+      .from("memories")
+      .remove(objects.map((object) => `${userId}/${object.name}`));
+    if (removeError) throw removeError;
+  }
+
+  let ownedDb: Client | undefined;
+  const db =
+    existingDb ??
+    (ownedDb = new Client({
+      connectionString: CONNECTION_STRING,
+    }));
+
+  if (ownedDb) await ownedDb.connect();
+  try {
+    await db.query(
+      `select pgmq.delete('memory_jobs', msg_id)
+         from pgmq.q_memory_jobs
+        where (message->>'user_id') = $1`,
+      [userId],
+    );
+    await db.query(
+      "delete from pgmq.a_memory_jobs where (message->>'user_id') = $1",
+      [userId],
+    );
+    await db.query("delete from public.deletions where user_id = $1", [
+      userId,
+    ]);
+  } finally {
+    if (ownedDb) await ownedDb.end();
+  }
+
+  const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
+  if (deleteError && deleteError.status !== 404) throw deleteError;
+}
+
 type MailpitSummary = { ID: string; To: { Address: string }[] };
 type MailpitMessage = { Text: string; HTML: string };
 
@@ -45,6 +106,31 @@ export async function latestMessageTo(address: string): Promise<string> {
   return `${body.Text}\n${body.HTML}`;
 }
 
+/** 테스트가 고유 수신 주소로 만든 메시지만 지운다. */
+export async function deleteMessagesTo(address: string): Promise<void> {
+  const list = await fetch(`${MAILPIT_URL}/api/v1/messages?limit=100`);
+  if (!list.ok) throw new Error(`Mailpit 목록 조회 실패: ${list.status}`);
+  const { messages } = (await list.json()) as { messages: MailpitSummary[] };
+  const ids = messages
+    .filter((message) =>
+      message.To.some(
+        (recipient) =>
+          recipient.Address.toLowerCase() === address.toLowerCase(),
+      ),
+    )
+    .map((message) => message.ID);
+  if (ids.length === 0) return;
+
+  const response = await fetch(`${MAILPIT_URL}/api/v1/messages`, {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ IDs: ids }),
+  });
+  if (!response.ok) {
+    throw new Error(`Mailpit 메시지 삭제 실패: ${response.status}`);
+  }
+}
+
 /**
  * 메일 본문에서 확인 토큰 해시를 뽑는다.
  *
@@ -56,9 +142,4 @@ export function extractTokenHash(body: string): string {
   const match = body.match(/[?&]token=([a-f0-9]+)/i);
   if (!match) throw new Error("본문에서 확인 토큰을 찾지 못했다");
   return match[1];
-}
-
-/** Mailpit 사서함을 비운다. 테스트 간 간섭을 막는다. */
-export async function clearMailbox(): Promise<void> {
-  await fetch(`${MAILPIT_URL}/api/v1/messages`, { method: "DELETE" });
 }
