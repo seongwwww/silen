@@ -9,44 +9,70 @@
 
 ## 현재 활성 작업 (Active Work Order)
 
-**목표:** ESLint가 파이썬 디렉터리(`worker/`·`evals/`)를 훑지 않게 한다. **`eslint.config.mjs` 2줄.**
-**브랜치:** **`fix/eslint-ignore-python`을 `main`에서 새로 만들어** 작업한다.
-**왜:** `npm run lint`가 `EPERM: scandir 'worker/.pytest_cache'`로 **크래시한다.** ESLint 9 flat config는 `.gitignore`를 자동으로 따르지 않아 파이썬 트리까지 걸어 들어간다. 캐시 디렉터리 권한이 한 번 깨지면 lint 전체가 죽는다 — DoD(`lint + build + test`)를 검증할 수 없게 된다.
+**목표:** 같은 꼬리 질문에서 여러 번 이어 기록하고, 원할 때만 생각 단서를
+펼칠 수 있는 **질문 세션 UI**.
+**브랜치:** `feat/question-session`.
+**설계:** `docs/superpowers/specs/2026-07-28-question-session-design.md`.
+**계획:** `docs/superpowers/plans/2026-07-28-question-session.md`.
+**왜:** 현재도 `?section=<uuid>`가 남아 같은 질문에서 여러 번 기록할 수 있지만
+UI가 이를 설명하지 않는다. 질문에서 남긴 답도 일반 메모로 파이프라인에 들어가
+추가 엔티티와 이후 재등장·반복 패턴을 찾는 재료가 될 수 있다.
 
 ### 무엇을 (전부다)
 
-`eslint.config.mjs`의 `globalIgnores([...])`에 두 줄을 추가한다:
-
-```js
-    // worker·evals는 파이썬이다. 1차 JS/TS가 없고, .venv·캐시까지 훑다가
-    // 권한이 깨진 디렉터리를 만나면 lint 전체가 EPERM으로 죽는다.
-    // (.gitignore를 따르게 하는 방식은 worker/src·tests가 추적 파일이라 안 통한다.)
-    "worker/**",
-    "evals/**",
-```
+- 일기의 질문 카드에 같은 질문에서 여러 번 이어 쓸 수 있음을 안내한다.
+- 기록 화면에 `"이 질문에서 이어 쓰는 중"` 라벨과 반복 기록 안내를 둔다.
+- 저장 뒤 질문은 유지하고 입력·감정만 비운다.
+- 사용자가 누를 때만 결정적 생각 단서 3개를 한 번에 하나씩 순환한다.
+- `"이렇게 남긴 기록도 쌓여, 나중에 작은 차이를 찾는 단서가 돼요."`로
+  파이프라인 연결을 설명하되 즉시 차이를 약속하지 않는다.
 
 ### 검증
-- `npm run lint` — **크래시 없이 통과**해야 한다(지금은 EPERM으로 죽는다).
-- `npx eslint app lib components` — 여전히 exit 0.
-- `npm run build`·`npx vitest run` 회귀 확인.
+- `npx vitest run`
+- `npm run lint`
+- `npm run build`
 
 ### 어기면 안 되는 것
-- **다른 ignore 패턴을 추가하지 마라.** `worker/**`·`evals/**` 둘뿐이다.
-- **`@eslint/compat`·`includeIgnoreFile` 같은 의존성을 추가하지 마라.** `worker/src`·`worker/tests`는 git 추적 파일이라 `.gitignore` 연동으로는 문제가 안 풀린다.
-- **기존 규칙(`import/no-restricted-paths`·`no-restricted-imports`)을 건드리지 마라.**
-- `worker/.pytest_cache` 디렉터리 자체는 **잠겨 있어 삭제되지 않는다.** 지우려 하지 마라 — 사람이 프로세스를 닫고 처리한다.
-- **커밋만. push·merge 금지.** `Co-Authored-By`는 네 것으로.
+- 자동 질문·LLM 호출·질문 진행률·완료 압박 금지.
+- 질문↔답변 연결 스키마·API payload·워커 변경 금지.
+- 질문이 없는 일반 기록 화면에는 관련 UI를 노출하지 않는다.
+- 모든 조작 버튼은 44px(`min-h-11`).
+- URL에는 질문 텍스트가 아니라 기존 `section` UUID만 둔다.
 
 ---
 
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
-- **진행:** `fix/eslint-ignore-python`에서 구현·검증 완료 — `5f1db3c`.
-- **검증:** `npm run lint` PASS · `npx eslint app lib components` PASS · build/TypeScript PASS · 프론트 단위 **59 PASS**.
-- **참고:** 이번 세션에서는 변경 전 lint도 통과해 EPERM을 재현하지 못했다. 캐시 잠금 상태에 따라 간헐적인 문제이며, `worker/**`·`evals/**`만 전역 제외해 해당 경로 순회를 차단했다.
+- **진행:** 설계·계획·구현·검증·**커밋 완료**. push·merge는 하지 않았다.
+- **커밋:** 설계·계획 `cdddfca` · UI 구현·테스트 `d576a19` · 이 상태 기록.
+- **변경:** `FollowUpCard` 반복 안내, `RecordForm` 질문 세션 라벨·질문별
+  cue state·선택형 생각 단서·질문 세션 성공 메시지·작은 차이 설명.
+- **TDD:** 대상 테스트가 구현 전 3건 실패했고 구현 후 16건 PASS.
+- **최종 검증:** 프론트 단위 **63 PASS**(대상 16) · lint clean · build/TypeScript PASS.
+- **코드 리뷰(별도 세션):** diff가 설계·계획과 일치함을 확인했다. 단서 문구 3개·
+  라벨·안내·성공 메시지가 스펙과 문자 단위로 일치하고, cue state를 질문 문자열에
+  묶어 다른 질문으로 이동하면 초기화된다. 금지 항목(스키마·API·워커·`next-env.d.ts`·
+  URL·44px) 위반 없음. 테스트는 약화되지 않았고 실제 행동을 검증한다.
+- **보안 확인:** 유효한 `?section=<uuid>`로 **미인증 요청**을 보내도 질문 문구가
+  응답에 나타나지 않는다(RLS+인증 가드). 일반 기록 화면(`/`)엔 질문 세션 UI가
+  렌더되지 않는 것도 확인.
+- **화면 점검(미완):** 로컬 서버는 `http://localhost:3000`에서 실행 중이지만,
+  질문이 있는 사용자 화면은 **그 브라우저 세션에서만** 보인다(RLS). 로그인 우회·
+  DB 수정은 하지 않았다. 사람이 아래 URL로 육안 확인하면 된다:
+  `http://localhost:3000/?section=196844bb-ba8c-40a3-a2db-9d775c7145d5`
+- **관찰(비차단):** ① 생각 단서 `<p aria-live="polite">`가 첫 클릭 때 DOM에 새로
+  삽입돼, 일부 스크린리더가 **첫 단서만** 안 읽을 수 있다(두 번째부터는 내용 변경이라
+  정상 안내). 버튼의 `aria-expanded` 변화가 일부 보완한다. 고치려면 빈 live region을
+  항상 렌더하면 된다. ② `RecordForm.test.tsx`가 `vi.stubGlobal("fetch", ...)`를
+  쓰지만 `vi.unstubAllGlobals()`가 없다 — **기존 테스트도 같은 패턴**이라 이번 변경이
+  만든 문제는 아니고, 현재 fetch를 쓰는 테스트는 각자 스텁해 실질 위험은 없다.
 - **막힘/결정 필요:** (없음)
-- **다음 시작점:** 사람이 `5f1db3c`를 리뷰한 뒤 push·merge한다. AI는 push·merge하지 않았다.
-- **알려진 문제(범위 밖):** ① 통합 테스트가 개발 DB의 auth 사용자 전체와 큐를 지운다(`schema.integration.test.ts`·`queue.integration.test.ts`). ② 워커 CLI가 stdout을 UTF-8로 reconfigure하지 않아 cp949 콘솔에서 한글이 깨진다. ③ 엔티티 추출이 `시간` 같은 일반명사도 잡는다. ④ **일기 품질 개선(`599be4b`)이 실데이터로는 아직 재검증되지 않았다** — eval 5/5는 합성 기준이고, Task 2의 db reset으로 로컬 데이터가 초기화됐다.
+- **다음 시작점:** 사람이 위 URL로 육안 확인 → 문제 없으면 push·merge.
+- **알려진 문제(범위 밖):** ① 통합 테스트가 개발 DB의 auth 사용자 전체와 큐를 지운다(`schema.integration.test.ts`·`queue.integration.test.ts`). ② 워커 CLI가 stdout을 UTF-8로 reconfigure하지 않아 cp949 콘솔에서 한글이 깨진다. ③ 엔티티 추출이 `시간` 같은 일반명사도 잡는다.
+
+> 직전 완료: 일기 품질 실데이터 재검증 — entities 6 → differences 6 →
+> narrations 6 → 확정 6 → 일기 생성. 본문 `"처음"` 0회·메타 표현 0건,
+> recap 6·질문 1·근거 3으로 개선 효과 확인.
 
 > 직전 완료: 일기 품질 개선(`feat/diary-recap-followup`) — 병합·push 완료(`599be4b`). 본문/recap 분리·메타 서술 차단·꼬리 질문.
 

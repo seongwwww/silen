@@ -20,4 +20,13 @@ describe("FollowUpCard", () => {
     render(<FollowUpCard sectionId="sec-1" text="질문" />);
     expect(screen.getByRole("link").className).toContain("min-h-11");
   });
+
+  it("같은 질문에서 여러 번 이어 쓸 수 있다고 안내한다", () => {
+    render(<FollowUpCard sectionId="sec-1" text="질문" />);
+    expect(
+      screen.getByText(
+        "한 번에 다 적지 않아도 괜찮아요. 같은 질문에서 여러 번 이어 쓸 수 있어요.",
+      ),
+    ).toBeInTheDocument();
+  });
 });
