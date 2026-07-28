@@ -21,13 +21,10 @@
 
 ### 다음 시작점
 
-1. 사람이 `20260728170000_dimension_difference_natural_key.sql`,
-   `20260728230000_request_account_data_deletion.sql`을 staging dry-run 후 적용
-2. `npm run test:integration`과 worker
-   `-m "integration and not destructive"` 재실행
-3. 명시 승인 후 격리된 `destructive` 삭제 통합 테스트·잔존 검증
-4. 비용 승인 후 실제 Vertex diary eval 실행
-5. 최종 리뷰 후 사용자 요청 시 main 위 rebase → `merge --no-ff` → push
+1. 명시 승인 후 격리된 `destructive` 삭제 통합 테스트·잔존 검증
+2. 비용 승인 후 실제 Vertex diary eval 실행
+3. production 전에는 두 신규 마이그레이션을 staging dry-run
+4. 최종 리뷰 후 사용자 요청 시 main 위 rebase → `merge --no-ff` → push
 
 ### v2 검토에서 바로잡은 결정
 
@@ -67,13 +64,14 @@
   `.claude/settings.local.json`만 기존 사용자/도구의 untracked 파일이라
   건드리지 않는다.
 - **검증:** `npm run check` 37 files/**167 tests**, production build 17 pages,
-  worker ruff·단위 **139** 통과. 마이그레이션 비의존 프런트 통합 **61**,
-  worker 비파괴 통합 **90** 통과.
-- **대기:** 프런트 삭제 RPC 통합 1개와 감정축 멱등 통합 2개는 로컬
-  마이그레이션 2건 미적용 때문에 대기한다. 실제 Vertex eval은 비용,
-  `destructive` 삭제 통합은 데이터 삭제를 수반하므로 실행하지 않았다.
-- **막힘/결정 필요:** AGENTS 규칙상 마이그레이션 적용·파괴 테스트는 사람이
-  실행하거나 명시 승인해야 한다. 세 게이트 전에는 Phase 6/MVP 완료로 표시하지 않는다.
+  worker ruff·단위 **139**, 프런트 통합 **62/62**, worker 비파괴 통합
+  **92/92** 통과.
+- **로컬 스키마:** 승인 후 `20260728170000`, `20260728230000`을 적용했고
+  local migration list가 19/19 일치한다.
+- **대기:** 실제 Vertex eval은 비용, `destructive` 삭제 통합은 격리 fixture라도
+  실제 DB·Storage 삭제를 수반하므로 실행하지 않았다.
+- **막힘/결정 필요:** AGENTS 규칙상 파괴 테스트와 유료 eval은 각각 명시
+  승인이 필요하다. 두 게이트 전에는 Phase 6/MVP 완료로 표시하지 않는다.
 
 > 직전 완료: 질문 세션 이어 쓰기(`feat/question-session`) — 병합·push 완료(PR #9, `02e0add`).
 
