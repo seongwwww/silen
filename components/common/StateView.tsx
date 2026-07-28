@@ -11,7 +11,28 @@ export function ErrorState({ onRetry }: { onRetry?: () => void }) {
   );
 }
 export function LoadingState() {
-  return <div className="space-y-3 py-4" aria-hidden="true">
-    {[0, 1, 2].map((i) => <div key={i} className="h-24 rounded-xl border" />)}
-  </div>;
+  return (
+    <div role="status" aria-label="불러오는 중" className="space-y-3 py-4">
+      <span className="sr-only">불러오는 중</span>
+      <div aria-hidden="true" className="space-y-3">
+        {[0, 1, 2].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl border bg-muted/60" />)}
+      </div>
+    </div>
+  );
+}
+
+export function ProcessingState({ message = "기록을 묶고 있어요" }: { message?: string }) {
+  return (
+    <div role="status" className="rounded-2xl border bg-card px-5 py-8 text-center text-[15px] text-muted-foreground">
+      {message}
+    </div>
+  );
+}
+
+export function OfflineState() {
+  return (
+    <p className="rounded-xl border bg-card px-4 py-3 text-center text-sm text-muted-foreground">
+      지금은 오프라인이에요.
+    </p>
+  );
 }

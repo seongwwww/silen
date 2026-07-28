@@ -4,7 +4,15 @@
 timeout으로 재시도, 상한 초과 시 데드레터.
 """
 
-from silen_worker.db import connect, fetch_memory, upsert_entity, link_memory_entity
+from silen_worker.db import (
+    claim_diary_generation_request,
+    complete_diary_generation_request,
+    connect,
+    fail_diary_generation_request,
+    fetch_memory,
+    link_memory_entity,
+    upsert_entity,
+)
 from silen_worker.extraction.service import LLMExtractor, guardrail
 from silen_worker.queue import (
     QUEUE,
@@ -13,6 +21,7 @@ from silen_worker.queue import (
     read_messages,
     read_messages_for_user,
 )
+from silen_worker.tasks.write_diary import generate_diary
 
 VISIBILITY_TIMEOUT = 60  # 초. LLM 호출이 있어 A보다 넉넉히.
 MAX_READS = 5
@@ -48,6 +57,50 @@ def process_pending(
             )
         )
         for msg_id, read_ct, payload in messages:
+            if payload.get("job_type") == "diary":
+                request_id = payload.get("request_id")
+                user_id = payload.get("user_id")
+                target_date = payload.get("date")
+                if not all(
+                    isinstance(value, str)
+                    for value in (request_id, user_id, target_date)
+                ):
+                    archive_message(conn, QUEUE, msg_id)
+                    continue
+                if not claim_diary_generation_request(conn, request_id, user_id):
+                    delete_message(conn, QUEUE, msg_id)
+                    continue
+                try:
+                    diary_id = generate_diary(conn, user_id, target_date)
+                    if diary_id is None:
+                        fail_diary_generation_request(
+                            conn,
+                            request_id,
+                            user_id,
+                            "generation_rejected",
+                            True,
+                        )
+                    else:
+                        complete_diary_generation_request(
+                            conn,
+                            request_id,
+                            user_id,
+                            diary_id,
+                        )
+                        processed.append(request_id)
+                    delete_message(conn, QUEUE, msg_id)
+                except Exception as exc:
+                    terminal = read_ct >= MAX_READS
+                    fail_diary_generation_request(
+                        conn,
+                        request_id,
+                        user_id,
+                        type(exc).__name__,
+                        terminal,
+                    )
+                    if terminal:
+                        archive_message(conn, QUEUE, msg_id)
+                continue
             try:
                 memory = fetch_memory(conn, payload["memory_id"], payload["user_id"])
                 if memory is None:

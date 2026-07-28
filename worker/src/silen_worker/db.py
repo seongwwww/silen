@@ -427,3 +427,73 @@ def insert_diary_question(
         "values (%s, %s, '질문', %s)",
         (diary_id, difference_id, content),
     )
+
+
+def claim_diary_generation_request(
+    conn: psycopg.Connection,
+    request_id: str,
+    user_id: str,
+) -> bool:
+    """본인 요청을 processing으로 전환한다. 오래 멈춘 claim은 재시도할 수 있다."""
+    row = conn.execute(
+        """
+        update public.diary_generation_requests
+           set status = 'processing',
+               attempts = attempts + 1,
+               started_at = now(),
+               error_code = null
+         where id = %s
+           and user_id = %s
+           and (
+             status = 'queued'
+             or (status = 'processing' and started_at < now() - interval '60 seconds')
+           )
+        returning id
+        """,
+        (request_id, user_id),
+    ).fetchone()
+    return row is not None
+
+
+def complete_diary_generation_request(
+    conn: psycopg.Connection,
+    request_id: str,
+    user_id: str,
+    diary_id: str,
+) -> None:
+    """일기 저장까지 끝난 뒤에만 done으로 바꾼다."""
+    conn.execute(
+        """
+        update public.diary_generation_requests
+           set status = 'done',
+               diary_id = %s,
+               error_code = null,
+               completed_at = now()
+         where id = %s
+           and user_id = %s
+           and status = 'processing'
+        """,
+        (diary_id, request_id, user_id),
+    )
+
+
+def fail_diary_generation_request(
+    conn: psycopg.Connection,
+    request_id: str,
+    user_id: str,
+    error_code: str,
+    terminal: bool,
+) -> None:
+    """재시도 가능 실패는 queued, 상한 도달 실패는 failed로 기록한다."""
+    conn.execute(
+        """
+        update public.diary_generation_requests
+           set status = case when %s then 'failed' else 'queued' end,
+               error_code = %s,
+               completed_at = case when %s then now() else null end
+         where id = %s
+           and user_id = %s
+           and status = 'processing'
+        """,
+        (terminal, error_code, terminal, request_id, user_id),
+    )

@@ -1,12 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MemoryRepository } from "@/lib/services/memory";
+import type { TodayMemoryPort } from "@/lib/services/today";
 
 /**
  * authenticated 세션 클라이언트로 MemoryRepository를 구현한다.
  * user_id는 세션에서 오고 RLS with-check가 위조를 막으므로 service_role을
  * 쓰지 않는다. emotion·asset은 부모 경유 RLS로 검증된다.
  */
-export function createMemoryRepository(client: SupabaseClient): MemoryRepository {
+export function createMemoryRepository(
+  client: SupabaseClient,
+): MemoryRepository & TodayMemoryPort {
   return {
     async insertMemory(row) {
       const { data, error } = await client
@@ -39,6 +42,37 @@ export function createMemoryRepository(client: SupabaseClient): MemoryRepository
         mime_type: row.mimeType,
       });
       if (error) throw error;
+    },
+
+    async listBetween(start, end) {
+      const { data, error } = await client
+        .from("memories")
+        .select("id, raw_text, captured_at")
+        .gte("captured_at", start)
+        .lt("captured_at", end)
+        .is("deleted_at", null)
+        .eq("is_locked", false)
+        .not("raw_text", "is", null)
+        .neq("raw_text", "")
+        .order("captured_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((row) => ({
+        id: row.id as string,
+        rawText: row.raw_text as string,
+        capturedAt: row.captured_at as string,
+      }));
+    },
+
+    async listActiveCapturedAt() {
+      const { data, error } = await client
+        .from("memories")
+        .select("captured_at")
+        .is("deleted_at", null)
+        .eq("is_locked", false)
+        .not("raw_text", "is", null)
+        .neq("raw_text", "");
+      if (error) throw error;
+      return (data ?? []).map((row) => row.captured_at as string);
     },
   };
 }

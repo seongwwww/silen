@@ -8,7 +8,7 @@ describe("FollowUpCard", () => {
   it("질문을 보여주고 기록 화면으로 링크한다", () => {
     render(<FollowUpCard sectionId="sec-1" text="지은은 어떤 사람이었어요?" />);
     const link = screen.getByRole("link", { name: "지은은 어떤 사람이었어요?" });
-    expect(link).toHaveAttribute("href", "/?section=sec-1");
+    expect(link).toHaveAttribute("href", "/record?section=sec-1");
   });
 
   it("URL에 질문 텍스트를 담지 않는다", () => {

@@ -2,6 +2,52 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DiffStatus, ReviewItem } from "@/lib/services/difference";
 
 const MAX_EVIDENCE = 3;
+const REVIEW_SELECT =
+  "id, category, difference_narrations!inner(headline), difference_evidence(memories(raw_text, is_locked, deleted_at))" as const;
+
+function toReviewItems(rows: unknown[] | null): ReviewItem[] {
+  return (rows ?? []).map((value) => {
+    const row = value as {
+      id: string;
+      category: string;
+      difference_narrations:
+        | { headline: string }[]
+        | { headline: string }
+        | null;
+      difference_evidence: {
+        memories: {
+          raw_text: string | null;
+          is_locked: boolean;
+          deleted_at: string | null;
+        } | null;
+      }[];
+    };
+    const headline = row.difference_narrations
+      ? (Array.isArray(row.difference_narrations)
+          ? row.difference_narrations[0]?.headline
+          : row.difference_narrations.headline) ?? ""
+      : "";
+    const evidence = (row.difference_evidence ?? [])
+      .map((item) => item.memories)
+      .filter(
+        (
+          item,
+        ): item is {
+          raw_text: string;
+          is_locked: boolean;
+          deleted_at: string | null;
+        } =>
+          !!item &&
+          !item.is_locked &&
+          !item.deleted_at &&
+          !!item.raw_text &&
+          item.raw_text.trim().length > 0,
+      )
+      .map((item) => item.raw_text.trim())
+      .slice(0, MAX_EVIDENCE);
+    return { id: row.id, headline, category: row.category, evidence };
+  });
+}
 
 /** 세션 클라이언트로 차이를 조회/수정한다. RLS(user_id=auth.uid())가 소유권을 강제하므로
  * service_role을 쓰지 않는다. */
@@ -24,29 +70,26 @@ export function createDifferenceRepository(client: SupabaseClient) {
     async listCandidatesForReview(): Promise<ReviewItem[]> {
       const { data, error } = await client
         .from("differences")
-        .select(
-          "id, category, difference_narrations!inner(headline), difference_evidence(memories(raw_text, is_locked, deleted_at))",
-        )
+        .select(REVIEW_SELECT)
         .eq("status", "candidate")
         .eq("evidence_state", "intact")
         .order("date", { ascending: false });
       if (error) throw error;
-      return (data ?? []).map((row) => {
-        const headline = (row.difference_narrations as { headline: string }[] | { headline: string })
-          ? (Array.isArray(row.difference_narrations)
-              ? row.difference_narrations[0]?.headline
-              : (row.difference_narrations as { headline: string }).headline) ?? ""
-          : "";
-        const evidence = ((row.difference_evidence ?? []) as unknown as {
-          memories: { raw_text: string | null; is_locked: boolean; deleted_at: string | null } | null;
-        }[])
-          .map((e) => e.memories)
-          .filter((m): m is { raw_text: string; is_locked: boolean; deleted_at: string | null } =>
-            !!m && !m.is_locked && !m.deleted_at && !!m.raw_text && m.raw_text.trim().length > 0)
-          .map((m) => m.raw_text.trim())
-          .slice(0, MAX_EVIDENCE);
-        return { id: row.id as string, headline, category: row.category as string, evidence };
-      });
+      return toReviewItems(data);
+    },
+
+    async listForDate(date: string): Promise<ReviewItem[]> {
+      const { data, error } = await client
+        .from("differences")
+        .select(REVIEW_SELECT)
+        .eq("date", date)
+        .eq("status", "candidate")
+        .eq("evidence_state", "intact")
+        .neq("detection_method", "first_occurrence")
+        .order("confidence", { ascending: false })
+        .limit(3);
+      if (error) throw error;
+      return toReviewItems(data);
     },
   };
 }

@@ -73,6 +73,33 @@ function toDiaryView(row: {
  * 소유권을 강제하므로 service_role을 쓰지 않는다. */
 export function createDiaryRepository(client: SupabaseClient) {
   return {
+    /** 인증 세션의 사용자 로컬 날짜에 대한 생성 작업을 요청한다.
+     * RPC는 auth.uid()로 소유자를 정하고 중복 요청을 멱등 처리한다. */
+    async enqueue(date: string): Promise<void> {
+      const { error } = await client.rpc("request_diary_generation", {
+        target_date: date,
+      });
+      if (error) throw error;
+    },
+
+    async findGenerationRequest(date: string): Promise<{
+      status: "queued" | "processing" | "done" | "failed";
+    } | null> {
+      const { data, error } = await client
+        .from("diary_generation_requests")
+        .select("status")
+        .eq("date", date)
+        .limit(1);
+      if (error) throw error;
+      const status = data?.[0]?.status as
+        | "queued"
+        | "processing"
+        | "done"
+        | "failed"
+        | undefined;
+      return status ? { status } : null;
+    },
+
     /** 가장 최근 일기 하나. run-diary는 '어제'를 대상으로 돌기 때문에
      * 오늘 날짜로 찾지 않고 최신 하나를 가져온다. */
     async findLatest(): Promise<DiaryView | null> {

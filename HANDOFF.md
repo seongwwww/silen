@@ -12,8 +12,9 @@
 **목표:** 와이어프레임 7화면과 핵심 탐지 루프를
 `docs/superpowers/plans/2026-07-28-mvp-full-build.md` 순서로 구현한다.
 
-**성격:** **v2 설계 승인 완료, Phase -1 구현·검증 완료.** 현재
-`fix/test-isolation` 변경은 아직 커밋하지 않았다.
+**성격:** Phase -1은 `ffc8a3c`로 커밋해 `main`의 `d9a18ff`에
+`merge --no-ff` 완료. 현재 `feat/mvp-shell`에서 **Phase 0~1 + Daily Wrap
+데모 확장 구현·검증 완료, 미커밋** 상태다.
 
 **왜:** 기반 파이프라인과 일기 루프는 완료됐지만 화면 간 이동이 없고, 홈은 발견
 중심이 아니며, 현재 detector는 first occurrence·반복만 다룬다. 와이어프레임의
@@ -21,9 +22,9 @@
 
 ### 다음 시작점
 
-1. `fix/test-isolation` 변경 리뷰
-2. 사용자 요청 시 커밋 → `main`에 `merge --no-ff`
-3. `feat/mvp-shell`에서 Phase 0~1 시작
+1. `feat/mvp-shell` 변경 리뷰
+2. 사람이 신규 일기 요청 마이그레이션을 staging dry-run 후 적용
+3. 사용자 요청 시 Phase 0~1 변경 커밋 → `main`에 `merge --no-ff`
 4. 이후 detector → diary opt-out → weekly → recall → data controls를
    **각각 짧은 브랜치**로 진행
 
@@ -39,6 +40,10 @@
 - 담백·따뜻은 기본 프리셋, 짧게·유머는 1회 재생성 주문이다.
 - 삭제 요청은 앱 service role이 아니라 security-definer RPC로 만든다.
 - 야간 스케줄러·잡 상태·알림·PWA·계정 연결은 화면 구현 뒤의 베타 운영 게이트다.
+- 추가 요청으로 수동 일기 생성에 필요한 **durable 잡 상태만** 먼저 구현했다.
+  `Daily Wrap`은 새 테이블 산출물이 아니라 완성된 일기의 도착 상태다.
+- 시간만으로 “하루가 끝났다”고 단정하지 않고 “오늘을 정리할 시간이에요”라고 한다.
+- `/demo`는 프론트 목 데이터만 쓰며 실제 API·사용자 데이터를 건드리지 않는다.
 
 ### 실행 방식
 
@@ -51,21 +56,25 @@
 
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
-- **진행:** v2 설계 승인 후 `fix/test-isolation` Phase -1 구현·검증 완료.
-  전역 사용자 삭제·큐 purge·Mailpit 전체 삭제를 제거했고, 사용자별 cleanup과
-  큐 claim 단계의 `user_id` 필터를 추가했다. 남의 큐 메시지는 생존뿐 아니라
-  `read_ct`·`vt`도 바뀌지 않는다.
-- **현재 변경:** 위 설계·계획·상태 문서와 Phase -1 코드/테스트가 모두
-  **미커밋** 상태다. `.claude/orchestration/`, `.claude/settings.local.json`은
-  기존 사용자/도구 파일이므로 건드리지 않는다.
-- **검증:** 프론트 단위 **84**, 통합 **53**, 워커 **137**, lint, typecheck,
-  ruff, build 통과. 통합 테스트 전후 DB 8지표
-  (`users/auth_users/memories/diaries/queue/archive/deletions/storage`)와 Mailpit
-  메시지 수가 모두 동일했다
-  (`5/5/2/0/0/0/1/4`, Mailpit `1`). 실 Vertex eval은 변경 범위 밖이며
-  기존 **6/6**, 명시 승인 없이 재실행하지 않았다.
-- **다음:** 사용자 요청 시 Phase -1 커밋·병합 → `feat/mvp-shell` Phase 0~1.
-- **막힘/결정 필요:** 커밋·push·병합 권한.
+- **진행:** Phase 0의 `lang=ko`·따뜻한 토큰·하단 3탭, Phase 1의 `/record`
+  분리와 발견 우선 홈을 구현했다. 홈은 사용자 타임존 날짜, 3일 학습 게이트,
+  차이 확인, 20자 메모 미리보기, 일기 상태, 큰 기록 CTA를 제공한다.
+- **추가 완료:** Daily Wrap 도착/차이 발견/정리 시간 문구, 수동 첫 일기 생성
+  API, `(user_id,date)` 요청 원장, pgmq 타입 분기 워커, 실제 상태 기반
+  queued/processing/done/failed UI를 구현했다. 설정의 **데모 상태 보기**에서
+  `/demo` 목 상태 8종을 전환할 수 있다.
+- **현재 변경:** 위 Phase 0~1·Daily Wrap 코드/테스트/ADR/마이그레이션이
+  `feat/mvp-shell`에 **미커밋** 상태다. `.claude/orchestration/`,
+  `.claude/settings.local.json`은 기존 사용자/도구 파일이므로 건드리지 않는다.
+- **검증:** frontend lint·typecheck 통과, 단위 **117**, 통합 **53**,
+  worker **139**, ruff, production build 통과. 모바일 `/demo?state=arrived`
+  DOM·시각 확인 완료. 실 Vertex eval은 프롬프트 변경이 없고 비용이 발생하므로
+  명시 승인 없이 재실행하지 않았다.
+- **다음:** 코드 리뷰 → 사람의
+  `20260728143000_diary_generation_requests.sql` staging dry-run/적용 →
+  사용자 요청 시 커밋·병합 → Phase 2.
+- **막힘/결정 필요:** 신규 마이그레이션은 AI 적용 금지. 적용 전에는 실제 웹의
+  수동 일기 요청은 500이지만 `/demo`는 독립적으로 동작한다.
 
 > 직전 완료: 질문 세션 이어 쓰기(`feat/question-session`) — 병합·push 완료(PR #9, `02e0add`).
 
@@ -99,8 +108,9 @@
 - **현재 파이프라인:** 메모 insert → pgmq `memory_jobs` → `run-pending` 엔티티 추출
   → `run-daily` 차이 검출·서술 → 사람이 확인·기각 → `run-diary` 일기 생성.
   Phase 3에서 candidate도 일기에 쓰고 dismissed만 제외하는 opt-out으로 바꿀 계획이다.
-- **앱과 워커 경계:** 둘은 큐·DB로만 통신한다. 현재 일기·주간 잡 큐와 잡 상태는
-  없다. 화면에 실제로 알 수 없는 processing/failed 상태를 추측해 표시하지 않는다.
+- **앱과 워커 경계:** 둘은 큐·DB로만 통신한다. 수동 일기는 요청 원장과 기존
+  `memory_jobs(job_type='diary')`로 연결됐다. 야간 자동 스케줄러와 주간 잡은
+  아직 없다. processing/failed는 원장에 실제 상태가 있을 때만 표시한다.
 - **계획 완료와 베타 완료는 다르다:** 7화면 뒤에도 야간 자동 실행·잡 재시도·알림·
   PWA·계정 연결이 베타 운영 게이트로 남는다.
 - Claude 세션이 서브에이전트 주도(SDD)로 돌 땐 `.superpowers/sdd/progress.md`에 더 세밀한 태스크 원장을 둔다(선택). **공용 진행 상태의 기준은 이 파일의 "상태" 절**이다.

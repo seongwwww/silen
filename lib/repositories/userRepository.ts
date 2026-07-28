@@ -4,6 +4,24 @@ import type { TonePreset } from "@/lib/services/diary";
 /** 세션 클라이언트로 내 설정을 읽고 쓴다. RLS가 소유권을 강제한다. */
 export function createUserRepository(client: SupabaseClient) {
   return {
+    async findTimeZone(): Promise<string> {
+      const { data, error } = await client
+        .from("users")
+        .select("timezone")
+        .limit(1);
+      if (error) throw error;
+      return (data?.[0]?.timezone as string | undefined) ?? "Asia/Seoul";
+    },
+
+    async findDiaryTime(): Promise<string> {
+      const { data, error } = await client
+        .from("users")
+        .select("diary_time")
+        .limit(1);
+      if (error) throw error;
+      return (data?.[0]?.diary_time as string | undefined) ?? "22:00";
+    },
+
     async findTonePreset(): Promise<TonePreset> {
       const { data, error } = await client
         .from("users")

@@ -18,7 +18,13 @@ const QUESTION_CUES = [
 /** 기록 입력. 파이프라인의 입구다 — 열자마자 한 줄 쓰고 보내는 것이 전부여야 한다.
  * POST /api/memories는 멱등이 아니라 이중 전송이 중복 메모를 만든다(가드 필수).
  * 실패해도 사용자가 쓴 글은 절대 비우지 않는다. */
-export function RecordForm({ question }: { question?: string | null }) {
+export function RecordForm({
+  question,
+  onSaved,
+}: {
+  question?: string | null;
+  onSaved?: () => void;
+}) {
   const [text, setText] = useState("");
   const [emotion, setEmotion] = useState<EmotionChoice | undefined>(undefined);
   const [saving, setSaving] = useState(false);
@@ -68,6 +74,7 @@ export function RecordForm({ question }: { question?: string | null }) {
           ? "기록했어요. 더 떠오르면 이어 적어도 돼요."
           : "기록했어요",
       );
+      onSaved?.();
       areaRef.current?.focus();
     } catch {
       toast.error("기록하지 못했어요. 다시 시도해 주세요.");
