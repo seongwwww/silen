@@ -309,21 +309,45 @@ def fetch_confirmed_differences(
 
 def fetch_existing_diary(
     conn: psycopg.Connection, user_id: str, target_date: date
-) -> tuple[str, str] | None:
-    """(diary_id, status) 또는 None. 멱등/보호 판정용. user_id 강제."""
+) -> tuple[str, str, str | None, bool] | None:
+    """(diary_id, status, tone_instruction, regenerate_requested) 또는 None."""
     row = conn.execute(
-        "select id::text, status from public.diaries where user_id = %s and date = %s",
+        "select id::text, status, tone_instruction, "
+        "regenerate_requested_at is not null "
+        "from public.diaries where user_id = %s and date = %s",
         (user_id, target_date),
     ).fetchone()
-    return (row[0], row[1]) if row is not None else None
+    return (row[0], row[1], row[2], row[3]) if row is not None else None
+
+
+def fetch_tone_preset(conn: psycopg.Connection, user_id: str) -> str:
+    """사용자 기본 톤. 없으면 담백."""
+    row = conn.execute(
+        "select style_profile->>'preset' from public.users where id = %s",
+        (user_id,),
+    ).fetchone()
+    return row[0] if row and row[0] in ("담백", "따뜻") else "담백"
+
+
+def clear_regenerate_request(conn: psycopg.Connection, diary_id: str) -> None:
+    """요청을 1회 소비한다. 자동 재생성이 아니므로 반드시 비운다."""
+    conn.execute(
+        "update public.diaries set tone_instruction = null, "
+        "regenerate_requested_at = null where id = %s",
+        (diary_id,),
+    )
 
 
 def upsert_diary(
-    conn: psycopg.Connection, user_id: str, target_date: date, generated_text: str
+    conn: psycopg.Connection,
+    user_id: str,
+    target_date: date,
+    generated_text: str,
+    reset_edit: bool = False,
 ) -> str | None:
-    """(user_id, date) 자연키로 멱등 upsert. 재생성은 status='draft'일 때만 덮어쓴다.
-    유저가 편집한(edited/confirmed) 행이면 DB 레벨에서 미갱신하고 None을 반환한다 —
-    체크와 쓰기 사이의 경쟁 조건에서도 '유저 말이 이긴다'를 원자적으로 강제한다."""
+    """(user_id, date) 자연키로 멱등 upsert. reset_edit이면 편집본을 비우고
+    draft로 되돌린다 — 사용자가 '다시 만들기'로 명시 요청한 경우다.
+    요청 없는 force는 status='draft'일 때만 갱신해 사용자 편집을 보호한다."""
     row = conn.execute(
         """
         insert into public.diaries (user_id, date, status, style_profile, generated_text)
@@ -331,11 +355,11 @@ def upsert_diary(
         on conflict (user_id, date) do update
           set generated_text = excluded.generated_text,
               status = 'draft',
-              style_profile = excluded.style_profile
-          where diaries.status = 'draft'
+              edited_text = case when %s then null else public.diaries.edited_text end
+          where %s or public.diaries.status = 'draft'
         returning id::text
         """,
-        (user_id, target_date, generated_text),
+        (user_id, target_date, generated_text, reset_edit, reset_edit),
     ).fetchone()
     return row[0] if row is not None else None
 

@@ -38,6 +38,9 @@
 10. **새 저장소 `userRepository.ts`를 `eslint.config.mjs` 예외 목록에 추가**한다(기존 4개와 같은 이유 — 경계가 조립하는 팩토리). 규칙 구조는 건드리지 마라.
 11. **설정 화면은 톤 프리셋만.** `diary_time`은 F4다.
 12. **즉시 반영·처리중 UI·폴링을 만들지 마라.**
+13. **사용자가 `다시 만들기`를 요청한 경우만 편집본을 덮는다.** 요청 없는
+    일반 force는 저장 순간에도 `draft`일 때만 갱신해, 그사이 사용자가 고친
+    일기를 보존한다.
 
 ## File Structure
 
@@ -1044,7 +1047,7 @@ def clear_regenerate_request(conn: psycopg.Connection, diary_id: str) -> None:
 def upsert_diary(
     conn: psycopg.Connection, user_id: str, target_date: date, generated_text: str,
     reset_edit: bool = False,
-) -> str:
+) -> str | None:
     """(user_id, date) 자연키로 멱등 upsert. reset_edit이면 편집본을 비우고
     draft로 되돌린다 — 사용자가 '다시 만들기'로 명시 요청한 경우다."""
     row = conn.execute(
@@ -1055,11 +1058,12 @@ def upsert_diary(
           set generated_text = excluded.generated_text,
               status = 'draft',
               edited_text = case when %s then null else public.diaries.edited_text end
+          where %s or public.diaries.status = 'draft'
         returning id::text
         """,
-        (user_id, target_date, generated_text, reset_edit),
+        (user_id, target_date, generated_text, reset_edit, reset_edit),
     ).fetchone()
-    return row[0]
+    return row[0] if row is not None else None
 ```
 
 - [ ] **Step 2: 프롬프트에 톤 반영**

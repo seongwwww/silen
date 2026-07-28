@@ -7,8 +7,15 @@ from datetime import date
 import psycopg
 
 from silen_worker.db import (
-    fetch_confirmed_differences, fetch_diary_memories, fetch_existing_diary,
-    insert_diary_question, replace_diary_sections, replace_diary_sources, upsert_diary,
+    clear_regenerate_request,
+    fetch_confirmed_differences,
+    fetch_diary_memories,
+    fetch_existing_diary,
+    fetch_tone_preset,
+    insert_diary_question,
+    replace_diary_sections,
+    replace_diary_sources,
+    upsert_diary,
 )
 from silen_worker.diary.question import pick_question_target, question_guardrail
 from silen_worker.diary.service import (
@@ -35,10 +42,13 @@ def generate_diary(
     target = date.fromisoformat(target_date_iso)
 
     existing = fetch_existing_diary(conn, user_id, target)
+    regenerate = False
+    tone_instruction = None
     if existing is not None:
-        diary_id, status = existing
-        if not force or status != "draft":
-            return diary_id  # 멱등·유저 편집 보호
+        diary_id_existing, status, tone_instruction, regenerate = existing
+        # 사용자가 명시적으로 '다시 만들기'를 눌렀으면 status 무관하게 다시 쓴다.
+        if not regenerate and (not force or status != "draft"):
+            return diary_id_existing  # 멱등·유저 편집 보호
 
     mem_rows = fetch_diary_memories(conn, user_id, target)
     memories = [
@@ -62,6 +72,8 @@ def generate_diary(
             DiaryDifference(c.difference_id, c.headline, c.entity_name)
             for c in body_diffs
         ],
+        tone_preset=fetch_tone_preset(conn, user_id),
+        tone_instruction=tone_instruction,
     )
 
     raw = writer.write(facts)
@@ -69,7 +81,13 @@ def generate_diary(
     if diary is None:
         return None
 
-    diary_id = upsert_diary(conn, user_id, target, diary.body)
+    diary_id = upsert_diary(
+        conn,
+        user_id,
+        target,
+        diary.body,
+        reset_edit=regenerate,
+    )
     if diary_id is None:
         # 경쟁 조건: status 확인 후 upsert 전에 유저가 편집 → 보호(덮지 않음).
         # 섹션·출처도 건드리지 않고 기존 일기 id를 그대로 반환한다.
@@ -89,5 +107,8 @@ def generate_diary(
         question = question_guardrail(asker.ask(target), target)
         if question is not None:
             insert_diary_question(conn, diary_id, target.difference_id, question)
+
+    if regenerate:
+        clear_regenerate_request(conn, diary_id)
 
     return diary_id

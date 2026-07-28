@@ -132,7 +132,7 @@ def test_기존_일기_조회(conn):
         assert fetch_existing_diary(conn, user, date.today()) is None
         did = upsert_diary(conn, user, date.today(), "본문")
         got = fetch_existing_diary(conn, user, date.today())
-        assert got == (did, "draft")
+        assert got == (did, "draft", None, False)
     finally:
         delete_user(conn, user)
 
