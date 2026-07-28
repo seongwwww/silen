@@ -26,7 +26,7 @@ describe("RecordScreen", () => {
 
     await userEvent.type(screen.getByRole("textbox"), "오늘의 작은 기록");
     await userEvent.click(
-      screen.getByRole("button", { name: "기록하기" }),
+      screen.getByRole("button", { name: "남기기" }),
     );
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
@@ -37,7 +37,7 @@ describe("RecordScreen", () => {
 
     await userEvent.type(screen.getByRole("textbox"), "이어 쓰는 기록");
     await userEvent.click(
-      screen.getByRole("button", { name: "기록하기" }),
+      screen.getByRole("button", { name: "남기기" }),
     );
 
     await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue(""));

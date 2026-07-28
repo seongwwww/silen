@@ -74,6 +74,11 @@ const eslintConfig = defineConfig([
     // (.gitignore를 따르게 하는 방식은 worker/src·tests가 추적 파일이라 안 통한다.)
     "worker/**",
     "evals/**",
+    // supabase start가 만드는 런타임 생성물. 컨테이너용 번들이 들어 있어
+    // 스택을 띄운 개발자에게서만 lint가 깨진다(.gitignore 대상이지만
+    // eslint는 .gitignore를 보지 않는다).
+    "supabase/.temp/**",
+    "supabase/.branches/**",
   ]),
 ]);
 

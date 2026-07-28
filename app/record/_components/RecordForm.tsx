@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -98,14 +97,14 @@ export function RecordForm({
           </p>
         </div>
       )}
-      <div className="flex items-start gap-2">
+      <div>
         <label htmlFor="record-text" className="sr-only">
           오늘의 기록
         </label>
         <Textarea
           id="record-text"
           ref={areaRef}
-          rows={1}
+          rows={4}
           value={text}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
@@ -118,17 +117,8 @@ export function RecordForm({
             }
           }}
           placeholder="오늘, 실은…"
-          className="min-h-11 flex-1 resize-none"
+          className="min-h-[120px] w-full resize-none text-[15px] leading-relaxed"
         />
-        <Button
-          type="button"
-          aria-label="기록하기"
-          disabled={!canSend}
-          onClick={() => void submit()}
-          className="min-h-11 min-w-11"
-        >
-          <ArrowUp className="size-4" aria-hidden />
-        </Button>
       </div>
       <EmotionChips
         value={emotion}
@@ -138,6 +128,14 @@ export function RecordForm({
       <p className="text-[12px] text-muted-foreground">
         기분은 안 골라도 괜찮아요
       </p>
+      <Button
+        type="button"
+        disabled={!canSend}
+        onClick={() => void submit()}
+        className="min-h-14 w-full text-[15px] font-semibold"
+      >
+        {saving ? "남기는 중이에요" : "남기기"}
+      </Button>
       {question && (
         <div className="rounded-lg border border-dashed px-3 py-2">
           <Button

@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { RecordForm } from "./RecordForm";
 
 const input = () => screen.getByLabelText("오늘의 기록");
-const sendButton = () => screen.getByRole("button", { name: "기록하기" });
+const sendButton = () => screen.getByRole("button", { name: "남기기" });
 
 // navigator 객체 전체를 stub하면 userEvent가 쓰는 clipboard가 사라져 깨진다.
 // onLine 속성만 갈아끼운다.
