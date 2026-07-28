@@ -62,14 +62,22 @@ def generate_diary(
     confirmed = fetch_confirmed_differences(conn, user_id, target)
     # 본문엔 '이야기가 되는' 반복만 녹인다. '처음 등장'은 나열이 자연스러워
     # recap 목록이 담당한다(본문에 넣으면 "~한 것도 처음이다"가 반복된다).
-    body_diffs = [c for c in confirmed if c.detection_method == "freq_shift"]
+    body_diffs = [
+        c for c in confirmed if c.detection_method in {"freq_shift", "zscore"}
+    ]
 
     facts = DiaryInput(
         date_iso=target_date_iso,
         user_id=user_id,
         memories=memories,
         differences=[
-            DiaryDifference(c.difference_id, c.headline, c.entity_name)
+            DiaryDifference(
+                c.difference_id,
+                c.headline,
+                c.entity_name,
+                c.entity_type,
+                c.detection_method,
+            )
             for c in body_diffs
         ],
         tone_preset=fetch_tone_preset(conn, user_id),

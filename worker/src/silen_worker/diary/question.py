@@ -28,7 +28,14 @@ def pick_question_target(
     confirmed: list[ConfirmedDifference],
 ) -> ConfirmedDifference | None:
     """질문 대상 하나. 처음 등장한 사람 > 장소 > 활동 순. 없으면 None(묻지 않는다)."""
-    firsts = [c for c in confirmed if c.detection_method == "first_occurrence"]
+    firsts = [
+        c
+        for c in confirmed
+        if c.detection_method == "first_occurrence"
+        and c.entity_type in QUESTION_TARGET_TYPES
+        and isinstance(c.entity_name, str)
+        and bool(c.entity_name.strip())
+    ]
     for entity_type in QUESTION_TARGET_TYPES:
         for candidate in firsts:
             if candidate.entity_type == entity_type:
@@ -37,6 +44,12 @@ def pick_question_target(
 
 
 def build_question_prompt(target: ConfirmedDifference) -> str:
+    if (
+        target.entity_type not in QUESTION_TARGET_TYPES
+        or not isinstance(target.entity_name, str)
+        or not target.entity_name.strip()
+    ):
+        raise ValueError("question target requires an entity")
     return (
         "너는 일기 앱 '실은'의 질문 담당이다. 오늘 처음 등장한 것에 대해\n"
         "짧은 질문 하나를 만들어라.\n"
@@ -56,7 +69,11 @@ def question_guardrail(raw: dict, target: ConfirmedDifference) -> str | None:
     question = str(raw.get("question") or "").strip()
     if not question or len(question) > QUESTION_MAX:
         return None
-    if target.entity_name not in question:
+    if (
+        not isinstance(target.entity_name, str)
+        or not target.entity_name.strip()
+        or target.entity_name not in question
+    ):
         return None
     if any(p in question for p in FORBIDDEN_QUESTION_PHRASES):
         return None

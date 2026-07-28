@@ -41,11 +41,14 @@ def narrate_difference(
     facts = NarrationInput(
         difference_id=facts_row.difference_id,
         user_id=facts_row.user_id,
+        entity_id=facts_row.entity_id,
         entity_name=facts_row.entity_name,
         entity_type=facts_row.entity_type,
+        dimension=facts_row.dimension,
         detection_method=facts_row.detection_method,
         description=facts_row.description,
         date_iso=facts_row.date_iso,
+        evidence_ids=facts_row.evidence_ids,
     )
     raw = narrator.narrate(facts)
     narration = guardrail(raw, facts)

@@ -20,7 +20,9 @@ class DiaryMemory:
 class DiaryDifference:
     difference_id: str
     headline: str
-    entity_name: str
+    entity_name: str | None = None
+    entity_type: str | None = None
+    detection_method: str = "freq_shift"
 
 
 @dataclass(frozen=True)
@@ -49,14 +51,37 @@ class DiaryWriter(Protocol):
         ...
 
 
+BODY_DIFFERENCE_METHODS = frozenset(("freq_shift", "zscore"))
+
+
+def _body_differences(facts: DiaryInput) -> list[DiaryDifference]:
+    """일기 본문이 소비할 수 있는 차이만 남긴다.
+
+    first_occurrence는 질문·주간 recap 재료이며 본문 차이가 아니다.
+    """
+    return [
+        difference
+        for difference in facts.differences
+        if difference.detection_method in BODY_DIFFERENCE_METHODS
+    ]
+
+
+def _difference_prompt_line(difference: DiaryDifference) -> str:
+    if difference.detection_method == "zscore":
+        context = "차원: 감정 기록"
+    elif difference.entity_name:
+        context = f"표현: {difference.entity_name}"
+    else:
+        context = "표현 없음"
+    return f"- [{difference.difference_id}] {difference.headline} ({context})"
+
+
 def build_prompt(facts: DiaryInput) -> str:
     """그날 메모(본문)+확정 차이로 프롬프트를 조립한다. 시간순 메모, 사실만."""
     mem_lines = "\n".join(f"- [{m.memory_id}] {m.text}" for m in facts.memories)
+    body_differences = _body_differences(facts)
     diff_lines = (
-        "\n".join(
-            f"- [{d.difference_id}] {d.headline} (표현: {d.entity_name})"
-            for d in facts.differences
-        )
+        "\n".join(_difference_prompt_line(d) for d in body_differences)
         or "- (없음)"
     )
     return (
@@ -106,7 +131,7 @@ def guardrail(raw: dict, facts: DiaryInput) -> Diary | None:
     used_diff = [str(x) for x in used_diff]
 
     input_mem_ids = {m.memory_id for m in facts.memories}
-    input_diff_ids = {d.difference_id for d in facts.differences}
+    input_diff_ids = {d.difference_id for d in _body_differences(facts)}
     if not set(used_mem) <= input_mem_ids:
         return None
     if not set(used_diff) <= input_diff_ids:
@@ -122,7 +147,10 @@ def guardrail(raw: dict, facts: DiaryInput) -> Diary | None:
 
     # 본문에 쓴 차이는 그 엔티티 표현을 그대로 써야 한다.
     # ('여친'을 '여자친구'로 바꾸는 확장을 막는다 — 원문에 없는 표현이다.)
-    name_by_id = {d.difference_id: d.entity_name for d in facts.differences}
+    name_by_id = {
+        d.difference_id: d.entity_name
+        for d in _body_differences(facts)
+    }
     for difference_id in used_diff:
         name = name_by_id.get(difference_id, "")
         if name and name not in body:

@@ -156,6 +156,7 @@ def fetch_window_emotions(
         where m.user_id = %s
           and m.deleted_at is null
           and m.is_locked = false
+          and e.confirmed_by_user = true
           and e.valence is not null
           and m.captured_at >= %s
           and m.captured_at < %s
@@ -202,14 +203,14 @@ def fetch_latest_prior_occurrences(
     user_id: str,
     entity_ids: list[str],
     target_date: date,
-) -> dict[str, tuple[datetime, str]]:
-    """대상 로컬 날짜보다 앞선 마지막 활성 언급을 엔티티별로 반환한다."""
+) -> dict[str, tuple[datetime, str, str]]:
+    """대상 로컬 날짜보다 앞선 마지막 활성 언급과 근거 ID를 반환한다."""
     if not entity_ids:
         return {}
     rows = conn.execute(
         """
         select distinct on (me.entity_id)
-               me.entity_id::text, m.captured_at, u.timezone
+               me.entity_id::text, m.captured_at, u.timezone, m.id::text
         from public.memory_entities me
         join public.memories m on m.id = me.memory_id
         join public.users u on u.id = m.user_id
@@ -224,7 +225,7 @@ def fetch_latest_prior_occurrences(
         """,
         (user_id, user_id, entity_ids, target_date),
     ).fetchall()
-    return {r[0]: (r[1], r[2]) for r in rows}
+    return {r[0]: (r[1], r[2], r[3]) for r in rows}
 
 
 def fetch_earliest_occurrence(
@@ -302,6 +303,8 @@ def upsert_dimension_difference(
         values (%s, %s, null, %s, %s, %s, %s, %s, 'candidate', 'intact')
         on conflict (user_id, date, dimension, detection_method)
           where entity_id is null
+            and dimension = 'emotion'
+            and detection_method = 'zscore'
         do update set description = excluded.description,
                       confidence = excluded.confidence,
                       category = excluded.category,
@@ -326,18 +329,21 @@ def fetch_dismiss_counts(
     conn: psycopg.Connection,
     user_id: str,
     since_date: date,
+    target_date: date,
 ) -> dict[tuple[str | None, str, str], int]:
-    """최근 기각 횟수를 엔티티/차원/방법 자연키로 반환한다."""
+    """대상일까지 최근 intact 기각 횟수를 자연키별로 반환한다."""
     rows = conn.execute(
         """
         select entity_id::text, dimension, detection_method, count(*)::int
         from public.differences
         where user_id = %s
           and date >= %s
+          and date <= %s
           and status = 'dismissed'
+          and evidence_state = 'intact'
         group by entity_id, dimension, detection_method
         """,
-        (user_id, since_date),
+        (user_id, since_date, target_date),
     ).fetchall()
     return {(row[0], row[1], row[2]): row[3] for row in rows}
 
@@ -355,54 +361,140 @@ def link_difference_evidence(
 
 def replace_difference_evidence(
     conn: psycopg.Connection,
+    user_id: str,
     difference_id: str,
     memory_ids: list[str],
 ) -> None:
-    """재탐지 시 현재 근거 집합으로 교체해 잠금·삭제된 옛 링크를 남기지 않는다."""
+    """본인 차이의 근거를 본인 활성 메모 집합으로만 교체한다."""
     conn.execute(
-        "delete from public.difference_evidence where difference_id = %s",
-        (difference_id,),
+        """
+        delete from public.difference_evidence de
+        using public.differences d
+        where de.difference_id = d.id
+          and d.id = %s
+          and d.user_id = %s
+        """,
+        (difference_id, user_id),
     )
     for memory_id in dict.fromkeys(memory_ids):
-        link_difference_evidence(conn, difference_id, memory_id)
+        conn.execute(
+            """
+            insert into public.difference_evidence (difference_id, memory_id)
+            select d.id, m.id
+            from public.differences d
+            join public.memories m on m.id = %s
+            where d.id = %s
+              and d.user_id = %s
+              and m.user_id = %s
+              and m.deleted_at is null
+              and m.is_locked = false
+            on conflict (difference_id, memory_id) do nothing
+            """,
+            (memory_id, difference_id, user_id, user_id),
+        )
+
+
+def reconcile_daily_differences(
+    conn: psycopg.Connection,
+    user_id: str,
+    target_date: date,
+    keep_ids: list[str],
+) -> None:
+    """재탐지 결과에서 밀린 당일 차이를 stale 처리한다.
+
+    사용자의 confirmed/dismissed 판단은 바꾸지 않고 근거 유효성만 갱신한다.
+    """
+    conn.execute(
+        """
+        update public.differences
+        set evidence_state = 'stale', staled_at = now()
+        where user_id = %s
+          and date = %s
+          and evidence_state = 'intact'
+          and not (id = any(%s::uuid[]))
+        """,
+        (user_id, target_date, keep_ids),
+    )
 
 
 @dataclass
 class DifferenceFacts:
     difference_id: str
     user_id: str
-    entity_id: str
-    entity_name: str
-    entity_type: str
+    entity_id: str | None
+    entity_name: str | None
+    entity_type: str | None
+    dimension: str
     detection_method: str
     description: str
     date_iso: str
+    evidence_ids: tuple[str, ...]
 
 
 def fetch_difference_for_narration(
     conn: psycopg.Connection, difference_id: str
 ) -> DifferenceFacts | None:
-    """서술 재료를 엔티티 조인으로 읽는다. 엔티티 차이(entity_id 있음)이고
-    근거가 살아있는(intact) 것만 대상. 서술 대상은 status=candidate로 한정한다
-    (스펙 §1) — 사용자가 '아니에요'(dismissed) 한 차이는 서술하지 않는다.
-    저장은 여기서 읽은 user_id로 귀속한다."""
+    """소유자와 활성 근거가 일치하는 카드용 차이만 서술 재료로 읽는다."""
     row = conn.execute(
         """
         select d.id::text, d.user_id::text, d.entity_id::text,
-               e.name, e.entity_type, d.detection_method,
-               coalesce(d.description, ''), d.date::text
+               e.name, e.entity_type, d.dimension, d.detection_method,
+               coalesce(d.description, ''), d.date::text,
+               array(
+                 select de.memory_id::text
+                 from public.difference_evidence de
+                 join public.memories m on m.id = de.memory_id
+                 where de.difference_id = d.id
+                   and m.user_id = d.user_id
+                   and m.deleted_at is null
+                   and m.is_locked = false
+                 order by de.memory_id
+               )
         from public.differences d
-        join public.entities e on e.id = d.entity_id
+        left join public.entities e
+          on e.id = d.entity_id and e.user_id = d.user_id
         where d.id = %s
-          and d.entity_id is not null
           and d.evidence_state = 'intact'
           and d.status = 'candidate'
+          and d.detection_method <> 'first_occurrence'
+          and (d.entity_id is null or e.id is not null)
+          and exists (
+            select 1
+            from public.difference_evidence de
+            join public.memories m on m.id = de.memory_id
+            where de.difference_id = d.id
+              and m.user_id = d.user_id
+              and m.deleted_at is null
+              and m.is_locked = false
+          )
+          and not exists (
+            select 1
+            from public.difference_evidence de
+            join public.memories m on m.id = de.memory_id
+            where de.difference_id = d.id
+              and (
+                m.user_id <> d.user_id
+                or m.deleted_at is not null
+                or m.is_locked = true
+              )
+          )
         """,
         (difference_id,),
     ).fetchone()
     if row is None:
         return None
-    return DifferenceFacts(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7])
+    return DifferenceFacts(
+        row[0],
+        row[1],
+        row[2],
+        row[3],
+        row[4],
+        row[5],
+        row[6],
+        row[7],
+        row[8],
+        tuple(row[9]),
+    )
 
 
 def upsert_narration(
@@ -471,8 +563,8 @@ class ConfirmedDifference:
     difference_id: str
     headline: str
     detection_method: str
-    entity_type: str
-    entity_name: str
+    entity_type: str | None
+    entity_name: str | None
 
 
 def fetch_confirmed_differences(
@@ -485,7 +577,8 @@ def fetch_confirmed_differences(
         select d.id::text, coalesce(n.headline, d.description, ''),
                d.detection_method, e.entity_type, e.name
         from public.differences d
-        join public.entities e on e.id = d.entity_id
+        left join public.entities e
+          on e.id = d.entity_id and e.user_id = d.user_id
         left join public.difference_narrations n on n.difference_id = d.id
         where d.user_id = %s
           and d.date = %s

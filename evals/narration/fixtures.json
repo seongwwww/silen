@@ -1,16 +1,43 @@
 {
   "cases": [
-    {"name": "freq-streak", "entity_name": "김밥", "entity_type": "thing",
-     "detection_method": "freq_shift", "description": "최근 3일 연속 등장",
-     "date_iso": "2026-07-24", "must_include_entity": true,
-     "reason": "반복을 담백하게, 조언·인과 없이"},
-    {"name": "first-place", "entity_name": "그 카페", "entity_type": "place",
-     "detection_method": "first_occurrence", "description": "이 place 첫 등장",
-     "date_iso": "2026-07-24", "must_include_entity": true,
-     "reason": "처음을 사실로만"},
-    {"name": "reemergence", "entity_name": "지은", "entity_type": "person",
-     "detection_method": "freq_shift", "description": "9일 만에 재등장(최근 28일 내)",
-     "date_iso": "2026-07-24", "must_include_entity": true,
-     "reason": "재등장을 감정 승격 없이"}
+    {
+      "name": "absence",
+      "entity_id": "entity-thing",
+      "entity_name": "운동",
+      "entity_type": "thing",
+      "dimension": "thing",
+      "detection_method": "freq_shift",
+      "description": "과거 활성일 4일 중 3일 기록됨, 오늘 기록에는 언급 없음, 마지막 2일 전",
+      "date_iso": "2026-07-24",
+      "evidence_ids": ["memory-1", "memory-2", "memory-3"],
+      "must_include_entity": true,
+      "reason": "생활 부재로 승격하지 않고 기록의 언급 변화만 서술"
+    },
+    {
+      "name": "reemergence",
+      "entity_id": "entity-person",
+      "entity_name": "지은",
+      "entity_type": "person",
+      "dimension": "person",
+      "detection_method": "freq_shift",
+      "description": "9일 만에 재등장(최근 28일 내)",
+      "date_iso": "2026-07-24",
+      "evidence_ids": ["memory-4"],
+      "must_include_entity": true,
+      "reason": "재등장을 감정 승격 없이"
+    },
+    {
+      "name": "emotion-shift",
+      "entity_id": null,
+      "entity_name": null,
+      "entity_type": null,
+      "dimension": "emotion",
+      "detection_method": "zscore",
+      "description": "최근 5일 평균 0.20, 오늘 -0.60 (z=-3.2)",
+      "date_iso": "2026-07-24",
+      "evidence_ids": ["memory-5", "memory-6"],
+      "must_include_entity": false,
+      "reason": "입력 수치만 비교하고 감정 해석·원인·위로·조언 없이"
+    }
   ]
 }

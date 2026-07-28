@@ -33,6 +33,34 @@ def _seed_difference(conn, user_id, name="김밥", status="candidate"):
         """,
         (user_id, ent, status),
     ).fetchone()[0]
+    memory_id = seed_memory(conn, user_id, "서술 근거")
+    conn.execute(
+        "insert into public.difference_evidence (difference_id, memory_id) "
+        "values (%s, %s)",
+        (diff, memory_id),
+    )
+    return diff
+
+
+def _seed_emotion_difference(conn, user_id, method="zscore"):
+    diff = conn.execute(
+        """
+        insert into public.differences
+          (user_id, date, entity_id, dimension, description,
+           detection_method, confidence, category, status, evidence_state)
+        values (%s, current_date, null, 'emotion',
+                '최근 5일 평균 0.20, 오늘 -0.60 (z=-3.2)',
+                %s, 3.2, '감정전환', 'candidate', 'intact')
+        returning id::text
+        """,
+        (user_id, method),
+    ).fetchone()[0]
+    memory_id = seed_memory(conn, user_id, "감정 근거")
+    conn.execute(
+        "insert into public.difference_evidence (difference_id, memory_id) "
+        "values (%s, %s)",
+        (diff, memory_id),
+    )
     return diff
 
 
@@ -152,5 +180,38 @@ def test_재서술은_내용을_덮어쓴다(conn):
             (diff,),
         ).fetchone()[0]
         assert count == 1
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_엔티티_없는_감정_차이도_수치_근거로_서술된다(conn):
+    user = seed_user(conn)
+    try:
+        diff = _seed_emotion_difference(conn, user)
+        raw = {
+            "headline": "감정 기록의 차이",
+            "body": "최근 감정 기록 평균 0.20보다 오늘 값 -0.60이 낮았어요.",
+            "evidence_text": "최근 5일 기록과 오늘 값을 비교했어요.",
+        }
+
+        nid = narrate_difference(conn, diff, narrator=StubNarrator(raw))
+
+        assert nid is not None
+        row = _narration_row(conn, diff)
+        assert row[0] == user
+        assert row[1] == "감정 기록의 차이"
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_first_occurrence는_카드_서술_대상이_아니다(conn):
+    user = seed_user(conn)
+    try:
+        diff = _seed_emotion_difference(conn, user, method="first_occurrence")
+
+        assert narrate_difference(conn, diff, narrator=StubNarrator(_GOOD)) is None
+        assert _narration_row(conn, diff) is None
     finally:
         delete_user(conn, user)

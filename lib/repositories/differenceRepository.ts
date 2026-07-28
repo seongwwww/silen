@@ -2,26 +2,33 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DiffStatus, ReviewItem } from "@/lib/services/difference";
 
 const MAX_EVIDENCE = 3;
+const DISMISS_WINDOW_DAYS = 28;
 const REVIEW_SELECT =
-  "id, category, difference_narrations!inner(headline), difference_evidence(memories(raw_text, is_locked, deleted_at))" as const;
+  "id, entity_id, dimension, detection_method, confidence, category, difference_narrations!inner(headline), difference_evidence(memories(raw_text, is_locked, deleted_at))" as const;
+
+type ReviewRow = {
+  id: string;
+  entity_id: string | null;
+  dimension: string;
+  detection_method: string;
+  confidence: number;
+  category: string;
+  difference_narrations:
+    | { headline: string }[]
+    | { headline: string }
+    | null;
+  difference_evidence: {
+    memories: {
+      raw_text: string | null;
+      is_locked: boolean;
+      deleted_at: string | null;
+    } | null;
+  }[];
+};
 
 function toReviewItems(rows: unknown[] | null): ReviewItem[] {
   return (rows ?? []).map((value) => {
-    const row = value as {
-      id: string;
-      category: string;
-      difference_narrations:
-        | { headline: string }[]
-        | { headline: string }
-        | null;
-      difference_evidence: {
-        memories: {
-          raw_text: string | null;
-          is_locked: boolean;
-          deleted_at: string | null;
-        } | null;
-      }[];
-    };
+    const row = value as ReviewRow;
     const headline = row.difference_narrations
       ? (Array.isArray(row.difference_narrations)
           ? row.difference_narrations[0]?.headline
@@ -47,6 +54,16 @@ function toReviewItems(rows: unknown[] | null): ReviewItem[] {
       .slice(0, MAX_EVIDENCE);
     return { id: row.id, headline, category: row.category, evidence };
   });
+}
+
+function subtractUtcDays(date: string, days: number): string {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  parsed.setUTCDate(parsed.getUTCDate() - days);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function dismissKey(row: Pick<ReviewRow, "entity_id" | "dimension" | "detection_method">): string {
+  return `${row.entity_id ?? ""}\u0000${row.dimension}\u0000${row.detection_method}`;
 }
 
 /** 세션 클라이언트로 차이를 조회/수정한다. RLS(user_id=auth.uid())가 소유권을 강제하므로
@@ -85,11 +102,36 @@ export function createDifferenceRepository(client: SupabaseClient) {
         .eq("date", date)
         .eq("status", "candidate")
         .eq("evidence_state", "intact")
-        .neq("detection_method", "first_occurrence")
-        .order("confidence", { ascending: false })
-        .limit(3);
+        .neq("detection_method", "first_occurrence");
       if (error) throw error;
-      return toReviewItems(data);
+
+      const { data: dismissed, error: dismissedError } = await client
+        .from("differences")
+        .select("entity_id, dimension, detection_method")
+        .eq("status", "dismissed")
+        .eq("evidence_state", "intact")
+        .gte("date", subtractUtcDays(date, DISMISS_WINDOW_DAYS))
+        .lte("date", date);
+      if (dismissedError) throw dismissedError;
+
+      const dismissCounts = new Map<string, number>();
+      for (const row of (dismissed ?? []) as Pick<
+        ReviewRow,
+        "entity_id" | "dimension" | "detection_method"
+      >[]) {
+        const key = dismissKey(row);
+        dismissCounts.set(key, (dismissCounts.get(key) ?? 0) + 1);
+      }
+      const ranked = ([...(data ?? [])] as unknown as ReviewRow[])
+        .sort((left, right) => {
+          const leftScore =
+            left.confidence / (1 + (dismissCounts.get(dismissKey(left)) ?? 0));
+          const rightScore =
+            right.confidence / (1 + (dismissCounts.get(dismissKey(right)) ?? 0));
+          return rightScore - leftScore || left.id.localeCompare(right.id);
+        })
+        .slice(0, 3);
+      return toReviewItems(ranked);
     },
   };
 }

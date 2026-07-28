@@ -11,6 +11,7 @@ from silen_worker.db import (
     fetch_window_active_memories,
     fetch_window_emotions,
     fetch_window_occurrences,
+    reconcile_daily_differences,
     replace_difference_evidence,
     upsert_difference,
     upsert_dimension_difference,
@@ -62,6 +63,7 @@ def detect_day(
 
     today_memory_ids = active_by_date.get(target, [])
     if not today_memory_ids:
+        reconcile_daily_differences(conn, user_id, target, [])
         return DetectDayResult([], [])
 
     active_history_dates = frozenset(
@@ -86,6 +88,7 @@ def detect_day(
                 "type": row.entity_type,
                 "dates": set(),
                 "memory_ids": [],
+                "prior_memory_id": None,
             },
         )
         bucket["dates"].add(local)
@@ -105,6 +108,8 @@ def detect_day(
             if prior is not None
             else None
         )
+        if prior is not None:
+            bucket["prior_memory_id"] = prior[2]
         windows.append(
             EntityWindow(
                 entity_id,
@@ -158,6 +163,7 @@ def detect_day(
         conn,
         user_id,
         target - timedelta(days=DISMISS_WINDOW_DAYS),
+        target,
     )
     ranked = rank_differences(
         rankable,
@@ -192,6 +198,7 @@ def detect_day(
             )
             replace_difference_evidence(
                 conn,
+                user_id,
                 difference_id,
                 emotion_memory_ids,
             )
@@ -207,6 +214,7 @@ def detect_day(
         saved_ids.append(difference_id)
         narration_ids.append(difference_id)
 
+    reconcile_daily_differences(conn, user_id, target, saved_ids)
     return DetectDayResult(saved_ids, narration_ids)
 
 
@@ -229,13 +237,17 @@ def _save_entity_difference(
         candidate.confidence,
     )
     entity_memory_ids = by_entity[candidate.entity_id]["memory_ids"]
+    prior_memory_id = by_entity[candidate.entity_id]["prior_memory_id"]
     evidence_ids = (
         [*entity_memory_ids, *today_memory_ids]
         if target not in by_entity[candidate.entity_id]["dates"]
         else entity_memory_ids
     )
+    if prior_memory_id is not None:
+        evidence_ids = [*evidence_ids, prior_memory_id]
     replace_difference_evidence(
         conn,
+        user_id,
         difference_id,
         evidence_ids,
     )

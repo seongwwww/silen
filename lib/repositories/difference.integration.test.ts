@@ -17,14 +17,19 @@ async function clientFor(email: string): Promise<SupabaseClient> {
   return c;
 }
 
-async function seedCandidate(user: string, headline: string, memoText: string): Promise<string> {
+async function seedCandidate(
+  user: string,
+  headline: string,
+  memoText: string,
+  confidence = 0.5,
+): Promise<string> {
   const ent = (await db.query(
     "insert into public.entities (user_id, entity_type, name, normalized_name) values ($1,'thing',$2,$2) returning id",
     [user, headline])).rows[0].id;
   const diff = (await db.query(
-    "insert into public.differences (user_id, date, entity_id, dimension, description, detection_method, category, status, evidence_state) " +
-    "values ($1, current_date, $2, 'thing', 'x', 'freq_shift', '오늘의다른점', 'candidate', 'intact') returning id",
-    [user, ent])).rows[0].id;
+    "insert into public.differences (user_id, date, entity_id, dimension, description, detection_method, confidence, category, status, evidence_state) " +
+    "values ($1, current_date, $2, 'thing', 'x', 'freq_shift', $3, '오늘의다른점', 'candidate', 'intact') returning id",
+    [user, ent, confidence])).rows[0].id;
   await db.query("insert into public.difference_narrations (user_id, difference_id, headline, body, evidence_text, model) values ($1,$2,$3,'b','e','m')",
     [user, diff, headline]);
   const mem = (await db.query("insert into public.memories (user_id, raw_text, source_type, memory_type) values ($1,$2,'manual','moment') returning id",
@@ -82,5 +87,28 @@ describe("차이 확인 저장소", () => {
     expect(await repo.updateStatus(diff, "dismissed", "candidate")).toBe(false);
     const row = await db.query("select status from public.differences where id=$1", [diff]);
     expect(row.rows[0].status).toBe("confirmed"); // 직접 전이 우회 차단
+  });
+
+  it("오늘 카드는 최근 기각을 반영한 표시점수 순서로 조회한다", async () => {
+    const attenuated = await seedCandidate(alice, "기각된 고점수", "근거 A", 6);
+    const plain = await seedCandidate(alice, "기각 없는 점수", "근거 B", 4);
+    const entity = (await db.query(
+      "select entity_id from public.differences where id=$1",
+      [attenuated],
+    )).rows[0].entity_id;
+    await db.query(
+      "insert into public.differences " +
+      "(user_id, date, entity_id, dimension, description, detection_method, confidence, category, status, evidence_state) " +
+      "values ($1, current_date - 1, $2, 'thing', 'x', 'freq_shift', 6, '오늘의다른점', 'dismissed', 'intact'), " +
+      "($1, current_date - 2, $2, 'thing', 'x', 'freq_shift', 6, '오늘의다른점', 'dismissed', 'intact')",
+      [alice, entity],
+    );
+    const today = (await db.query("select current_date::text as date")).rows[0].date;
+
+    const repo = createDifferenceRepository(await clientFor("alice-diff@example.com"));
+    const items = await repo.listForDate(today);
+    const relevant = items.filter((item) => item.id === attenuated || item.id === plain);
+
+    expect(relevant.map((item) => item.id)).toEqual([plain, attenuated]);
   });
 });

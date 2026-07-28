@@ -115,3 +115,57 @@ def test_쓴_차이의_표현을_그대로_쓰면_통과한다():
         _facts(),
     )
     assert out is not None
+
+
+def test_zscore_감정_차이는_엔티티_없이_본문에_쓸_수_있다():
+    emotion = DiaryDifference(
+        "d2",
+        "최근 감정 기록 평균보다 오늘 값이 낮음",
+        entity_name=None,
+        entity_type=None,
+        detection_method="zscore",
+    )
+    facts = _facts(differences=[emotion])
+    out = guardrail(
+        _raw(
+            body="최근 감정 기록 평균보다 오늘 값이 낮았다.",
+            used_difference_ids=["d2"],
+        ),
+        facts,
+    )
+
+    assert out is not None
+    assert out.used_difference_ids == ["d2"]
+
+
+def test_감정_차이_프롬프트에는_None_대신_감정_차원이라고_쓴다():
+    emotion = DiaryDifference(
+        "d2",
+        "최근 5일 평균 0.40, 오늘 -0.60 (z=-4.0)",
+        entity_name=None,
+        entity_type=None,
+        detection_method="zscore",
+    )
+
+    prompt = build_prompt(_facts(differences=[emotion]))
+
+    assert "차원: 감정 기록" in prompt
+    assert "None" not in prompt
+
+
+def test_first_occurrence는_본문용_차이로_사용할_수_없다():
+    first = DiaryDifference(
+        "d3",
+        "지은 처음 등장",
+        entity_name="지은",
+        entity_type="person",
+        detection_method="first_occurrence",
+    )
+
+    out = guardrail(
+        _raw(body="지은을 만났다.", used_difference_ids=["d3"]),
+        _facts(differences=[first]),
+    )
+
+    assert out is None
+    assert "지은 처음 등장" not in build_prompt(_facts(differences=[first]))

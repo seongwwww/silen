@@ -33,7 +33,8 @@ def _mention(conn, user_id, entity_id, day):
 def _emotion(conn, user_id, day, valence):
     memory_id = _memory(conn, user_id, day)
     conn.execute(
-        "insert into public.emotions (memory_id, valence) values (%s, %s)",
+        "insert into public.emotions "
+        "(memory_id, valence, confirmed_by_user) values (%s, %s, true)",
         (memory_id, valence),
     )
     return memory_id
@@ -154,6 +155,28 @@ def test_오랜만의_재등장은_활성일_기준_bits를_저장한다(conn):
 
 
 @pytest.mark.integration
+def test_창_밖_재등장도_마지막_과거_메모를_근거로_연결한다(conn):
+    user = seed_user(conn)
+    try:
+        entity_id = _entity(conn, user, "오래된노래", "thing")
+        prior_id = _mention(conn, user, entity_id, TARGET - timedelta(days=40))
+        _memory(conn, user, TARGET - timedelta(days=2))
+        _memory(conn, user, TARGET - timedelta(days=1))
+        today_id = _mention(conn, user, entity_id, TARGET)
+
+        result = detect_day(conn, user, TARGET.isoformat())
+
+        evidence = conn.execute(
+            "select memory_id::text from public.difference_evidence "
+            "where difference_id = %s",
+            (result.saved_ids[0],),
+        ).fetchall()
+        assert {row[0] for row in evidence} == {prior_id, today_id}
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
 def test_연속_등장은_매일_차이로_저장하지_않는다(conn):
     user = seed_user(conn)
     try:
@@ -182,6 +205,80 @@ def test_일일_노출_차이는_놀라움_상위_3건으로_제한한다(conn):
         assert len(result.saved_ids) == 3
         assert result.narration_ids == result.saved_ids
         assert len(_diffs(conn, user)) == 3
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_재실행에서_순위가_바뀌면_밀린_후보를_stale로_바꾼다(conn):
+    user = seed_user(conn)
+    try:
+        entities = {
+            name: _entity(conn, user, name)
+            for name in ("A", "B", "C", "D")
+        }
+        history_memories = [
+            _memory(conn, user, TARGET - timedelta(days=offset))
+            for offset in range(10, 0, -1)
+        ]
+        seen_counts = {"A": 9, "B": 9, "C": 8, "D": 7}
+        for name, count in seen_counts.items():
+            for memory_id in history_memories[:count]:
+                conn.execute(
+                    "insert into public.memory_entities "
+                    "(memory_id, entity_id, relation_type) "
+                    "values (%s, %s, 'mentioned')",
+                    (memory_id, entities[name]),
+                )
+        _memory(conn, user, TARGET)
+
+        first = detect_day(conn, user, TARGET.isoformat())
+        assert len(first.saved_ids) == 3
+
+        for memory_id in history_memories[7:]:
+            conn.execute(
+                "insert into public.memory_entities "
+                "(memory_id, entity_id, relation_type) "
+                "values (%s, %s, 'mentioned')",
+                (memory_id, entities["D"]),
+            )
+        second = detect_day(conn, user, TARGET.isoformat())
+
+        assert len(second.saved_ids) == 3
+        states = conn.execute(
+            "select evidence_state, count(*)::int "
+            "from public.differences where user_id = %s "
+            "group by evidence_state",
+            (user,),
+        ).fetchall()
+        assert dict(states) == {"intact": 3, "stale": 1}
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_오늘_기록이_사라지면_이전_탐지_결과도_stale이_된다(conn):
+    user = seed_user(conn)
+    try:
+        entity_id = _entity(conn, user, "산책", "activity")
+        _mention(conn, user, entity_id, TARGET - timedelta(days=2))
+        _mention(conn, user, entity_id, TARGET - timedelta(days=1))
+        today_id = _memory(conn, user, TARGET)
+        result = detect_day(conn, user, TARGET.isoformat())
+        assert len(result.saved_ids) == 1
+
+        conn.execute(
+            "update public.memories set deleted_at = now() where id = %s",
+            (today_id,),
+        )
+        rerun = detect_day(conn, user, TARGET.isoformat())
+
+        assert rerun.saved_ids == []
+        state = conn.execute(
+            "select evidence_state from public.differences where id = %s",
+            (result.saved_ids[0],),
+        ).fetchone()[0]
+        assert state == "stale"
     finally:
         delete_user(conn, user)
 
