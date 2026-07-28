@@ -9,24 +9,25 @@
 
 ## 현재 활성 작업 (Active Work Order)
 
-**목표:** 와이어프레임 7화면과 핵심 탐지 루프를
-`docs/superpowers/plans/2026-07-28-mvp-full-build.md` 순서로 구현한다.
+**목표:** `docs/superpowers/plans/2026-07-28-mvp-full-build.md`의 Phase 0~6을
+검증 게이트까지 닫고 `feat/mvp-shell`을 main 병합 가능한 상태로 만든다.
 
-**성격:** Phase -1은 `ffc8a3c`로 커밋해 `main`의 `d9a18ff`에
-`merge --no-ff` 완료. 현재 `feat/mvp-shell`에서 **Phase 0~1 + Daily Wrap
-데모 확장 구현·검증 완료, 미커밋** 상태다.
+**성격:** Phase -1은 `main`의 `d9a18ff`에 병합됐다. 현재
+`feat/mvp-shell`에는 **Phase 0~6 제품 코드와 프런트 목데이터까지 전부
+커밋**돼 있다. 남은 것은 사람 승인이 필요한 스키마·파괴 테스트·실 LLM eval이다.
 
-**왜:** 기반 파이프라인과 일기 루프는 완료됐지만 화면 간 이동이 없고, 홈은 발견
-중심이 아니며, 현재 detector는 first occurrence·반복만 다룬다. 와이어프레임의
-주간 리포트·회고·데이터 제어 화면도 아직 없다.
+**왜:** 화면과 기능이 존재하는 것만으로 삭제 완전성·감정축 멱등성과 모델 품질이
+검증되지는 않는다. 코드 완료를 MVP 완료로 과장하지 않고 남은 게이트를 명시한다.
 
 ### 다음 시작점
 
-1. `feat/mvp-shell` 변경 리뷰
-2. 사람이 신규 일기 요청 마이그레이션을 staging dry-run 후 적용
-3. 사용자 요청 시 Phase 0~1 변경 커밋 → `main`에 `merge --no-ff`
-4. 이후 detector → diary opt-out → weekly → recall → data controls를
-   **각각 짧은 브랜치**로 진행
+1. 사람이 `20260728170000_dimension_difference_natural_key.sql`,
+   `20260728230000_request_account_data_deletion.sql`을 staging dry-run 후 적용
+2. `npm run test:integration`과 worker
+   `-m "integration and not destructive"` 재실행
+3. 명시 승인 후 격리된 `destructive` 삭제 통합 테스트·잔존 검증
+4. 비용 승인 후 실제 Vertex diary eval 실행
+5. 최종 리뷰 후 사용자 요청 시 main 위 rebase → `merge --no-ff` → push
 
 ### v2 검토에서 바로잡은 결정
 
@@ -56,25 +57,23 @@
 
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
-- **진행:** Phase 0의 `lang=ko`·따뜻한 토큰·하단 3탭, Phase 1의 `/record`
-  분리와 발견 우선 홈을 구현했다. 홈은 사용자 타임존 날짜, 3일 학습 게이트,
-  차이 확인, 20자 메모 미리보기, 일기 상태, 큰 기록 CTA를 제공한다.
-- **추가 완료:** Daily Wrap 도착/차이 발견/정리 시간 문구, 수동 첫 일기 생성
-  API, `(user_id,date)` 요청 원장, pgmq 타입 분기 워커, 실제 상태 기반
-  queued/processing/done/failed UI를 구현했다. 설정의 **데모 상태 보기**에서
-  `/demo` 목 상태 8종을 전환할 수 있다.
-- **현재 변경:** 위 Phase 0~1·Daily Wrap 코드/테스트/ADR/마이그레이션이
-  `feat/mvp-shell`에 **미커밋** 상태다. `.claude/orchestration/`,
-  `.claude/settings.local.json`은 기존 사용자/도구 파일이므로 건드리지 않는다.
-- **검증:** frontend lint·typecheck 통과, 단위 **117**, 통합 **53**,
-  worker **139**, ruff, production build 통과. 모바일 `/demo?state=arrived`
-  DOM·시각 확인 완료. 실 Vertex eval은 프롬프트 변경이 없고 비용이 발생하므로
-  명시 승인 없이 재실행하지 않았다.
-- **다음:** 코드 리뷰 → 사람의
-  `20260728143000_diary_generation_requests.sql` staging dry-run/적용 →
-  사용자 요청 시 커밋·병합 → Phase 2.
-- **막힘/결정 필요:** 신규 마이그레이션은 AI 적용 금지. 적용 전에는 실제 웹의
-  수동 일기 요청은 500이지만 `/demo`는 독립적으로 동작한다.
+- **코드 완료:** Phase 0~6. 놀라움(bits)·기록 부재·감정축·top 3·기각학습,
+  일기 opt-out·톤 주문, 7일 리포트, 키워드 회고, JSON 내보내기, 재개 가능한
+  전체 삭제, 읽기 전용 `stats`까지 구현·커밋했다.
+- **웹 확인:** `/demo` Daily Wrap 8상태와 `/report?demo=1` 완성 리포트는
+  실제 API 없이 볼 수 있다. `/settings` 내보내기·2단계 삭제 확인,
+  `/report` 빈 상태와 목데이터 상태를 375px 모바일에서 확인했다.
+- **현재 작업트리:** 제품 변경은 모두 커밋됐다. `.claude/orchestration/`,
+  `.claude/settings.local.json`만 기존 사용자/도구의 untracked 파일이라
+  건드리지 않는다.
+- **검증:** `npm run check` 37 files/**167 tests**, production build 17 pages,
+  worker ruff·단위 **139** 통과. 마이그레이션 비의존 프런트 통합 **61**,
+  worker 비파괴 통합 **90** 통과.
+- **대기:** 프런트 삭제 RPC 통합 1개와 감정축 멱등 통합 2개는 로컬
+  마이그레이션 2건 미적용 때문에 대기한다. 실제 Vertex eval은 비용,
+  `destructive` 삭제 통합은 데이터 삭제를 수반하므로 실행하지 않았다.
+- **막힘/결정 필요:** AGENTS 규칙상 마이그레이션 적용·파괴 테스트는 사람이
+  실행하거나 명시 승인해야 한다. 세 게이트 전에는 Phase 6/MVP 완료로 표시하지 않는다.
 
 > 직전 완료: 질문 세션 이어 쓰기(`feat/question-session`) — 병합·push 완료(PR #9, `02e0add`).
 
@@ -106,11 +105,12 @@
 ## 참고 (context)
 
 - **현재 파이프라인:** 메모 insert → pgmq `memory_jobs` → `run-pending` 엔티티 추출
-  → `run-daily` 차이 검출·서술 → 사람이 확인·기각 → `run-diary` 일기 생성.
-  Phase 3에서 candidate도 일기에 쓰고 dismissed만 제외하는 opt-out으로 바꿀 계획이다.
+  → `run-daily` 통계 차이 검출·서술 → candidate·confirmed를 바로
+  `run-diary`에 반영하고 dismissed·stale만 제외 → `run-weekly` 7일 집계.
 - **앱과 워커 경계:** 둘은 큐·DB로만 통신한다. 수동 일기는 요청 원장과 기존
-  `memory_jobs(job_type='diary')`로 연결됐다. 야간 자동 스케줄러와 주간 잡은
-  아직 없다. processing/failed는 원장에 실제 상태가 있을 때만 표시한다.
-- **계획 완료와 베타 완료는 다르다:** 7화면 뒤에도 야간 자동 실행·잡 재시도·알림·
-  PWA·계정 연결이 베타 운영 게이트로 남는다.
+  `memory_jobs(job_type='diary')`로 연결됐다. `run-weekly` 명령은 있지만
+  야간 자동 스케줄러는 아직 없다. processing/failed는 원장에 실제 상태가
+  있을 때만 표시한다.
+- **계획 완료와 베타 완료는 다르다:** 야간 자동 실행·알림·PWA·계정 연결은
+  여전히 베타 운영 게이트다. 지금은 웹 버튼과 CLI로 수동 실행한다.
 - Claude 세션이 서브에이전트 주도(SDD)로 돌 땐 `.superpowers/sdd/progress.md`에 더 세밀한 태스크 원장을 둔다(선택). **공용 진행 상태의 기준은 이 파일의 "상태" 절**이다.

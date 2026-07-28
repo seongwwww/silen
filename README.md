@@ -11,13 +11,19 @@ CLAUDE.md               # 항상 적용되는 개발 원칙 (200줄 이하)
 AGENTS.md               # Next.js 16 버전 고지 (코드 작성 전 필독)
 .claude/rules/          # 도메인별 규칙 (프론트/백엔드/DB/프라이버시/AI-eval/테스트/git)
 app/                    # 경계 계층 — Route Handler·페이지
-app/page.tsx            # 홈 = 기록 화면 (한 줄 입력 + 감정 칩)
-app/_components/        # 홈 전용 컴포넌트 — RecordForm·EmotionChips
+app/page.tsx            # 홈 = 발견·Daily Wrap·오늘 기록 요약
+app/record/             # 5초 기록 화면 (텍스트 + 감정 칩)
+app/_components/        # 홈 전용 컴포넌트 — 발견 카드·Daily Wrap
 app/api/memories/       # 기록 생성 API (텍스트·감정·사진)
 app/api/differences/    # 차이 확인 PATCH API (전이 검증·RLS)
+app/api/export/         # 본인 데이터 JSON 내보내기
+app/api/account/data/   # 전체 기록 삭제 요청(실제 삭제는 워커)
 app/review/             # 오늘의 다른 점 확인 화면
 app/diary/              # 일기 보기 (최신 · 근거 접기 · 날짜 이동 /diary/[date])
-app/settings/           # 일기 기본 톤 설정 (담백 · 따뜻)
+app/report/             # 주간 리포트(7일 막대·3개 고정 슬롯)
+app/recall/             # 본인 기록 키워드 회고
+app/settings/           # 톤·JSON 내보내기·전체 기록 삭제
+app/demo/               # 실제 API를 쓰지 않는 Daily Wrap·리포트 목데이터
 lib/time/               # "하루" 경계 단일 유틸
 lib/services/           # 서비스 계층 (프레임워크 타입을 모름)
 lib/repositories/       # 저장소 계층 (쿼리·user 스코프 강제)
@@ -46,6 +52,11 @@ docs/
 5초 undo를 제공한다. 확인은 일기 반영의 관문이 아니며, [아니에요]로 기각한
 차이만 일기에서 제외한다.
 일기 화면(`/diary`)은 가장 최근 일기와 무엇을 보고 썼는지(근거 메모)를 접어서 함께 보여준다. AI 초안을 고치거나 확정할 수 있고, 늦은 기록을 반영하려면 다시 만들기를 요청할 수 있다. 이전/다음 버튼으로 과거 일기(`/diary/[date]`)를 오갈 수 있으며, 일기가 없는 날은 건너뛰고 실제 일기가 있는 날짜로 점프한다. 처음 등장한 것은 "오늘 처음" 목록으로 모아 보여주고, 그중 하나에 대해 부담 없는 질문을 한 번 건넨다(답하면 새 기록이 된다). 일기 생성은 `run-diary`(§4)가 하며 화면의 다시 만들기는 즉시 생성하지 않고 다음 실행에 반영할 요청만 남긴다.
+
+주간 리포트(`/report`)는 첫 활성 기록일부터 완결된 7일 블록을 묶고, 회고
+(`/recall`)는 잠기거나 삭제되지 않은 본인 기록만 최신순 키워드로 찾는다.
+화면 검수용 `/demo`와 `/report?demo=1`은 프런트 fixture만 사용하며 실제
+사용자 데이터나 API를 건드리지 않는다.
 
 ## 개발 환경 세팅
 
