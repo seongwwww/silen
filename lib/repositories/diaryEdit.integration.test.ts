@@ -25,6 +25,7 @@ async function clientFor(email: string): Promise<SupabaseClient> {
   const client = createClient(SUPABASE_URL, ANON_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+  if (!data.properties) throw new Error("magiclink 발급 실패");
   await client.auth.verifyOtp({
     token_hash: data.properties.hashed_token,
     type: "magiclink",
