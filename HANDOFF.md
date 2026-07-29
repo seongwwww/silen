@@ -12,14 +12,15 @@
 **목표:** `docs/superpowers/plans/2026-07-29-beta-gate.md`의 P1~P6을
 짧은 브랜치와 사람 병합 게이트를 지키며 순서대로 완료한다.
 
-**현재:** P1 자동 일기 스케줄을 `feat/schedule`에서 구현·검증·커밋했다.
-사람이 `main`에 병합하기 전에는 P2 브랜치를 만들거나 작업하지 않는다.
+**현재:** P1은 `main`에 병합됐다(`b8d85e6`). P2 일반명사 억제를
+`fix/entity-stopwords`에서 구현·검증·커밋했다. 사용자 승인에 따라 이 브랜치를
+`main`에 병합한 뒤 P3의 ADR부터 시작한다.
 
 ### 다음 시작점
 
-1. 사람이 `feat/schedule`을 검토하고 `main`에 `merge --no-ff`
-2. 병합 확인 뒤 `main`에서 `fix/entity-stopwords` 생성
-3. P2 시드 검증: `run-daily` 재실행 후 `점심` 제외·`김밥` 유지
+1. `fix/entity-stopwords`를 `main`에 `merge --no-ff`
+2. `main`에서 `feat/recall-rag` 생성
+3. 공식 Vertex 문서로 모델명·차원을 확인하고 ADR-0004를 코드보다 먼저 커밋
 
 ### v2 검토에서 바로잡은 결정
 
@@ -49,6 +50,22 @@
 
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
+- **P2 구현 완료:** 정확 일치 불용어를
+  `worker/src/silen_worker/extraction/constants.py` 한곳에 두고 추출
+  가드레일에서 제거한다(`3857a31`). `집`·`일`은 과잉 차단하지 않는다.
+- **P2 기존 데이터 방어:** 이미 저장된 불용어 엔티티도 새 마이그레이션이나
+  삭제 없이 탐지 조회에서 제외하고, 재실행 시 이전 차이를 stale로 바꾼다.
+- **P2 시드 검증:** 보존된 2026-07-19~29 시드 사용자의 2026-07-27에
+  실제 `run-daily`를 재실행해 `점심=0`, `김밥=1`을 확인했다. 처음 등장은
+  LLM 서술 대상이 아니므로 실제 Vertex 호출은 없었다.
+- **P2 브라우저:** UI 변경은 없어서 현재 로그인 사용자의 375px 홈을 회귀
+  확인했다. `clientWidth=scrollWidth=360`, 홈·탭바가 정상 표시됐다. 시드
+  사용자는 별도 인증 소유자라 그 차이 카드를 현재 브라우저 세션에서 열지는
+  않았다.
+- **P2 검증:** `npm run check` 173, production build 17 pages, worker ruff,
+  worker 단위 148, 프런트 통합 63, worker 통합 98 모두 통과. 엔티티 eval
+  케이스는 추가했지만 지시대로 실행하지 않았다.
+
 - **P1 구현 완료:** `diary_hour` up/down, 설정 UI/API, 홈 예약 문구,
   `run-scheduled`, 기존 요청 원장·`memory_jobs` 재사용, 원장+큐 단일
   트랜잭션을 구현했다(`7ac0035`).
@@ -70,8 +87,8 @@
 - **작업트리:** 제품 변경은 모두 커밋했다. `.claude/orchestration/`,
   `.claude/settings.local.json`, `docs/overview/`는 사용자 소유 미추적 파일로
   그대로 두었다.
-- **사람이 할 일:** `feat/schedule` 검토·병합. 작업 스케줄러 등록과
-  staging 마이그레이션은 이번 로컬 구현 범위 밖이며 사람이 실행한다.
+- **사람이 할 일:** P1 작업 스케줄러 등록과 staging 마이그레이션은 이번
+  로컬 구현 범위 밖이며 사람이 실행한다.
 
 - **코드 완료:** Phase 0~6. 놀라움(bits)·기록 부재·감정축·top 3·기각학습,
   일기 opt-out·톤 주문, 7일 리포트, 키워드 회고, JSON 내보내기, 재개 가능한

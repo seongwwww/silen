@@ -5,6 +5,8 @@
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
+from silen_worker.extraction.constants import ENTITY_STOPWORDS
+
 EntityType = Literal["person", "place", "activity", "thing"]
 _VALID_TYPES = {"person", "place", "activity", "thing"}
 
@@ -43,6 +45,8 @@ def guardrail(candidates: list[dict], text: str) -> list[ExtractedEntity]:
         if name not in text:
             continue
         key = (etype, normalize_name(name))
+        if key[1] in ENTITY_STOPWORDS:
+            continue
         if key in seen:
             continue
         seen.add(key)

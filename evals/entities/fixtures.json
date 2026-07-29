@@ -37,6 +37,15 @@
         {"type": "person", "name": "지은"}
       ],
       "reason": "4종 분류"
+    },
+    {
+      "name": "deterministic-stopwords",
+      "text": "오늘 점심 김밥 먹음",
+      "must_contain": [
+        {"type": "thing", "name": "김밥"}
+      ],
+      "expected_count_max": 1,
+      "reason": "시간대어·일반명사는 가드레일에서 제거하고 김밥은 보존"
     }
   ]
 }

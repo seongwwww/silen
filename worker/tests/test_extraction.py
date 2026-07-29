@@ -55,3 +55,30 @@ def test_같은_엔티티_중복은_한_번만():
 
 def test_빈_이름은_폐기한다():
     assert guardrail([{"type": "place", "name": ""}], "장소 없음") == []
+
+
+def test_확실한_시간대어와_일반명사는_폐기한다():
+    text = "오늘 아침 점심 저녁 내일 주말"
+    candidates = [
+        {"type": "thing", "name": name}
+        for name in ("오늘", "아침", "점심", "저녁", "내일", "주말")
+    ]
+
+    assert guardrail(candidates, text) == []
+
+
+def test_불용어_옆의_고유한_대상은_남고_애매한_말은_과잉차단하지_않는다():
+    text = "오늘 점심 김밥 먹고 집에서 일함"
+    candidates = [
+        {"type": "thing", "name": "오늘"},
+        {"type": "thing", "name": "점심"},
+        {"type": "thing", "name": "김밥"},
+        {"type": "place", "name": "집"},
+        {"type": "activity", "name": "일"},
+    ]
+
+    assert [(item.type, item.name) for item in guardrail(candidates, text)] == [
+        ("thing", "김밥"),
+        ("place", "집"),
+        ("activity", "일"),
+    ]

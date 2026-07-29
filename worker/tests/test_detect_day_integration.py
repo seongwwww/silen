@@ -73,6 +73,40 @@ def test_첫_등장은_저장하고_오늘_근거를_연결한다(conn):
 
 
 @pytest.mark.integration
+def test_기존_불용어_엔티티는_탐지에서_빠지고_김밥은_남는다(conn):
+    user = seed_user(conn)
+    try:
+        lunch_id = _entity(conn, user, "점심")
+        gimbap_id = _entity(conn, user, "김밥")
+        memory_id = _memory(conn, user, TARGET)
+        for entity_id in (lunch_id, gimbap_id):
+            conn.execute(
+                """
+                insert into public.memory_entities
+                  (memory_id, entity_id, relation_type)
+                values (%s, %s, 'mentioned')
+                """,
+                (memory_id, entity_id),
+            )
+
+        result = detect_day(conn, user, TARGET.isoformat())
+        names = conn.execute(
+            """
+            select e.name
+              from public.differences d
+              join public.entities e on e.id = d.entity_id
+             where d.user_id = %s
+               and d.id = any(%s::uuid[])
+            """,
+            (user, result.saved_ids),
+        ).fetchall()
+
+        assert names == [("김밥",)]
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
 def test_기록_부재는_과거_언급과_오늘_활성_메모를_근거로_삼는다(conn):
     user = seed_user(conn)
     try:
