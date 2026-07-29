@@ -7,8 +7,9 @@ import pytest
 import silen_worker.tasks.process as process_task
 from silen_worker.queue import delete_message, read_messages
 from silen_worker.tasks.process import process_pending
-from tests.conftest import seed_user, seed_memory, delete_user
+from tests.conftest import StubEmbedder, seed_user, seed_memory, delete_user
 
+_EMB = StubEmbedder()
 
 class _NoEntities:
     def extract(self, text):
@@ -35,7 +36,7 @@ def test_메모_생성부터_처리까지_배관이_돈다(conn):
 
         processed = process_pending(
             limit=10,
-            extractor=_NoEntities(),
+            embedder=_EMB, extractor=_NoEntities(),
             only_user_id=user,
         )
 
@@ -77,7 +78,7 @@ def test_메모가_삭제됐어도_메시지는_치워진다(conn):
 
         processed = process_pending(
             limit=10,
-            extractor=_NoEntities(),
+            embedder=_EMB, extractor=_NoEntities(),
             only_user_id=user,
         )
 
@@ -123,7 +124,7 @@ def test_스코프가_없으면_읽은_메시지를_모두_처리한다(monkeypa
         lambda conn, queue, msg_id: deleted.append(msg_id),
     )
 
-    processed = process_pending(limit=10, extractor=_NoEntities())
+    processed = process_pending(limit=10, embedder=_EMB, extractor=_NoEntities())
 
     assert processed == ["memory-a", "memory-b"]
     assert deleted == [1, 2]
@@ -184,7 +185,7 @@ def test_일기_생성_요청을_분기해_완료_처리한다(monkeypatch):
         lambda conn, queue, msg_id: deleted.append(msg_id),
     )
 
-    processed = process_pending(limit=10, extractor=_NoEntities())
+    processed = process_pending(limit=10, embedder=_EMB, extractor=_NoEntities())
 
     assert processed == ["request-a"]
     assert completed == [("request-a", "user-a", "diary-a")]
@@ -243,7 +244,7 @@ def test_일기_생성_재시도_상한이면_실패로_남기고_보관한다(m
         lambda conn, queue, msg_id: archived.append(msg_id),
     )
 
-    processed = process_pending(limit=10, extractor=_NoEntities())
+    processed = process_pending(limit=10, embedder=_EMB, extractor=_NoEntities())
 
     assert processed == []
     assert failed == [("request-b", "user-b", "RuntimeError", True)]

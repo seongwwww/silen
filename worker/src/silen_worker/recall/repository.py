@@ -64,7 +64,9 @@ def search_keyword_candidates(
            and m.deleted_at is null
            and m.raw_text is not null
            and btrim(m.raw_text) <> ''
-           and m.raw_text ilike any(%s) escape '\'
+           -- ESCAPE 절은 LIKE 특수 구문에만 있다. ANY(배열)은 연산자 형식이라
+           -- 붙일 수 없다. 기본 이스케이프 문자가 이미 백슬래시라 필요도 없다.
+           and m.raw_text ilike any(%s)
          order by m.captured_at desc, m.id
          limit %s
         """,
