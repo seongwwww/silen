@@ -12,3 +12,8 @@ from zoneinfo import ZoneInfo
 def local_date_for(instant: datetime, time_zone: str) -> str:
     """UTC 시각과 IANA 타임존을 받아 YYYY-MM-DD 로컬 날짜를 반환한다."""
     return instant.astimezone(ZoneInfo(time_zone)).strftime("%Y-%m-%d")
+
+
+def local_hour_for(instant: datetime, time_zone: str) -> int:
+    """UTC 시각을 사용자 로컬 시간대의 0~23시로 바꾼다."""
+    return instant.astimezone(ZoneInfo(time_zone)).hour

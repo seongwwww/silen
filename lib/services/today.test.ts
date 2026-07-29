@@ -116,7 +116,32 @@ describe("buildTodayView", () => {
     expect(view.memories.previews[0]).toBe(
       "아주 긴 오늘 기록은 스무 글자까지만",
     );
-    expect(view.diary).toEqual({ state: "processing" });
+    expect(view.diary).toEqual({
+      state: "processing",
+      message: "오늘 밤 9시에 묶어드릴게요",
+    });
+  });
+
+  it("설정한 시각을 홈의 자동 일기 문구에 넣는다", async () => {
+    const view = await buildTodayView({
+      now: NOW,
+      timeZone: TIME_ZONE,
+      diaryHour: 21,
+      ...ports({
+        memories: [
+          {
+            id: "mem-1",
+            rawText: "오늘 기록",
+            capturedAt: "2026-07-22T02:00:00.000Z",
+          },
+        ],
+      }),
+    });
+
+    expect(view.diary).toEqual({
+      state: "processing",
+      message: "오늘 밤 9시에 묶어드릴게요",
+    });
   });
 
   it("관측 3일째부터 오늘 차이를 보여준다", async () => {
@@ -181,7 +206,7 @@ describe("buildTodayView", () => {
     const view = await buildTodayView({
       now: new Date("2026-07-22T14:00:00.000Z"),
       timeZone: TIME_ZONE,
-      diaryTime: "22:00",
+      diaryHour: 22,
       ...ports({
         memories: [
           {

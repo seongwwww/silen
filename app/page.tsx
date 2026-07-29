@@ -30,16 +30,16 @@ export default async function Home() {
   } = await supabase.auth.getUser();
 
   const userRepository = createUserRepository(supabase);
-  const [timeZone, diaryTime] = user
+  const [timeZone, diaryHour] = user
     ? await Promise.all([
         userRepository.findTimeZone(),
-        userRepository.findDiaryTime(),
+        userRepository.findDiaryHour(),
       ])
-    : ["Asia/Seoul", "22:00"];
+    : (["Asia/Seoul", 21] as const);
   const view = await buildTodayView({
     now: new Date(),
     timeZone,
-    diaryTime,
+    diaryHour,
     memory: user ? createMemoryRepository(supabase) : emptyMemory,
     difference: user
       ? createDifferenceRepository(supabase)

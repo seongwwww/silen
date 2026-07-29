@@ -3,6 +3,7 @@ import { createServerSupabase } from "@/lib/repositories/supabase";
 import { createUserRepository } from "@/lib/repositories/userRepository";
 import { DataDeletionCard } from "./_components/DataDeletionCard";
 import { DataExportCard } from "./_components/DataExportCard";
+import { DiaryHourPicker } from "./_components/DiaryHourPicker";
 import { TonePicker } from "./_components/TonePicker";
 
 export default async function SettingsPage() {
@@ -10,9 +11,12 @@ export default async function SettingsPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const preset = user
-    ? await createUserRepository(supabase).findTonePreset()
-    : "담백";
+  const [preset, diaryHour] = user
+    ? await Promise.all([
+        createUserRepository(supabase).findTonePreset(),
+        createUserRepository(supabase).findDiaryHour(),
+      ])
+    : (["담백", 21] as const);
 
   return (
     <main className="mx-auto max-w-md p-4">
@@ -22,6 +26,12 @@ export default async function SettingsPage() {
       <p className="mt-2 text-xs text-muted-foreground">
         문체만 바뀌어요. 사실은 그대로예요.
       </p>
+      <section className="mt-8 border-t pt-6">
+        <DiaryHourPicker initial={diaryHour} />
+        <p className="mt-2 text-xs text-muted-foreground">
+          기록이 있는 날에만 이 시간이 지나면 일기를 준비해요.
+        </p>
+      </section>
       <DataExportCard />
       <DataDeletionCard />
       <section className="mt-10 border-t pt-6">

@@ -32,7 +32,7 @@ components/common/      # 실은 도메인 공통 컴포넌트
 worker/                 # Python 워커 (차이 탐지·AI 잡)
 worker/src/silen_worker/tasks/        # 큐 소비 잡 진입점(process_pending)
 worker/src/silen_worker/extraction/   # 엔티티 추출 (가드레일·정규화·Vertex Gemini)
-worker/src/silen_worker/cli.py        # 파이프라인 CLI(run-pending·run-daily·run-diary·run-weekly·stats)
+worker/src/silen_worker/cli.py        # 파이프라인 CLI(run-pending·run-scheduled·run-daily·run-diary·run-weekly·stats)
 worker/src/silen_worker/db.py         # 워커 DB 접근(user 스코프 강제)
 fixtures/               # 두 자산이 공유하는 골든 케이스
 evals/entities/         # 엔티티 추출 골든셋 (환각·빈날·조사·병합·4종)
@@ -117,6 +117,9 @@ worker\.venv\Scripts\python.exe evals/diary/run.py
 # 큐 소비 → 엔티티 추출 (실 Vertex 호출·비용)
 worker\.venv\Scripts\python.exe -m silen_worker run-pending
 
+# 사용자 로컬 설정 시각이 지난 오늘 일기 요청을 기존 큐에 멱등 등록
+worker\.venv\Scripts\python.exe -m silen_worker run-scheduled
+
 # 차이 검출 → 서술 (실 Vertex 호출·비용). 기본 대상: 전체 사용자 × 각자 로컬 어제
 worker\.venv\Scripts\python.exe -m silen_worker run-daily
 
@@ -138,6 +141,9 @@ worker\.venv\Scripts\python.exe -m silen_worker run-weekly --user <uuid> --date 
 
 `run-diary`는 사용자의 확인을 기다리지 않는다. `run-daily`가 만든 candidate도
 바로 일기 재료가 되며, [아니에요]로 기각한 차이와 근거가 stale인 차이만 빠진다.
+`run-scheduled`는 기록이 있는 오늘 날짜의 요청만 기존 요청 원장과 `memory_jobs`
+큐에 등록한다. 실제 생성은 기존 `run-pending`이 맡으며, 같은 날 반복 실행해도
+`(user_id, date)` 유니크 제약으로 요청과 일기는 하나만 생긴다.
 `run-weekly`는 첫 활성 메모의 로컬 날짜를 기준으로 완결된 7일 블록만 집계한다.
 매일 실행해도 경계가 아닌 날은 건너뛰며, 같은 블록 재실행은 기존 리포트와
 하이라이트를 멱등 갱신한다.
@@ -163,6 +169,10 @@ Windows 작업 스케줄러 예시 — **아래는 안내이며 등록은 사람
 # 5분마다 큐 소비
 schtasks /create /tn "silen-run-pending" /sc minute /mo 5 ^
   /tr "C:\workspace\silen\worker\.venv\Scripts\python.exe -m silen_worker run-pending"
+
+# 5분마다 사용자별 일기 예약 시각 확인
+schtasks /create /tn "silen-run-scheduled" /sc minute /mo 5 ^
+  /tr "C:\workspace\silen\worker\.venv\Scripts\python.exe -m silen_worker run-scheduled"
 
 # 매일 00:30 차이 검출·서술
 schtasks /create /tn "silen-run-daily" /sc daily /st 00:30 ^

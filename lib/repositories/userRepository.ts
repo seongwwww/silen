@@ -13,13 +13,13 @@ export function createUserRepository(client: SupabaseClient) {
       return (data?.[0]?.timezone as string | undefined) ?? "Asia/Seoul";
     },
 
-    async findDiaryTime(): Promise<string> {
+    async findDiaryHour(): Promise<number> {
       const { data, error } = await client
         .from("users")
-        .select("diary_time")
+        .select("diary_hour")
         .limit(1);
       if (error) throw error;
-      return (data?.[0]?.diary_time as string | undefined) ?? "22:00";
+      return (data?.[0]?.diary_hour as number | undefined) ?? 21;
     },
 
     async findTonePreset(): Promise<TonePreset> {
@@ -35,9 +35,28 @@ export function createUserRepository(client: SupabaseClient) {
     },
 
     async updateTonePreset(preset: TonePreset): Promise<boolean> {
+      const {
+        data: { user },
+      } = await client.auth.getUser();
+      if (!user) return false;
       const { data, error } = await client
         .from("users")
         .update({ style_profile: { preset } })
+        .eq("id", user.id)
+        .select("id");
+      if (error) throw error;
+      return (data?.length ?? 0) > 0;
+    },
+
+    async updateDiaryHour(hour: number): Promise<boolean> {
+      const {
+        data: { user },
+      } = await client.auth.getUser();
+      if (!user) return false;
+      const { data, error } = await client
+        .from("users")
+        .update({ diary_hour: hour })
+        .eq("id", user.id)
         .select("id");
       if (error) throw error;
       return (data?.length ?? 0) > 0;

@@ -3,9 +3,10 @@ import { z } from "zod";
 import { createServerSupabase } from "@/lib/repositories/supabase";
 import { createUserRepository } from "@/lib/repositories/userRepository";
 
-const bodySchema = z.object({
-  tonePreset: z.enum(["담백", "따뜻"]),
-});
+const bodySchema = z.union([
+  z.object({ tonePreset: z.enum(["담백", "따뜻"]) }).strict(),
+  z.object({ diaryHour: z.number().int().min(0).max(23) }).strict(),
+]);
 
 export async function PATCH(request: NextRequest) {
   let parsed;
@@ -32,9 +33,11 @@ export async function PATCH(request: NextRequest) {
       { status: 401 },
     );
   }
-  const ok = await createUserRepository(supabase).updateTonePreset(
-    parsed.tonePreset,
-  );
+  const repository = createUserRepository(supabase);
+  const ok =
+    "tonePreset" in parsed
+      ? await repository.updateTonePreset(parsed.tonePreset)
+      : await repository.updateDiaryHour(parsed.diaryHour);
   if (!ok) {
     return NextResponse.json(
       { error: { code: "not_found", message: "설정을 찾을 수 없습니다" } },

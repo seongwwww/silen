@@ -14,6 +14,7 @@ from silen_worker.db import (
     upsert_entity,
 )
 from silen_worker.extraction.service import LLMExtractor, guardrail
+from silen_worker.diary.service import DiaryWriter
 from silen_worker.queue import (
     QUEUE,
     archive_message,
@@ -31,6 +32,7 @@ def process_pending(
     limit: int = 10,
     extractor: LLMExtractor | None = None,
     only_user_id: str | None = None,
+    diary_writer: DiaryWriter | None = None,
 ) -> list[str]:
     """큐에서 최대 limit개 처리하고 처리한 memory_id를 반환한다.
     extractor는 LLMExtractor 포트. 테스트는 스텁, 프로덕션은 Gemini를 주입한다.
@@ -71,7 +73,16 @@ def process_pending(
                     delete_message(conn, QUEUE, msg_id)
                     continue
                 try:
-                    diary_id = generate_diary(conn, user_id, target_date)
+                    diary_id = (
+                        generate_diary(conn, user_id, target_date)
+                        if diary_writer is None
+                        else generate_diary(
+                            conn,
+                            user_id,
+                            target_date,
+                            writer=diary_writer,
+                        )
+                    )
                     if diary_id is None:
                         fail_diary_generation_request(
                             conn,

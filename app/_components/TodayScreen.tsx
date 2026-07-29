@@ -122,7 +122,7 @@ export function TodayScreen({
           )}
           {view.diary.state === "processing" && (
             <p className="text-[15px] text-muted-foreground">
-              오늘 기록을 묶을 준비를 하고 있어요
+              {view.diary.message}
             </p>
           )}
           {view.diary.state === "ready" && (

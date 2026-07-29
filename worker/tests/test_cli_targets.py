@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from silen_worker.cli import (
     build_parser,
+    build_scheduled_targets,
     build_targets,
     build_weekly_targets,
     local_yesterday,
@@ -49,12 +50,13 @@ def test_없는_user면_빈_목록():
     assert build_targets(_USERS, user="없음", date_iso=None, now=now) == []
 
 
-def test_파서가_다섯_명령을_안다():
+def test_파서가_여섯_명령을_안다():
     parser = build_parser()
     assert parser.parse_args(["run-pending"]).command == "run-pending"
     assert parser.parse_args(["run-daily"]).command == "run-daily"
     assert parser.parse_args(["run-diary"]).command == "run-diary"
     assert parser.parse_args(["run-weekly"]).command == "run-weekly"
+    assert parser.parse_args(["run-scheduled"]).command == "run-scheduled"
     assert parser.parse_args(["stats"]).command == "stats"
 
 
@@ -88,6 +90,16 @@ def test_weekly_target도_user와_date로_좁힐_수_있다():
         now=now,
     )
     assert targets == [("u2", "2026-07-08")]
+
+
+def test_스케줄은_각자_로컬_일기_시각이_지난_사용자만_고른다():
+    now = datetime(2026, 7, 29, 12, 5, tzinfo=timezone.utc)
+    users = [
+        ("seoul", "Asia/Seoul", 21),
+        ("new-york", "America/New_York", 21),
+    ]
+
+    assert build_scheduled_targets(users, now) == [("seoul", "2026-07-29")]
 
 
 def test_run_diary_도움말은_확정이_관문이라고_말하지_않는다():
