@@ -127,3 +127,124 @@ def test_스코프가_없으면_읽은_메시지를_모두_처리한다(monkeypa
 
     assert processed == ["memory-a", "memory-b"]
     assert deleted == [1, 2]
+
+
+def test_일기_생성_요청을_분기해_완료_처리한다(monkeypatch):
+    class _Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    messages = [
+        (
+            7,
+            1,
+            {
+                "job_type": "diary",
+                "request_id": "request-a",
+                "user_id": "user-a",
+                "date": "2026-07-28",
+            },
+        ),
+    ]
+    deleted: list[int] = []
+    completed: list[tuple[str, str, str]] = []
+
+    monkeypatch.setattr(process_task, "connect", _Connection)
+    monkeypatch.setattr(
+        process_task,
+        "read_messages",
+        lambda conn, queue, vt, qty: messages,
+    )
+    monkeypatch.setattr(
+        process_task,
+        "claim_diary_generation_request",
+        lambda conn, request_id, user_id: True,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        process_task,
+        "generate_diary",
+        lambda conn, user_id, date_iso, writer=None: "diary-a",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        process_task,
+        "complete_diary_generation_request",
+        lambda conn, request_id, user_id, diary_id: completed.append(
+            (request_id, user_id, diary_id),
+        ),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        process_task,
+        "delete_message",
+        lambda conn, queue, msg_id: deleted.append(msg_id),
+    )
+
+    processed = process_pending(limit=10, extractor=_NoEntities())
+
+    assert processed == ["request-a"]
+    assert completed == [("request-a", "user-a", "diary-a")]
+    assert deleted == [7]
+
+
+def test_일기_생성_재시도_상한이면_실패로_남기고_보관한다(monkeypatch):
+    class _Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    messages = [
+        (
+            8,
+            process_task.MAX_READS,
+            {
+                "job_type": "diary",
+                "request_id": "request-b",
+                "user_id": "user-b",
+                "date": "2026-07-28",
+            },
+        ),
+    ]
+    failed: list[tuple[str, str, str, bool]] = []
+    archived: list[int] = []
+
+    monkeypatch.setattr(process_task, "connect", _Connection)
+    monkeypatch.setattr(
+        process_task,
+        "read_messages",
+        lambda conn, queue, vt, qty: messages,
+    )
+    monkeypatch.setattr(
+        process_task,
+        "claim_diary_generation_request",
+        lambda conn, request_id, user_id: True,
+    )
+
+    def raise_generation_error(conn, user_id, date_iso):
+        raise RuntimeError("private detail")
+
+    monkeypatch.setattr(process_task, "generate_diary", raise_generation_error)
+    monkeypatch.setattr(
+        process_task,
+        "fail_diary_generation_request",
+        lambda conn, request_id, user_id, code, terminal: failed.append(
+            (request_id, user_id, code, terminal),
+        ),
+    )
+    monkeypatch.setattr(
+        process_task,
+        "archive_message",
+        lambda conn, queue, msg_id: archived.append(msg_id),
+    )
+
+    processed = process_pending(limit=10, extractor=_NoEntities())
+
+    assert processed == []
+    assert failed == [("request-b", "user-b", "RuntimeError", True)]
+    assert archived == [8]

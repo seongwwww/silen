@@ -78,6 +78,95 @@ class OccurrenceRow:
     timezone: str
 
 
+@dataclass
+class ActiveMemoryRow:
+    memory_id: str
+    captured_at: datetime
+    timezone: str
+
+
+@dataclass
+class EmotionRow:
+    memory_id: str
+    captured_at: datetime
+    timezone: str
+    valence: float
+
+
+def fetch_window_active_memories(
+    conn: psycopg.Connection,
+    user_id: str,
+    target_date: date,
+    window_days: int,
+) -> list[ActiveMemoryRow]:
+    """오늘과 앞선 ``window_days``를 덮는 활성 메모를 반환한다.
+
+    엔티티가 추출되지 않은 메모도 활성 기록일 분모와 오늘 부재 근거에 포함한다.
+    """
+    lower = datetime.combine(
+        target_date - timedelta(days=window_days + 2),
+        datetime.min.time(),
+        timezone.utc,
+    )
+    upper = datetime.combine(
+        target_date + timedelta(days=2),
+        datetime.min.time(),
+        timezone.utc,
+    )
+    rows = conn.execute(
+        """
+        select m.id::text, m.captured_at, u.timezone
+        from public.memories m
+        join public.users u on u.id = m.user_id
+        where m.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+          and m.captured_at >= %s
+          and m.captured_at < %s
+        order by m.captured_at
+        """,
+        (user_id, lower, upper),
+    ).fetchall()
+    return [ActiveMemoryRow(r[0], r[1], r[2]) for r in rows]
+
+
+def fetch_window_emotions(
+    conn: psycopg.Connection,
+    user_id: str,
+    target_date: date,
+    window_days: int,
+) -> list[EmotionRow]:
+    """창 안의 잠기지 않은 본인 감정 값만 반환한다."""
+    lower = datetime.combine(
+        target_date - timedelta(days=window_days + 2),
+        datetime.min.time(),
+        timezone.utc,
+    )
+    upper = datetime.combine(
+        target_date + timedelta(days=2),
+        datetime.min.time(),
+        timezone.utc,
+    )
+    rows = conn.execute(
+        """
+        select m.id::text, m.captured_at, u.timezone, e.valence
+        from public.emotions e
+        join public.memories m on m.id = e.memory_id
+        join public.users u on u.id = m.user_id
+        where m.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+          and e.confirmed_by_user = true
+          and e.valence is not null
+          and m.captured_at >= %s
+          and m.captured_at < %s
+        order by m.captured_at
+        """,
+        (user_id, lower, upper),
+    ).fetchall()
+    return [EmotionRow(r[0], r[1], r[2], float(r[3])) for r in rows]
+
+
 def fetch_window_occurrences(
     conn: psycopg.Connection, user_id: str, target_date: date, window_days: int
 ) -> list[OccurrenceRow]:
@@ -107,6 +196,36 @@ def fetch_window_occurrences(
         (user_id, lower, upper, user_id),
     ).fetchall()
     return [OccurrenceRow(r[0], r[1], r[2], r[3], r[4]) for r in rows]
+
+
+def fetch_latest_prior_occurrences(
+    conn: psycopg.Connection,
+    user_id: str,
+    entity_ids: list[str],
+    target_date: date,
+) -> dict[str, tuple[datetime, str, str]]:
+    """대상 로컬 날짜보다 앞선 마지막 활성 언급과 근거 ID를 반환한다."""
+    if not entity_ids:
+        return {}
+    rows = conn.execute(
+        """
+        select distinct on (me.entity_id)
+               me.entity_id::text, m.captured_at, u.timezone, m.id::text
+        from public.memory_entities me
+        join public.memories m on m.id = me.memory_id
+        join public.users u on u.id = m.user_id
+        join public.entities e on e.id = me.entity_id
+        where m.user_id = %s
+          and e.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+          and me.entity_id = any(%s::uuid[])
+          and (m.captured_at at time zone u.timezone)::date < %s
+        order by me.entity_id, m.captured_at desc
+        """,
+        (user_id, user_id, entity_ids, target_date),
+    ).fetchall()
+    return {r[0]: (r[1], r[2], r[3]) for r in rows}
 
 
 def fetch_earliest_occurrence(
@@ -143,6 +262,7 @@ def upsert_difference(
     dimension: str,
     description: str,
     confidence: float,
+    category: str = "오늘의다른점",
 ) -> str:
     """(user_id, date, entity_id, detection_method) 부분 자연키로 멱등 upsert.
     재실행 시 근거를 되살린다(evidence_state=intact)."""
@@ -151,18 +271,92 @@ def upsert_difference(
         insert into public.differences
           (user_id, date, entity_id, dimension, description,
            detection_method, confidence, category, status, evidence_state)
-        values (%s, %s, %s, %s, %s, %s, %s, '오늘의다른점', 'candidate', 'intact')
+        values (%s, %s, %s, %s, %s, %s, %s, %s, 'candidate', 'intact')
         on conflict (user_id, date, entity_id, detection_method) where entity_id is not null
         do update set description = excluded.description,
                       confidence = excluded.confidence,
                       dimension = excluded.dimension,
+                      category = excluded.category,
                       evidence_state = 'intact',
                       staled_at = null
         returning id::text
         """,
-        (user_id, target_date, entity_id, dimension, description, detection_method, confidence),
+        (
+            user_id,
+            target_date,
+            entity_id,
+            dimension,
+            description,
+            detection_method,
+            confidence,
+            category,
+        ),
     ).fetchone()
     return row[0]
+
+
+def upsert_dimension_difference(
+    conn: psycopg.Connection,
+    user_id: str,
+    target_date: date,
+    dimension: str,
+    detection_method: str,
+    category: str,
+    description: str,
+    confidence: float,
+) -> str:
+    """엔티티 없는 차원을 부분 자연키로 멱등 upsert한다."""
+    row = conn.execute(
+        """
+        insert into public.differences
+          (user_id, date, entity_id, dimension, description,
+           detection_method, confidence, category, status, evidence_state)
+        values (%s, %s, null, %s, %s, %s, %s, %s, 'candidate', 'intact')
+        on conflict (user_id, date, dimension, detection_method)
+          where entity_id is null
+            and dimension = 'emotion'
+            and detection_method = 'zscore'
+        do update set description = excluded.description,
+                      confidence = excluded.confidence,
+                      category = excluded.category,
+                      evidence_state = 'intact',
+                      staled_at = null
+        returning id::text
+        """,
+        (
+            user_id,
+            target_date,
+            dimension,
+            description,
+            detection_method,
+            confidence,
+            category,
+        ),
+    ).fetchone()
+    return row[0]
+
+
+def fetch_dismiss_counts(
+    conn: psycopg.Connection,
+    user_id: str,
+    since_date: date,
+    target_date: date,
+) -> dict[tuple[str | None, str, str], int]:
+    """대상일까지 최근 intact 기각 횟수를 자연키별로 반환한다."""
+    rows = conn.execute(
+        """
+        select entity_id::text, dimension, detection_method, count(*)::int
+        from public.differences
+        where user_id = %s
+          and date >= %s
+          and date <= %s
+          and status = 'dismissed'
+          and evidence_state = 'intact'
+        group by entity_id, dimension, detection_method
+        """,
+        (user_id, since_date, target_date),
+    ).fetchall()
+    return {(row[0], row[1], row[2]): row[3] for row in rows}
 
 
 def link_difference_evidence(
@@ -176,42 +370,142 @@ def link_difference_evidence(
     )
 
 
+def replace_difference_evidence(
+    conn: psycopg.Connection,
+    user_id: str,
+    difference_id: str,
+    memory_ids: list[str],
+) -> None:
+    """본인 차이의 근거를 본인 활성 메모 집합으로만 교체한다."""
+    conn.execute(
+        """
+        delete from public.difference_evidence de
+        using public.differences d
+        where de.difference_id = d.id
+          and d.id = %s
+          and d.user_id = %s
+        """,
+        (difference_id, user_id),
+    )
+    for memory_id in dict.fromkeys(memory_ids):
+        conn.execute(
+            """
+            insert into public.difference_evidence (difference_id, memory_id)
+            select d.id, m.id
+            from public.differences d
+            join public.memories m on m.id = %s
+            where d.id = %s
+              and d.user_id = %s
+              and m.user_id = %s
+              and m.deleted_at is null
+              and m.is_locked = false
+            on conflict (difference_id, memory_id) do nothing
+            """,
+            (memory_id, difference_id, user_id, user_id),
+        )
+
+
+def reconcile_daily_differences(
+    conn: psycopg.Connection,
+    user_id: str,
+    target_date: date,
+    keep_ids: list[str],
+) -> None:
+    """재탐지 결과에서 밀린 당일 차이를 stale 처리한다.
+
+    사용자의 confirmed/dismissed 판단은 바꾸지 않고 근거 유효성만 갱신한다.
+    """
+    conn.execute(
+        """
+        update public.differences
+        set evidence_state = 'stale', staled_at = now()
+        where user_id = %s
+          and date = %s
+          and evidence_state = 'intact'
+          and not (id = any(%s::uuid[]))
+        """,
+        (user_id, target_date, keep_ids),
+    )
+
+
 @dataclass
 class DifferenceFacts:
     difference_id: str
     user_id: str
-    entity_id: str
-    entity_name: str
-    entity_type: str
+    entity_id: str | None
+    entity_name: str | None
+    entity_type: str | None
+    dimension: str
     detection_method: str
     description: str
     date_iso: str
+    evidence_ids: tuple[str, ...]
 
 
 def fetch_difference_for_narration(
     conn: psycopg.Connection, difference_id: str
 ) -> DifferenceFacts | None:
-    """서술 재료를 엔티티 조인으로 읽는다. 엔티티 차이(entity_id 있음)이고
-    근거가 살아있는(intact) 것만 대상. 서술 대상은 status=candidate로 한정한다
-    (스펙 §1) — 사용자가 '아니에요'(dismissed) 한 차이는 서술하지 않는다.
-    저장은 여기서 읽은 user_id로 귀속한다."""
+    """소유자와 활성 근거가 일치하는 카드용 차이만 서술 재료로 읽는다."""
     row = conn.execute(
         """
         select d.id::text, d.user_id::text, d.entity_id::text,
-               e.name, e.entity_type, d.detection_method,
-               coalesce(d.description, ''), d.date::text
+               e.name, e.entity_type, d.dimension, d.detection_method,
+               coalesce(d.description, ''), d.date::text,
+               array(
+                 select de.memory_id::text
+                 from public.difference_evidence de
+                 join public.memories m on m.id = de.memory_id
+                 where de.difference_id = d.id
+                   and m.user_id = d.user_id
+                   and m.deleted_at is null
+                   and m.is_locked = false
+                 order by de.memory_id
+               )
         from public.differences d
-        join public.entities e on e.id = d.entity_id
+        left join public.entities e
+          on e.id = d.entity_id and e.user_id = d.user_id
         where d.id = %s
-          and d.entity_id is not null
           and d.evidence_state = 'intact'
           and d.status = 'candidate'
+          and d.detection_method <> 'first_occurrence'
+          and (d.entity_id is null or e.id is not null)
+          and exists (
+            select 1
+            from public.difference_evidence de
+            join public.memories m on m.id = de.memory_id
+            where de.difference_id = d.id
+              and m.user_id = d.user_id
+              and m.deleted_at is null
+              and m.is_locked = false
+          )
+          and not exists (
+            select 1
+            from public.difference_evidence de
+            join public.memories m on m.id = de.memory_id
+            where de.difference_id = d.id
+              and (
+                m.user_id <> d.user_id
+                or m.deleted_at is not null
+                or m.is_locked = true
+              )
+          )
         """,
         (difference_id,),
     ).fetchone()
     if row is None:
         return None
-    return DifferenceFacts(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7])
+    return DifferenceFacts(
+        row[0],
+        row[1],
+        row[2],
+        row[3],
+        row[4],
+        row[5],
+        row[6],
+        row[7],
+        row[8],
+        tuple(row[9]),
+    )
 
 
 def upsert_narration(
@@ -276,35 +570,40 @@ def fetch_diary_memories(
 
 
 @dataclass
-class ConfirmedDifference:
+class UsableDifference:
     difference_id: str
     headline: str
     detection_method: str
-    entity_type: str
-    entity_name: str
+    entity_type: str | None
+    entity_name: str | None
 
 
-def fetch_confirmed_differences(
+def fetch_usable_differences(
     conn: psycopg.Connection, user_id: str, target_date: date
-) -> list[ConfirmedDifference]:
-    """그날 confirmed(intact) 차이. detection_method로 본문용(freq_shift)과
-    recap용(first_occurrence)을 가르고, entity_name은 가드레일에 쓴다."""
+) -> list[UsableDifference]:
+    """그날 기각되지 않은 intact 차이.
+
+    candidate와 confirmed는 사용하고 dismissed·stale은 제외한다. user_id와 날짜를
+    함께 강제해 특권 워커의 교차 사용자·교차 날짜 조회를 막는다.
+    """
     rows = conn.execute(
         """
         select d.id::text, coalesce(n.headline, d.description, ''),
                d.detection_method, e.entity_type, e.name
         from public.differences d
-        join public.entities e on e.id = d.entity_id
-        left join public.difference_narrations n on n.difference_id = d.id
+        left join public.entities e
+          on e.id = d.entity_id and e.user_id = d.user_id
+        left join public.difference_narrations n
+          on n.difference_id = d.id and n.user_id = d.user_id
         where d.user_id = %s
           and d.date = %s
-          and d.status = 'confirmed'
+          and d.status <> 'dismissed'
           and d.evidence_state = 'intact'
         order by d.id
         """,
         (user_id, target_date),
     ).fetchall()
-    return [ConfirmedDifference(r[0], r[1], r[2], r[3], r[4]) for r in rows]
+    return [UsableDifference(r[0], r[1], r[2], r[3], r[4]) for r in rows]
 
 
 def fetch_existing_diary(
@@ -399,6 +698,244 @@ def replace_diary_sources(
         )
 
 
+@dataclass(frozen=True)
+class WeeklyMemoryRow:
+    memory_id: str
+    local_date: date
+
+
+@dataclass(frozen=True)
+class WeeklyOccurrenceRow:
+    entity_id: str
+    entity_type: str
+    normalized_name: str
+    memory_id: str
+    local_date: date
+
+
+@dataclass(frozen=True)
+class WeeklyFirstOccurrenceRow:
+    difference_id: str
+    local_date: date
+    entity_id: str
+    normalized_name: str
+
+
+@dataclass(frozen=True)
+class WeeklyEmotionRow:
+    memory_id: str
+    local_date: date
+    valence: float
+
+
+@dataclass(frozen=True)
+class WeeklyEmotionDifferenceRow:
+    difference_id: str
+    local_date: date
+
+
+def fetch_weekly_anchor(conn: psycopg.Connection, user_id: str) -> date | None:
+    """Return the owner's first active memory date in their own timezone."""
+
+    row = conn.execute(
+        """
+        select min((m.captured_at at time zone u.timezone)::date)
+        from public.memories m
+        join public.users u on u.id = m.user_id
+        where m.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+        """,
+        (user_id,),
+    ).fetchone()
+    return row[0] if row and row[0] is not None else None
+
+
+def fetch_weekly_memories(
+    conn: psycopg.Connection,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+) -> list[WeeklyMemoryRow]:
+    rows = conn.execute(
+        """
+        select m.id::text, (m.captured_at at time zone u.timezone)::date
+        from public.memories m
+        join public.users u on u.id = m.user_id
+        where m.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+          and (m.captured_at at time zone u.timezone)::date between %s and %s
+        order by (m.captured_at at time zone u.timezone)::date, m.id
+        """,
+        (user_id, start_date, end_date),
+    ).fetchall()
+    return [WeeklyMemoryRow(row[0], row[1]) for row in rows]
+
+
+def fetch_weekly_occurrences(
+    conn: psycopg.Connection,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+) -> list[WeeklyOccurrenceRow]:
+    rows = conn.execute(
+        """
+        select e.id::text, e.entity_type, e.normalized_name, m.id::text,
+               (m.captured_at at time zone u.timezone)::date
+        from public.memory_entities me
+        join public.memories m on m.id = me.memory_id
+        join public.entities e on e.id = me.entity_id
+        join public.users u on u.id = m.user_id
+        where m.user_id = %s
+          and e.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+          and (m.captured_at at time zone u.timezone)::date between %s and %s
+        order by (m.captured_at at time zone u.timezone)::date, m.id, e.id
+        """,
+        (user_id, user_id, start_date, end_date),
+    ).fetchall()
+    return [WeeklyOccurrenceRow(*row) for row in rows]
+
+
+def fetch_weekly_first_occurrences(
+    conn: psycopg.Connection,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+) -> list[WeeklyFirstOccurrenceRow]:
+    rows = conn.execute(
+        """
+        select d.id::text, d.date, e.id::text, e.normalized_name
+        from public.differences d
+        join public.entities e
+          on e.id = d.entity_id and e.user_id = d.user_id
+        where d.user_id = %s
+          and d.date between %s and %s
+          and d.detection_method = 'first_occurrence'
+          and d.status <> 'dismissed'
+          and d.evidence_state = 'intact'
+        order by d.date, e.normalized_name, e.id, d.id
+        """,
+        (user_id, start_date, end_date),
+    ).fetchall()
+    return [WeeklyFirstOccurrenceRow(*row) for row in rows]
+
+
+def fetch_weekly_emotions(
+    conn: psycopg.Connection,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+) -> list[WeeklyEmotionRow]:
+    rows = conn.execute(
+        """
+        select m.id::text, (m.captured_at at time zone u.timezone)::date,
+               e.valence
+        from public.emotions e
+        join public.memories m on m.id = e.memory_id
+        join public.users u on u.id = m.user_id
+        where m.user_id = %s
+          and m.deleted_at is null
+          and m.is_locked = false
+          and e.confirmed_by_user = true
+          and e.valence is not null
+          and (m.captured_at at time zone u.timezone)::date between %s and %s
+        order by (m.captured_at at time zone u.timezone)::date, m.id
+        """,
+        (user_id, start_date, end_date),
+    ).fetchall()
+    return [WeeklyEmotionRow(row[0], row[1], float(row[2])) for row in rows]
+
+
+def fetch_weekly_existing_emotion_differences(
+    conn: psycopg.Connection,
+    user_id: str,
+    start_date: date,
+    end_date: date,
+) -> list[WeeklyEmotionDifferenceRow]:
+    rows = conn.execute(
+        """
+        select id::text, date
+        from public.differences
+        where user_id = %s
+          and date between %s and %s
+          and entity_id is null
+          and dimension = 'emotion'
+          and detection_method = 'zscore'
+          and status <> 'dismissed'
+          and evidence_state = 'intact'
+        order by date, id
+        """,
+        (user_id, start_date, end_date),
+    ).fetchall()
+    return [WeeklyEmotionDifferenceRow(*row) for row in rows]
+
+
+def upsert_weekly_report(
+    conn: psycopg.Connection,
+    user_id: str,
+    week_start: date,
+) -> str:
+    row = conn.execute(
+        """
+        insert into public.weekly_reports (user_id, week)
+        values (%s, %s)
+        on conflict (user_id, week) do update set week = excluded.week
+        returning id::text
+        """,
+        (user_id, week_start.isoformat()),
+    ).fetchone()
+    return row[0]
+
+
+def replace_weekly_highlights(
+    conn: psycopg.Connection,
+    user_id: str,
+    report_id: str,
+    highlights: list[tuple[str, str, int]],
+) -> None:
+    """Atomically replace highlights, linking only same-owner differences."""
+
+    with conn.transaction():
+        conn.execute(
+            """
+            delete from public.weekly_report_highlights h
+            using public.weekly_reports w
+            where h.report_id = w.id
+              and w.id = %s
+              and w.user_id = %s
+            """,
+            (report_id, user_id),
+        )
+        for difference_id, slot, rank in highlights:
+            conn.execute(
+                """
+                insert into public.weekly_report_highlights
+                  (report_id, difference_id, slot, rank)
+                select w.id, d.id, %s, %s
+                from public.weekly_reports w
+                join public.differences d on d.id = %s
+                where w.id = %s
+                  and w.user_id = %s
+                  and d.user_id = %s
+                  and d.status <> 'dismissed'
+                  and d.evidence_state = 'intact'
+                on conflict (report_id, difference_id) do update
+                  set slot = excluded.slot, rank = excluded.rank
+                """,
+                (
+                    slot,
+                    rank,
+                    difference_id,
+                    report_id,
+                    user_id,
+                    user_id,
+                ),
+            )
+
+
 def fetch_active_users(conn: psycopg.Connection) -> list[tuple[str, str]]:
     """모든 사용자를 (user_id, timezone)으로 반환한다. 배치 대상 열거용.
     사용자별 '하루' 경계 계산에 timezone이 필요하다(time.local_date_for)."""
@@ -426,4 +963,74 @@ def insert_diary_question(
         "insert into public.diary_sections (diary_id, difference_id, section_type, content) "
         "values (%s, %s, '질문', %s)",
         (diary_id, difference_id, content),
+    )
+
+
+def claim_diary_generation_request(
+    conn: psycopg.Connection,
+    request_id: str,
+    user_id: str,
+) -> bool:
+    """본인 요청을 processing으로 전환한다. 오래 멈춘 claim은 재시도할 수 있다."""
+    row = conn.execute(
+        """
+        update public.diary_generation_requests
+           set status = 'processing',
+               attempts = attempts + 1,
+               started_at = now(),
+               error_code = null
+         where id = %s
+           and user_id = %s
+           and (
+             status = 'queued'
+             or (status = 'processing' and started_at < now() - interval '60 seconds')
+           )
+        returning id
+        """,
+        (request_id, user_id),
+    ).fetchone()
+    return row is not None
+
+
+def complete_diary_generation_request(
+    conn: psycopg.Connection,
+    request_id: str,
+    user_id: str,
+    diary_id: str,
+) -> None:
+    """일기 저장까지 끝난 뒤에만 done으로 바꾼다."""
+    conn.execute(
+        """
+        update public.diary_generation_requests
+           set status = 'done',
+               diary_id = %s,
+               error_code = null,
+               completed_at = now()
+         where id = %s
+           and user_id = %s
+           and status = 'processing'
+        """,
+        (diary_id, request_id, user_id),
+    )
+
+
+def fail_diary_generation_request(
+    conn: psycopg.Connection,
+    request_id: str,
+    user_id: str,
+    error_code: str,
+    terminal: bool,
+) -> None:
+    """재시도 가능 실패는 queued, 상한 도달 실패는 failed로 기록한다."""
+    conn.execute(
+        """
+        update public.diary_generation_requests
+           set status = case when %s then 'failed' else 'queued' end,
+               error_code = %s,
+               completed_at = case when %s then now() else null end
+         where id = %s
+           and user_id = %s
+           and status = 'processing'
+        """,
+        (terminal, error_code, terminal, request_id, user_id),
     )

@@ -154,6 +154,25 @@ describe("diaryRepository", () => {
     expect(await repo.findLatest()).toBeNull();
   });
 
+  it("저장된 재생성 요청과 톤 주문을 조회한다", async () => {
+    await db.query("delete from public.diaries where user_id = $1", [bob]);
+    await db.query("delete from public.memories where user_id = $1", [bob]);
+    const diaryId = await seedDiary(bob, { memo: "주문 조회용" });
+    await db.query(
+      "update public.diaries set tone_instruction = $1, " +
+        "regenerate_requested_at = now() where id = $2",
+      ["짧게", diaryId],
+    );
+    const repo = createDiaryRepository(
+      await clientFor("diary-bob@example.com"),
+    );
+
+    const view = await repo.findLatest();
+
+    expect(view?.toneInstruction).toBe("짧게");
+    expect(view?.regenerateRequested).toBe(true);
+  });
+
   it("일기 재료가 될 메모가 있는지 판정한다", async () => {
     await db.query("delete from public.memories where user_id = $1", [bob]);
     const repo = createDiaryRepository(

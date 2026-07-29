@@ -29,6 +29,7 @@ pythonpath = ["src", "."]
 testpaths = ["tests"]
 markers = [
     "integration: 로컬 Supabase 스택이 떠 있어야 하는 테스트",
+    "destructive: 격리 fixture의 실제 삭제를 수행하며 사람 승인 뒤에만 실행",
 ]
 
 [tool.ruff]

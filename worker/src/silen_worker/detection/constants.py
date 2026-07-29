@@ -1,9 +1,10 @@
-"""탐지 튜닝 상수 한곳. 골든 단위 테스트로 검증·튜닝한다(spec §3.3)."""
+"""탐지 튜닝 상수 한곳. 골든 단위 테스트로 검증·튜닝한다."""
 
-WINDOW_DAYS = 28          # freq_shift 관찰 창
-STREAK_MIN = 2            # 연속 등장 최소 일수
-REEMERGENCE_GAP_MIN = 7   # 재등장으로 볼 최소 공백(일)
+WINDOW_DAYS = 28
+REEMERGENCE_GAP_MIN = 7
 
-FIRST_OCCURRENCE_CONFIDENCE = 1.0
-STREAK_CONFIDENCE_SPAN = 6.0        # (streak_len-1)/SPAN, 7일=1.0
-REEMERGENCE_CONFIDENCE_SPAN = float(WINDOW_DAYS)  # gap/WINDOW, 28일=1.0
+SURPRISAL_MIN_BITS = 2.0
+DAILY_DIFFERENCE_LIMIT = 3
+MIN_ACTIVE_HISTORY_DAYS = 2
+DISMISS_EXCLUDE_COUNT = 3
+DISMISS_WINDOW_DAYS = 28

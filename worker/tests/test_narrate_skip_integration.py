@@ -29,7 +29,7 @@ def _candidate_difference(conn, user_id):
         "values (%s, 'thing', '김밥', '김밥') returning id::text",
         (user_id,),
     ).fetchone()[0]
-    return conn.execute(
+    difference_id = conn.execute(
         """
         insert into public.differences
           (user_id, date, entity_id, dimension, description, detection_method,
@@ -40,6 +40,13 @@ def _candidate_difference(conn, user_id):
         """,
         (user_id, date.today(), ent),
     ).fetchone()[0]
+    memory_id = seed_memory(conn, user_id, "서술 근거")
+    conn.execute(
+        "insert into public.difference_evidence (difference_id, memory_id) "
+        "values (%s, %s)",
+        (difference_id, memory_id),
+    )
+    return difference_id
 
 
 @pytest.mark.integration

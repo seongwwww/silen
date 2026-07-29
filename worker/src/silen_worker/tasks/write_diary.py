@@ -1,4 +1,4 @@
-"""일기 생성 경계. 그날 메모+확정 차이를 읽어 일기를 쓰고 가드레일을 통과하면 저장한다.
+"""일기 생성 경계. 그날 메모+기각하지 않은 차이로 일기를 쓰고 가드레일을 통과하면 저장한다.
 하루 1건 멱등·자동 재생성 금지(force는 draft만). diary_time 스케줄 배선은 범위 밖.
 """
 
@@ -8,7 +8,7 @@ import psycopg
 
 from silen_worker.db import (
     clear_regenerate_request,
-    fetch_confirmed_differences,
+    fetch_usable_differences,
     fetch_diary_memories,
     fetch_existing_diary,
     fetch_tone_preset,
@@ -59,17 +59,25 @@ def generate_diary(
     if not memories:
         return None  # 빈 날 — 억지 생성 안 함
 
-    confirmed = fetch_confirmed_differences(conn, user_id, target)
+    usable = fetch_usable_differences(conn, user_id, target)
     # 본문엔 '이야기가 되는' 반복만 녹인다. '처음 등장'은 나열이 자연스러워
     # recap 목록이 담당한다(본문에 넣으면 "~한 것도 처음이다"가 반복된다).
-    body_diffs = [c for c in confirmed if c.detection_method == "freq_shift"]
+    body_diffs = [
+        c for c in usable if c.detection_method in {"freq_shift", "zscore"}
+    ]
 
     facts = DiaryInput(
         date_iso=target_date_iso,
         user_id=user_id,
         memories=memories,
         differences=[
-            DiaryDifference(c.difference_id, c.headline, c.entity_name)
+            DiaryDifference(
+                c.difference_id,
+                c.headline,
+                c.entity_name,
+                c.entity_type,
+                c.detection_method,
+            )
             for c in body_diffs
         ],
         tone_preset=fetch_tone_preset(conn, user_id),
@@ -92,13 +100,13 @@ def generate_diary(
         # 경쟁 조건: status 확인 후 upsert 전에 유저가 편집 → 보호(덮지 않음).
         # 섹션·출처도 건드리지 않고 기존 일기 id를 그대로 반환한다.
         return existing[0] if existing is not None else None
-    # recap 목록은 그날 확정된 차이 전부다(본문에 녹은 것만이 아니라).
-    recap = [(c.difference_id, c.headline) for c in confirmed]
+    # recap 목록은 그날 기각하지 않은 intact 차이 전부다(본문용만이 아니라).
+    recap = [(c.difference_id, c.headline) for c in usable]
     replace_diary_sections(conn, diary_id, diary.one_line, diary.body, recap)
     replace_diary_sources(conn, diary_id, diary.used_memory_ids)
 
     # 꼬리 질문은 하루 한 번, 대상이 있을 때만(prompts-draft §6 "기본은 묻지 않음").
-    target = pick_question_target(confirmed)
+    target = pick_question_target(usable)
     if target is not None:
         if asker is None:
             from silen_worker.diary.gemini import GeminiQuestionWriter

@@ -50,6 +50,31 @@ def test_엔티티_삭제시_entity_id는_null이_되고_difference는_남는다
 
 
 @pytest.mark.integration
+def test_같은_날_같은_방법의_엔티티_둘을_삭제해도_차이는_보존된다(conn):
+    user = seed_user(conn)
+    try:
+        first_entity = _entity(conn, user, "민수")
+        second_entity = _entity(conn, user, "지은")
+        first_diff = _insert_diff(conn, user, first_entity)
+        second_diff = _insert_diff(conn, user, second_entity)
+
+        conn.execute(
+            "delete from public.entities where id = any(%s::uuid[])",
+            ([first_entity, second_entity],),
+        )
+
+        rows = conn.execute(
+            "select id::text, entity_id from public.differences "
+            "where id = any(%s::uuid[]) order by id",
+            ([first_diff, second_diff],),
+        ).fetchall()
+        assert len(rows) == 2
+        assert all(row[1] is None for row in rows)
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
 def test_entity_id_null인_행은_자연키_제약을_받지_않는다(conn):
     user = seed_user(conn)
     try:

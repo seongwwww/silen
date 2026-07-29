@@ -6,7 +6,7 @@
 
 from typing import Protocol
 
-from silen_worker.db import ConfirmedDifference
+from silen_worker.db import UsableDifference
 
 # 사람·장소·활동이 이야기가 된다. 사물은 묻지 않는다.
 QUESTION_TARGET_TYPES = ("person", "place", "activity")
@@ -25,10 +25,17 @@ FORBIDDEN_QUESTION_PHRASES = (
 
 
 def pick_question_target(
-    confirmed: list[ConfirmedDifference],
-) -> ConfirmedDifference | None:
+    usable: list[UsableDifference],
+) -> UsableDifference | None:
     """질문 대상 하나. 처음 등장한 사람 > 장소 > 활동 순. 없으면 None(묻지 않는다)."""
-    firsts = [c for c in confirmed if c.detection_method == "first_occurrence"]
+    firsts = [
+        c
+        for c in usable
+        if c.detection_method == "first_occurrence"
+        and c.entity_type in QUESTION_TARGET_TYPES
+        and isinstance(c.entity_name, str)
+        and bool(c.entity_name.strip())
+    ]
     for entity_type in QUESTION_TARGET_TYPES:
         for candidate in firsts:
             if candidate.entity_type == entity_type:
@@ -36,7 +43,13 @@ def pick_question_target(
     return None
 
 
-def build_question_prompt(target: ConfirmedDifference) -> str:
+def build_question_prompt(target: UsableDifference) -> str:
+    if (
+        target.entity_type not in QUESTION_TARGET_TYPES
+        or not isinstance(target.entity_name, str)
+        or not target.entity_name.strip()
+    ):
+        raise ValueError("question target requires an entity")
     return (
         "너는 일기 앱 '실은'의 질문 담당이다. 오늘 처음 등장한 것에 대해\n"
         "짧은 질문 하나를 만들어라.\n"
@@ -49,14 +62,18 @@ def build_question_prompt(target: ConfirmedDifference) -> str:
     )
 
 
-def question_guardrail(raw: dict, target: ConfirmedDifference) -> str | None:
+def question_guardrail(raw: dict, target: UsableDifference) -> str | None:
     """통과한 질문 문자열, 아니면 None(저장하지 않는다)."""
     if not isinstance(raw, dict):
         return None
     question = str(raw.get("question") or "").strip()
     if not question or len(question) > QUESTION_MAX:
         return None
-    if target.entity_name not in question:
+    if (
+        not isinstance(target.entity_name, str)
+        or not target.entity_name.strip()
+        or target.entity_name not in question
+    ):
         return None
     if any(p in question for p in FORBIDDEN_QUESTION_PHRASES):
         return None
@@ -64,6 +81,6 @@ def question_guardrail(raw: dict, target: ConfirmedDifference) -> str | None:
 
 
 class QuestionWriter(Protocol):
-    def ask(self, target: ConfirmedDifference) -> dict:
+    def ask(self, target: UsableDifference) -> dict:
         """{"question": "..."} 원시 출력. 가드레일 전."""
         ...

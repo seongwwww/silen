@@ -26,15 +26,17 @@ const eslintConfig = defineConfig([
               //   도메인 질의 자체는 여전히 서비스를 거친다.
               // - diaryRepository.ts: 일기 보기 경계가 세션 client와 조립하는 팩토리.
               //   /review와 구조가 같은 RLS 스코프 읽기 전용 화면이다.
-              // 주의: 읽기 화면이 늘 때마다 예외를 추가하면 규칙이 닳는다. 다음에
-              // 또 추가하게 되면 목록 대신 "*Repository.ts 팩토리는 허용"처럼
-              // 기준 자체를 다시 세울 것.
+              // 주간 리포트까지 6개가 되어 기준을 다시 검토했다. 합성 루트의
+              // repository 팩토리 import는 필요하지만 wildcard는 저장소가 아닌
+              // 구현까지 새어 나갈 수 있어, 좁은 exact allowlist를 유지한다.
+              // 다음 읽기 화면은 서비스 facade 도입을 먼저 검토할 것.
               except: [
                 "./supabase.ts",
                 "./memoryRepository.ts",
                 "./differenceRepository.ts",
                 "./diaryRepository.ts",
                 "./userRepository.ts",
+                "./weeklyRepository.ts",
               ],
               message:
                 "계층 건너뛰기 금지(backend.md): 경계에서 저장소를 직접 호출하지 말고 서비스를 거친다.",
@@ -74,6 +76,11 @@ const eslintConfig = defineConfig([
     // (.gitignore를 따르게 하는 방식은 worker/src·tests가 추적 파일이라 안 통한다.)
     "worker/**",
     "evals/**",
+    // supabase start가 만드는 런타임 생성물. 컨테이너용 번들이 들어 있어
+    // 스택을 띄운 개발자에게서만 lint가 깨진다(.gitignore 대상이지만
+    // eslint는 .gitignore를 보지 않는다).
+    "supabase/.temp/**",
+    "supabase/.branches/**",
   ]),
 ]);
 

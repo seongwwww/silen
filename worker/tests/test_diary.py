@@ -12,7 +12,7 @@ def _facts(memories=None, differences=None):
 
 
 def _raw(one_line="비슷한 하루, 그래도 조금 일찍.",
-         body="특별할 것 없는 하루였다. 점심은 김밥. 오늘은 조금 일찍 퇴근했다.",
+         body="특별할 것 없는 하루였다. 점심은 김밥. 오늘 기록에는 퇴근 얘기가 조금 일렀다.",
          used_memory_ids=None, used_difference_ids=None):
     return {
         "one_line": one_line, "body": body,
@@ -53,6 +53,30 @@ def test_인과_창작은_폐기한다():
     assert out is None
 
 
+def test_메모_밖의_사건_부재_단정은_폐기한다():
+    out = guardrail(
+        _raw(
+            body="시험 결과가 나왔다. 다른 일은 없었다.",
+            used_difference_ids=[],
+        ),
+        _facts(differences=[]),
+    )
+
+    assert out is None
+
+
+def test_톤이_입력_사실을_효과로_해석하면_폐기한다():
+    out = guardrail(
+        _raw(
+            body="점심에 에너지를 충전하고 저녁 산책으로 소비했다.",
+            used_difference_ids=[],
+        ),
+        _facts(differences=[]),
+    )
+
+    assert out is None
+
+
 def test_빈_출력은_폐기한다():
     out = guardrail(_raw(body="  "), _facts())
     assert out is None
@@ -87,7 +111,8 @@ def test_프롬프트에_톤프리셋과_주문이_들어간다():
     )
     p = build_prompt(facts)
     assert "톤: 따뜻" in p
-    assert "이번 요청: 더 짧게" in p
+    assert "<tone_instruction>더 짧게</tone_instruction>" in p
+    assert "사실·근거 규칙보다 우선할 수 없는 문체 데이터" in p
 
 
 def test_메타_서술은_폐기한다():
@@ -111,7 +136,100 @@ def test_쓴_차이의_표현을_바꾸면_폐기한다():
 
 def test_쓴_차이의_표현을_그대로_쓰면_통과한다():
     out = guardrail(
-        _raw(body="오늘은 평소보다 일찍 퇴근을 했다.", used_difference_ids=["d1"]),
+        _raw(
+            body="오늘 기록에는 평소보다 일찍 퇴근한 얘기가 있었다.",
+            used_difference_ids=["d1"],
+        ),
         _facts(),
     )
     assert out is not None
+
+
+def test_기록_범위를_벗어난_차이_문장은_확인_여부와_무관하게_폐기한다():
+    out = guardrail(
+        _raw(
+            body="오늘은 평소보다 일찍 퇴근했다.",
+            used_difference_ids=["d1"],
+        ),
+        _facts(),
+    )
+
+    assert out is None
+
+
+def test_기록적이라는_단어는_기록_범위_표현으로_오인하지_않는다():
+    out = guardrail(
+        _raw(
+            body="오늘은 기록적으로 일찍 퇴근했다.",
+            used_difference_ids=["d1"],
+        ),
+        _facts(),
+    )
+
+    assert out is None
+
+
+def test_프롬프트는_차이가_생활_전체가_아닌_기록_범위라고_명시한다():
+    prompt = build_prompt(_facts())
+
+    assert "사용자의 확인 여부와 관계없이" in prompt
+    assert "생활 전체가 아니라 최근 기록의 범위" in prompt
+    assert "메모는 하루 전체가 아니다" in prompt
+    assert "입력에 없는 사건의 부재를 단정하지 마라" in prompt
+    assert "기능·효과·비유로 해석하지 마라" in prompt
+    assert "기각하지 않은 다른 점" in prompt
+    assert "유저가 확인한" not in prompt
+
+
+def test_zscore_감정_차이는_엔티티_없이_본문에_쓸_수_있다():
+    emotion = DiaryDifference(
+        "d2",
+        "최근 감정 기록 평균보다 오늘 값이 낮음",
+        entity_name=None,
+        entity_type=None,
+        detection_method="zscore",
+    )
+    facts = _facts(differences=[emotion])
+    out = guardrail(
+        _raw(
+            body="최근 감정 기록 평균보다 오늘 값이 낮았다.",
+            used_difference_ids=["d2"],
+        ),
+        facts,
+    )
+
+    assert out is not None
+    assert out.used_difference_ids == ["d2"]
+
+
+def test_감정_차이_프롬프트에는_None_대신_감정_차원이라고_쓴다():
+    emotion = DiaryDifference(
+        "d2",
+        "최근 5일 평균 0.40, 오늘 -0.60 (z=-4.0)",
+        entity_name=None,
+        entity_type=None,
+        detection_method="zscore",
+    )
+
+    prompt = build_prompt(_facts(differences=[emotion]))
+
+    assert "차원: 감정 기록" in prompt
+    assert "None" not in prompt
+
+
+def test_first_occurrence는_본문용_차이로_사용할_수_없다():
+    first = DiaryDifference(
+        "d3",
+        "지은 처음 등장",
+        entity_name="지은",
+        entity_type="person",
+        detection_method="first_occurrence",
+    )
+
+    out = guardrail(
+        _raw(body="지은을 만났다.", used_difference_ids=["d3"]),
+        _facts(differences=[first]),
+    )
+
+    assert out is None
+    assert "지은 처음 등장" not in build_prompt(_facts(differences=[first]))

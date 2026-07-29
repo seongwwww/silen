@@ -1,6 +1,11 @@
 from datetime import datetime, timezone
 
-from silen_worker.cli import build_parser, build_targets, local_yesterday
+from silen_worker.cli import (
+    build_parser,
+    build_targets,
+    build_weekly_targets,
+    local_yesterday,
+)
 
 _USERS = [("u1", "Asia/Seoul"), ("u2", "America/New_York")]
 
@@ -44,11 +49,13 @@ def test_없는_user면_빈_목록():
     assert build_targets(_USERS, user="없음", date_iso=None, now=now) == []
 
 
-def test_파서가_세_명령을_안다():
+def test_파서가_다섯_명령을_안다():
     parser = build_parser()
     assert parser.parse_args(["run-pending"]).command == "run-pending"
     assert parser.parse_args(["run-daily"]).command == "run-daily"
     assert parser.parse_args(["run-diary"]).command == "run-diary"
+    assert parser.parse_args(["run-weekly"]).command == "run-weekly"
+    assert parser.parse_args(["stats"]).command == "stats"
 
 
 def test_파서_기본값과_옵션():
@@ -64,3 +71,27 @@ def test_파서_기본값과_옵션():
 
     args = parser.parse_args(["run-pending"])
     assert args.limit == 10 and args.max_batches == 50
+
+
+def test_weekly_target은_각_사용자의_로컬_오늘이다():
+    now = datetime(2026, 7, 27, 16, 0, tzinfo=timezone.utc)
+    targets = build_weekly_targets(_USERS, user=None, date_iso=None, now=now)
+    assert targets == [("u1", "2026-07-28"), ("u2", "2026-07-27")]
+
+
+def test_weekly_target도_user와_date로_좁힐_수_있다():
+    now = datetime(2026, 7, 27, 16, 0, tzinfo=timezone.utc)
+    targets = build_weekly_targets(
+        _USERS,
+        user="u2",
+        date_iso="2026-07-08",
+        now=now,
+    )
+    assert targets == [("u2", "2026-07-08")]
+
+
+def test_run_diary_도움말은_확정이_관문이라고_말하지_않는다():
+    help_text = build_parser().format_help()
+
+    assert "기각하지 않은 차이 반영" in help_text
+    assert "확정 차이 반영" not in help_text

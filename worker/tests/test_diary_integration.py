@@ -37,6 +37,42 @@ def _today_iso():
     return date.today().isoformat()
 
 
+def _seed_difference(
+    conn,
+    user,
+    *,
+    status="candidate",
+    evidence_state="intact",
+    method="freq_shift",
+    name="김밥",
+    entity_type="thing",
+):
+    ent = conn.execute(
+        "insert into public.entities (user_id, entity_type, name, normalized_name) "
+        "values (%s, %s, %s, %s) returning id::text",
+        (user, entity_type, name, name),
+    ).fetchone()[0]
+    return conn.execute(
+        """
+        insert into public.differences
+          (user_id, date, entity_id, dimension, description, detection_method,
+           confidence, category, status, evidence_state)
+        values (%s, %s, %s, %s, '최근 기록에서 자주 언급됨', %s,
+                3.0, '오늘의다른점', %s, %s)
+        returning id::text
+        """,
+        (
+            user,
+            date.today(),
+            ent,
+            entity_type,
+            method,
+            status,
+            evidence_state,
+        ),
+    ).fetchone()[0]
+
+
 @pytest.mark.integration
 def test_일기가_저장된다(conn):
     user = seed_user(conn)
@@ -181,6 +217,78 @@ def test_가드레일_탈락은_저장안됨(conn):
 
 
 @pytest.mark.integration
+def test_candidate_차이도_일기_본문과_recap에_반영된다(conn):
+    user = seed_user(conn)
+    try:
+        seed_memory(conn, user, "점심 김밥")
+        difference_id = _seed_difference(conn, user, status="candidate")
+        writer = RecordingWriter(
+            {
+                "one_line": "비슷한 하루.",
+                "body": "오늘 기록에는 김밥 언급이 평소보다 자주 있었다.",
+            }
+        )
+
+        diary_id = generate_diary(conn, user, _today_iso(), writer=writer)
+
+        assert diary_id is not None
+        assert writer.facts is not None
+        assert [item.difference_id for item in writer.facts.differences] == [
+            difference_id
+        ]
+        recap = conn.execute(
+            "select difference_id::text from public.diary_sections "
+            "where diary_id = %s and section_type = '다른점'",
+            (diary_id,),
+        ).fetchall()
+        assert recap == [(difference_id,)]
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_dismissed_차이는_일기_본문과_recap에서_제외된다(conn):
+    user = seed_user(conn)
+    try:
+        seed_memory(conn, user, "점심 김밥")
+        _seed_difference(conn, user, status="dismissed")
+        writer = RecordingWriter(_GOOD)
+
+        diary_id = generate_diary(conn, user, _today_iso(), writer=writer)
+
+        assert diary_id is not None
+        assert writer.facts is not None
+        assert writer.facts.differences == []
+        recap_count = conn.execute(
+            "select count(*)::int from public.diary_sections "
+            "where diary_id = %s and section_type = '다른점'",
+            (diary_id,),
+        ).fetchone()[0]
+        assert recap_count == 0
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_candidate_차이를_생활_사실로_승격하면_일기를_저장하지_않는다(conn):
+    user = seed_user(conn)
+    try:
+        seed_memory(conn, user, "점심 김밥")
+        _seed_difference(conn, user, status="candidate")
+        writer = StubWriter(
+            {
+                "one_line": "김밥을 자주 먹은 날.",
+                "body": "오늘은 김밥을 평소보다 자주 먹었다.",
+            }
+        )
+
+        assert generate_diary(conn, user, _today_iso(), writer=writer) is None
+        assert fetch_existing_diary(conn, user, date.today()) is None
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
 def test_일기_삭제시_섹션출처_연쇄삭제(conn):
     user = seed_user(conn)
     try:
@@ -199,7 +307,7 @@ def test_처음등장은_본문재료가_아니고_recap에만_남는다(conn):
     user = seed_user(conn)
     try:
         seed_memory(conn, user, "점심 김밥")
-        # first_occurrence 확정 차이 하나
+        # first_occurrence candidate도 opt-out 일기의 recap 재료다.
         ent = conn.execute(
             "insert into public.entities (user_id, entity_type, name, normalized_name) "
             "values (%s, 'thing', '김밥', '김밥') returning id::text", (user,)
@@ -208,7 +316,7 @@ def test_처음등장은_본문재료가_아니고_recap에만_남는다(conn):
             "insert into public.differences (user_id, date, entity_id, dimension, description, "
             "detection_method, confidence, category, status, evidence_state) "
             "values (%s, %s, %s, 'thing', '처음 등장', 'first_occurrence', 1.0, "
-            "'오늘의다른점', 'confirmed', 'intact')",
+            "'오늘의다른점', 'candidate', 'intact')",
             (user, date.today(), ent),
         )
 
@@ -260,7 +368,7 @@ def test_처음_등장한_사람이_있으면_질문이_생긴다(conn):
             "insert into public.differences (user_id, date, entity_id, dimension, description, "
             "detection_method, confidence, category, status, evidence_state) "
             "values (%s, %s, %s, 'person', '처음 등장', 'first_occurrence', 1.0, "
-            "'오늘의다른점', 'confirmed', 'intact')",
+            "'오늘의다른점', 'candidate', 'intact')",
             (user, date.today(), ent),
         )
         did = generate_diary(

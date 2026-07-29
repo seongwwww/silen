@@ -29,7 +29,12 @@ export function DiaryArticle({ diary }: { diary: DiaryView }) {
         body={diary.body}
         status={diary.status}
       />
-      <RegenerateButton id={diary.id} status={diary.status} />
+      <RegenerateButton
+        id={diary.id}
+        status={diary.status}
+        initialToneInstruction={diary.toneInstruction}
+        initialRequested={diary.regenerateRequested}
+      />
 
       {diary.differences.length > 0 && (
         <section className="mt-4">

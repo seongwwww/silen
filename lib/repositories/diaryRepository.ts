@@ -14,7 +14,7 @@ type SourceRow = {
 // 타입을 잃으면 supabase-js의 select 타입 추론이 깨져 row.diary_sections가
 // GenericStringError가 된다(tsc에서만 드러남).
 const DIARY_SELECT =
-  "id, date, status, generated_text, edited_text, diary_sections(id, section_type, content), diary_sources(memories(raw_text, is_locked, deleted_at))" as const;
+  "id, date, status, generated_text, edited_text, tone_instruction, regenerate_requested_at, diary_sections(id, section_type, content), diary_sources(memories(raw_text, is_locked, deleted_at))" as const;
 
 /** 조회 행 하나를 표시용 뷰로 옮긴다. findLatest·findByDate가 공유한다. */
 function toDiaryView(row: {
@@ -23,6 +23,8 @@ function toDiaryView(row: {
   status: unknown;
   generated_text: unknown;
   edited_text: unknown;
+  tone_instruction: unknown;
+  regenerate_requested_at: unknown;
   diary_sections: unknown;
   diary_sources: unknown;
 }): DiaryView {
@@ -66,6 +68,8 @@ function toDiaryView(row: {
       const found = sections.find((section) => section.section_type === "질문");
       return found ? { sectionId: found.id, text: found.content } : null;
     })(),
+    toneInstruction: (row.tone_instruction as string | null) ?? null,
+    regenerateRequested: row.regenerate_requested_at != null,
   };
 }
 
@@ -73,6 +77,33 @@ function toDiaryView(row: {
  * 소유권을 강제하므로 service_role을 쓰지 않는다. */
 export function createDiaryRepository(client: SupabaseClient) {
   return {
+    /** 인증 세션의 사용자 로컬 날짜에 대한 생성 작업을 요청한다.
+     * RPC는 auth.uid()로 소유자를 정하고 중복 요청을 멱등 처리한다. */
+    async enqueue(date: string): Promise<void> {
+      const { error } = await client.rpc("request_diary_generation", {
+        target_date: date,
+      });
+      if (error) throw error;
+    },
+
+    async findGenerationRequest(date: string): Promise<{
+      status: "queued" | "processing" | "done" | "failed";
+    } | null> {
+      const { data, error } = await client
+        .from("diary_generation_requests")
+        .select("status")
+        .eq("date", date)
+        .limit(1);
+      if (error) throw error;
+      const status = data?.[0]?.status as
+        | "queued"
+        | "processing"
+        | "done"
+        | "failed"
+        | undefined;
+      return status ? { status } : null;
+    },
+
     /** 가장 최근 일기 하나. run-diary는 '어제'를 대상으로 돌기 때문에
      * 오늘 날짜로 찾지 않고 최신 하나를 가져온다. */
     async findLatest(): Promise<DiaryView | null> {

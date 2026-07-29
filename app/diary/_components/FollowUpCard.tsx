@@ -14,7 +14,7 @@ export function FollowUpCard({
     <section className="mt-6">
       <p className="mb-2 text-xs text-muted-foreground">덧붙이고 싶다면</p>
       <Link
-        href={`/?section=${sectionId}`}
+        href={`/record?section=${sectionId}`}
         className="block min-h-11 rounded-lg border px-3 py-2 text-[15px]"
       >
         {text}

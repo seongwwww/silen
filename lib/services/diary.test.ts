@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   assertValidDiaryTransition,
+  QUICK_TONE_ORDERS,
+  TONE_INSTRUCTION_MAX_LENGTH,
   InvalidDiaryTransitionError,
   type DiaryStatus,
+  type QuickToneOrder,
 } from "./diary";
 
 const allowed: [DiaryStatus, DiaryStatus][] = [
@@ -28,5 +31,17 @@ describe("일기 상태 전이", () => {
     expect(() => assertValidDiaryTransition(from, to)).toThrow(
       InvalidDiaryTransitionError,
     );
+  });
+});
+
+describe("일회성 톤 주문", () => {
+  it("빠른 주문은 짧게와 유머만 제공한다", () => {
+    const expected: QuickToneOrder[] = ["짧게", "유머"];
+    expect(QUICK_TONE_ORDERS).toEqual(expected);
+  });
+
+  it("자유 주문 길이 상한을 한곳에서 제공한다", () => {
+    expect(TONE_INSTRUCTION_MAX_LENGTH).toBeGreaterThanOrEqual(100);
+    expect(TONE_INSTRUCTION_MAX_LENGTH).toBeLessThanOrEqual(200);
   });
 });

@@ -1,88 +1,174 @@
-"""결정적 차이 규칙. DB·LLM·프레임워크를 모른다 — 테스트를 여기 집중(spec §5.2).
+"""결정적 엔티티 차이 규칙과 일일 카드 랭킹."""
 
-입력: 오늘 포함 창 안의 엔티티별 등장 날짜 집합 + 전체 이력 존재 여부.
-출력: DetectedDifference 목록. 오늘 등장한 엔티티만, 정확히 하나로 분류(상호 배타).
-"""
-
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
+from typing import Protocol, TypeVar
 
 from silen_worker.detection.constants import (
-    FIRST_OCCURRENCE_CONFIDENCE,
-    REEMERGENCE_CONFIDENCE_SPAN,
+    DAILY_DIFFERENCE_LIMIT,
+    DISMISS_EXCLUDE_COUNT,
+    MIN_ACTIVE_HISTORY_DAYS,
     REEMERGENCE_GAP_MIN,
-    STREAK_CONFIDENCE_SPAN,
-    STREAK_MIN,
-    WINDOW_DAYS,
+    SURPRISAL_MIN_BITS,
 )
+from silen_worker.detection.surprisal import surprisal_bits
 
 
 @dataclass(frozen=True)
 class EntityWindow:
     entity_id: str
     entity_type: str
-    dates: frozenset          # 창[target-(WINDOW-1)..target] 안의 로컬 날짜, target 포함 가정
-    occurred_before: bool     # target 이전 전체 이력에 등장한 적 있는가
+    dates: frozenset[date]
+    occurred_before: bool
+    last_prior_date: date | None = None
 
 
 @dataclass(frozen=True)
 class DetectedDifference:
     entity_id: str
     entity_type: str
-    method: str               # 'first_occurrence' | 'freq_shift'
-    description: str          # 통계 근거(사람에게 직접 노출 안 함)
+    method: str
+    description: str
     confidence: float
 
-
-def _streak_len(dates: frozenset, target: date) -> int:
-    """target에서 끝나는 연속 등장 일수."""
-    n = 0
-    d = target
-    while d in dates:
-        n += 1
-        d -= timedelta(days=1)
-    return n
+    @property
+    def dimension(self) -> str:
+        return self.entity_type
 
 
-def detect_differences(target_date: date, windows: list[EntityWindow]) -> list[DetectedDifference]:
+class RankableDifference(Protocol):
+    entity_id: str | None
+    method: str
+    confidence: float
+
+    @property
+    def dimension(self) -> str: ...
+
+
+RankableT = TypeVar("RankableT", bound=RankableDifference)
+
+
+def detect_differences(
+    target_date: date,
+    windows: list[EntityWindow],
+    *,
+    active_history_dates: frozenset[date],
+    today_is_active: bool,
+) -> list[DetectedDifference]:
+    """활성 기록일을 분모로 부재와 오랜만의 재등장을 찾는다.
+
+    오늘 기록이 없으면 생활의 부재로 오인하지 않도록 아무것도 만들지 않는다.
+    연속 등장은 주간 리포트의 책임이라 여기서는 다루지 않는다.
+    """
+    if not today_is_active:
+        return []
+
+    active_history = frozenset(
+        day for day in active_history_dates if day < target_date
+    )
+    active_days = len(active_history)
     out: list[DetectedDifference] = []
-    for w in windows:
-        if target_date not in w.dates:
-            continue  # 오늘 등장한 엔티티만 분류
 
-        if not w.occurred_before:
+    for window in windows:
+        present_today = target_date in window.dates
+        history_dates = frozenset(
+            day for day in window.dates if day in active_history
+        )
+        seen_days = len(history_dates)
+
+        if present_today and not window.occurred_before:
             out.append(
                 DetectedDifference(
-                    w.entity_id, w.entity_type, "first_occurrence",
-                    # 영문 enum이 LLM에 그대로 가면 "이 thing이 기록된 것도 처음"
-                    # 같은 메타 서술을 낳는다. 사람 말로 둔다.
-                    "처음 등장", FIRST_OCCURRENCE_CONFIDENCE,
+                    window.entity_id,
+                    window.entity_type,
+                    "first_occurrence",
+                    "처음 등장",
+                    surprisal_bits(active_days, seen_days, True),
                 )
             )
             continue
 
-        # freq_shift: 이력 있음. 창 안 반복 신호가 있을 때만.
-        streak = _streak_len(w.dates, target_date)
-        if streak >= STREAK_MIN:
-            conf = min(1.0, (streak - 1) / STREAK_CONFIDENCE_SPAN)
+        last_prior = window.last_prior_date
+        if last_prior is None and history_dates:
+            last_prior = max(history_dates)
+
+        if not present_today:
+            if seen_days < 2 or last_prior is None:
+                continue
+            gap = (target_date - last_prior).days
             out.append(
                 DetectedDifference(
-                    w.entity_id, w.entity_type, "freq_shift",
-                    f"최근 {streak}일 연속 등장", conf,
+                    window.entity_id,
+                    window.entity_type,
+                    "freq_shift",
+                    (
+                        f"기록을 남긴 {active_days}일 중 {seen_days}일에 있었음, "
+                        f"오늘 기록에는 없음, 마지막은 {gap}일 전"
+                    ),
+                    surprisal_bits(active_days, seen_days, False),
                 )
             )
             continue
 
-        prior = [d for d in w.dates if d < target_date]
-        if prior:
-            gap = (target_date - max(prior)).days
-            if gap >= REEMERGENCE_GAP_MIN:
-                conf = min(1.0, gap / REEMERGENCE_CONFIDENCE_SPAN)
-                out.append(
-                    DetectedDifference(
-                        w.entity_id, w.entity_type, "freq_shift",
-                        f"{gap}일 만에 재등장(최근 {WINDOW_DAYS}일 내)", conf,
-                    )
+        if (
+            window.occurred_before
+            and last_prior is not None
+            and (target_date - last_prior).days >= REEMERGENCE_GAP_MIN
+        ):
+            gap = (target_date - last_prior).days
+            out.append(
+                DetectedDifference(
+                    window.entity_id,
+                    window.entity_type,
+                    "freq_shift",
+                    (
+                        f"{gap}일 만에 재등장"
+                        f"(기록을 남긴 {active_days}일 중 {seen_days}일에 있었음)"
+                    ),
+                    surprisal_bits(active_days, seen_days, True),
                 )
-        # 그 외(산발적) → 차이 없음(오탐 억제)
+            )
+
     return out
+
+
+def rank_differences(
+    candidates: list[RankableT],
+    dismiss_counts: Mapping[tuple[str | None, str, str], int],
+    *,
+    active_history_days: int,
+) -> list[RankableT]:
+    """놀라움과 최근 기각 이력으로 오늘 노출할 최대 3건을 고른다."""
+    if active_history_days < MIN_ACTIVE_HISTORY_DAYS:
+        return []
+
+    ranked: list[tuple[float, RankableT]] = []
+    for candidate in candidates:
+        if candidate.method == "first_occurrence":
+            continue
+        if candidate.confidence < SURPRISAL_MIN_BITS:
+            continue
+        dismissed = dismiss_counts.get(
+            (
+                candidate.entity_id,
+                candidate.dimension,
+                candidate.method,
+            ),
+            0,
+        )
+        if dismissed >= DISMISS_EXCLUDE_COUNT:
+            continue
+        ranked.append(
+            (candidate.confidence / (1 + dismissed), candidate)
+        )
+
+    ranked.sort(
+        key=lambda item: (
+            -item[0],
+            item[1].entity_id or "",
+            item[1].dimension,
+            item[1].method,
+        )
+    )
+    return [item[1] for item in ranked[:DAILY_DIFFERENCE_LIMIT]]

@@ -81,10 +81,15 @@ Supabase CLI에는 down 마이그레이션 개념이 없다. `database.md`가 �
 
 - 워커가 `detect_day(user_id, date)`로 그날 언급된 엔티티를 통계 규칙으로 분류해
   `differences(status=candidate)`를 채운다. **탐지=통계, LLM 없음.**
-- 규칙 2종: first_occurrence(전체 이력 첫 등장), freq_shift(28일 창 연속 streak /
-  7일+ 공백 후 재등장). 산발적 등장·빈 날은 0건(억지 생성 안 함).
+- 규칙은 first_occurrence(전체 이력 첫 등장), freq_shift(연속·재등장),
+  absence(평소 기록되던 엔티티의 **기록상 부재**), 감정 valence z-score다.
+- 달력 경과일이 아니라 과거 활성 기록일을 기준으로 놀라움(bits)을 계산하고,
+  기각 학습을 반영해 하루 최대 3개만 서술한다. 빈 날에는 부재를 만들지 않는다.
+- first_occurrence는 저장하되 일일 카드 랭킹·서술에서는 제외하고 일기의
+  "오늘 처음" 목록에서만 사용한다.
 - 하루 경계는 사용자 로컬 자정(users.timezone + time.local_date_for).
-- (user,date,entity,method) 부분 unique로 멱등. 스케줄 배선은 다음 기능.
+- 엔티티 차이는 `(user,date,entity,method)`, 감정축은
+  `(user,date,dimension,method)` 부분 unique로 멱등 upsert한다.
 
 ## 차이 서술(narration)
 
@@ -96,17 +101,35 @@ Supabase CLI에는 down 마이그레이션 개념이 없다. `database.md`가 �
 
 ## 일기 생성(diary)
 
-- 워커가 `generate_diary(user_id, date)`로 그날 메모(raw_text)+confirmed 차이를
-  담백한 하루 일기로 엮어 `diaries`(하루 1건, unique)+`diary_sections`(오늘의한문장·
-  본문·다른점)+`diary_sources`(메모 근거)에 저장한다.
+- 워커가 `generate_diary(user_id, date)`로 그날 메모(raw_text)와
+  **기각하지 않은 intact 차이**(candidate·confirmed)를 담백한 하루 일기로 엮어
+  `diaries`(하루 1건, unique)+`diary_sections`(오늘의한문장·본문·다른점)+
+  `diary_sources`(메모 근거)에 저장한다. dismissed·stale은 제외한다.
 - 사용자 설정의 기본 톤(담백·따뜻)과 일기별 1회 톤 주문을 프롬프트에 반영하되,
   문체만 바꾸고 사실·근거 가드레일은 그대로 적용한다.
 - **하루 1건 멱등·자동 재생성 금지.** 사용자가 남긴 재생성 요청만 상태와 무관하게
   새 초안으로 바꾸고 편집본을 비운 뒤 요청을 소비한다. 요청 없는 force는 draft만 갱신한다.
-- 빈 날(메모 0)은 일기를 만들지 않는다. 가드레일이 근거 정합(used⊆입력)·조언/인과를
-  검사해 통과분만 저장. 스키마 변경 없음(기존 테이블 재사용).
-- 본문엔 `freq_shift`(반복·재등장)만 녹인다. `first_occurrence`(처음 등장)는
-  나열이 자연스러워 `다른점` 섹션(= 화면의 "오늘 처음")이 담당한다.
+- 빈 날(메모 0)은 일기를 만들지 않는다. 가드레일이 근거 정합(used⊆입력)·조언/인과와
+  **기록 범위 표현**을 검사해 통과분만 저장한다. 차이를 생활 전체의 사실로 승격한
+  출력은 status와 관계없이 폐기한다.
+- 본문엔 `freq_shift`(반복·재등장)와 `zscore`(감정 기록 변화)를 녹인다.
+  `first_occurrence`(처음 등장)는 `다른점` 섹션(= 화면의 "오늘 처음")이 담당한다.
 - 꼬리 질문은 하루 최대 1건(`section_type='질문'`). 처음 등장한 사람>장소>활동
   중 하나에만 묻고, 대상이 없으면 묻지 않는다. 답변은 따로 저장하지 않는다 —
   사용자가 남기는 새 기록이 곧 답이다.
+
+## 주간 리포트
+
+- `run-weekly`가 사용자 첫 활성 기록일을 기준으로 막 끝난 7일 블록만 집계한다.
+- 가장 많이 기록한 것·이번 블록의 첫 등장·감정 차이의 세 슬롯을
+  `weekly_report_highlights`에 저장한다. 모든 하이라이트는 본인
+  `difference_id`와 intact 근거를 가져야 한다.
+- 같은 블록 재실행은 기존 리포트와 슬롯을 멱등 갱신한다.
+
+## 내보내기·전체 삭제
+
+- `/api/export`는 세션 사용자 그래프를 JSON으로 내려주며 사진 바이너리·OCR·
+  전사 본문은 포함하지 않는다. 모든 하위 행은 본인 부모 ID로 다시 제한한다.
+- 전체 삭제 요청 RPC는 `auth.uid()`를 대상 ID로 고정한다. 실제 삭제 워커는
+  Storage → 리포트 → 일기 → 차이/파생 → 원본 순서로 재개 가능하게 처리하고
+  마지막에 DB·Storage 잔존을 검증한다. 계정과 삭제 원장은 유지한다.

@@ -9,23 +9,21 @@
 
 ## 현재 활성 작업 (Active Work Order)
 
-**목표:** 와이어프레임 7화면과 핵심 탐지 루프를
-`docs/superpowers/plans/2026-07-28-mvp-full-build.md` 순서로 구현한다.
+**목표:** `docs/superpowers/plans/2026-07-28-mvp-full-build.md`의 Phase 0~6을
+검증 게이트까지 닫고 `feat/mvp-shell`을 main 병합 가능한 상태로 만든다.
 
-**성격:** **v2 설계 승인 완료, Phase -1 구현·검증 완료.** 현재
-`fix/test-isolation` 변경은 아직 커밋하지 않았다.
+**성격:** Phase -1은 `main`의 `d9a18ff`에 병합됐다. `feat/mvp-shell`에서
+Phase 0~6과 실제 삭제·Vertex 검증에서 발견한 보강까지 구현·커밋·검증했다.
+마스터 계획의 구현 게이트는 모두 닫혔다.
 
-**왜:** 기반 파이프라인과 일기 루프는 완료됐지만 화면 간 이동이 없고, 홈은 발견
-중심이 아니며, 현재 detector는 first occurrence·반복만 다룬다. 와이어프레임의
-주간 리포트·회고·데이터 제어 화면도 아직 없다.
+**왜:** 화면과 기능이 존재하는 것만으로 삭제 완전성·감정축 멱등성과 모델 품질이
+검증되지는 않는다. 코드 완료를 MVP 완료로 과장하지 않고 남은 게이트를 명시한다.
 
 ### 다음 시작점
 
-1. `fix/test-isolation` 변경 리뷰
-2. 사용자 요청 시 커밋 → `main`에 `merge --no-ff`
-3. `feat/mvp-shell`에서 Phase 0~1 시작
-4. 이후 detector → diary opt-out → weekly → recall → data controls를
-   **각각 짧은 브랜치**로 진행
+1. production 전 신규 마이그레이션 2건 staging dry-run
+2. 사용자 요청 시 main 위 rebase → `merge --no-ff` → push
+3. 별도 베타 운영 계획으로 야간 스케줄러·알림·PWA·계정 연결 진행
 
 ### v2 검토에서 바로잡은 결정
 
@@ -39,6 +37,10 @@
 - 담백·따뜻은 기본 프리셋, 짧게·유머는 1회 재생성 주문이다.
 - 삭제 요청은 앱 service role이 아니라 security-definer RPC로 만든다.
 - 야간 스케줄러·잡 상태·알림·PWA·계정 연결은 화면 구현 뒤의 베타 운영 게이트다.
+- 추가 요청으로 수동 일기 생성에 필요한 **durable 잡 상태만** 먼저 구현했다.
+  `Daily Wrap`은 새 테이블 산출물이 아니라 완성된 일기의 도착 상태다.
+- 시간만으로 “하루가 끝났다”고 단정하지 않고 “오늘을 정리할 시간이에요”라고 한다.
+- `/demo`는 프론트 목 데이터만 쓰며 실제 API·사용자 데이터를 건드리지 않는다.
 
 ### 실행 방식
 
@@ -51,21 +53,29 @@
 
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
 
-- **진행:** v2 설계 승인 후 `fix/test-isolation` Phase -1 구현·검증 완료.
-  전역 사용자 삭제·큐 purge·Mailpit 전체 삭제를 제거했고, 사용자별 cleanup과
-  큐 claim 단계의 `user_id` 필터를 추가했다. 남의 큐 메시지는 생존뿐 아니라
-  `read_ct`·`vt`도 바뀌지 않는다.
-- **현재 변경:** 위 설계·계획·상태 문서와 Phase -1 코드/테스트가 모두
-  **미커밋** 상태다. `.claude/orchestration/`, `.claude/settings.local.json`은
-  기존 사용자/도구 파일이므로 건드리지 않는다.
-- **검증:** 프론트 단위 **84**, 통합 **53**, 워커 **137**, lint, typecheck,
-  ruff, build 통과. 통합 테스트 전후 DB 8지표
-  (`users/auth_users/memories/diaries/queue/archive/deletions/storage`)와 Mailpit
-  메시지 수가 모두 동일했다
-  (`5/5/2/0/0/0/1/4`, Mailpit `1`). 실 Vertex eval은 변경 범위 밖이며
-  기존 **6/6**, 명시 승인 없이 재실행하지 않았다.
-- **다음:** 사용자 요청 시 Phase -1 커밋·병합 → `feat/mvp-shell` Phase 0~1.
-- **막힘/결정 필요:** 커밋·push·병합 권한.
+- **코드 완료:** Phase 0~6. 놀라움(bits)·기록 부재·감정축·top 3·기각학습,
+  일기 opt-out·톤 주문, 7일 리포트, 키워드 회고, JSON 내보내기, 재개 가능한
+  전체 삭제, 읽기 전용 `stats`까지 구현·커밋했다.
+- **웹 확인:** `/demo` Daily Wrap 8상태와 `/report?demo=1` 완성 리포트는
+  실제 API 없이 볼 수 있다. `/settings` 내보내기·2단계 삭제 확인,
+  `/report` 빈 상태와 목데이터 상태를 375px 모바일에서 확인했다.
+- **현재 작업트리:** 제품·테스트 변경은 `ed0e75f`, `ef4dcb2`까지 커밋됐다.
+  `.claude/orchestration/`, `.claude/settings.local.json`은 기존 사용자/도구
+  파일이므로 건드리지 않는다.
+- **검증:** `npm run check` 37 files/**167 tests**, production build 17 pages,
+  worker ruff·단위 **143**, 프런트 통합 **62/62**, worker 비파괴 통합
+  **92/92** 통과.
+- **로컬 스키마:** 승인 후 `20260728170000`, `20260728230000`을 적용했고
+  local migration list가 19/19 일치한다.
+- **파괴 테스트:** 승인 후 격리 사용자와 실제 로컬 Storage 파일을 생성해
+  DB·Storage를 삭제했다. 계정·삭제 원장은 남고 다른 격리 사용자는 보존됨을
+  **1/1 통과**했다.
+- **Vertex eval:** 첫 실행 자동 6/6이었으나 사람이 `"다른 일은 없었다"` 환각을
+  발견해 차단했다. 두 번째 자동 6/6에서 유머 톤의 `"에너지 충전/소비"` 효과
+  해석을 발견해 다시 차단했다. 두 회귀를 단위·eval 자동 게이트에 넣은 뒤
+  최종 실제 Vertex **6/6**과 수동 검토를 통과했다.
+- **완료 판단:** Phase 0~6 구현·비파괴/파괴 통합·실제 LLM eval이 모두
+  통과했다. MVP 구현 계획은 완료다. 자동 운영·배포는 별도 베타 게이트다.
 
 > 직전 완료: 질문 세션 이어 쓰기(`feat/question-session`) — 병합·push 완료(PR #9, `02e0add`).
 
@@ -97,10 +107,12 @@
 ## 참고 (context)
 
 - **현재 파이프라인:** 메모 insert → pgmq `memory_jobs` → `run-pending` 엔티티 추출
-  → `run-daily` 차이 검출·서술 → 사람이 확인·기각 → `run-diary` 일기 생성.
-  Phase 3에서 candidate도 일기에 쓰고 dismissed만 제외하는 opt-out으로 바꿀 계획이다.
-- **앱과 워커 경계:** 둘은 큐·DB로만 통신한다. 현재 일기·주간 잡 큐와 잡 상태는
-  없다. 화면에 실제로 알 수 없는 processing/failed 상태를 추측해 표시하지 않는다.
-- **계획 완료와 베타 완료는 다르다:** 7화면 뒤에도 야간 자동 실행·잡 재시도·알림·
-  PWA·계정 연결이 베타 운영 게이트로 남는다.
+  → `run-daily` 통계 차이 검출·서술 → candidate·confirmed를 바로
+  `run-diary`에 반영하고 dismissed·stale만 제외 → `run-weekly` 7일 집계.
+- **앱과 워커 경계:** 둘은 큐·DB로만 통신한다. 수동 일기는 요청 원장과 기존
+  `memory_jobs(job_type='diary')`로 연결됐다. `run-weekly` 명령은 있지만
+  야간 자동 스케줄러는 아직 없다. processing/failed는 원장에 실제 상태가
+  있을 때만 표시한다.
+- **계획 완료와 베타 완료는 다르다:** 야간 자동 실행·알림·PWA·계정 연결은
+  여전히 베타 운영 게이트다. 지금은 웹 버튼과 CLI로 수동 실행한다.
 - Claude 세션이 서브에이전트 주도(SDD)로 돌 땐 `.superpowers/sdd/progress.md`에 더 세밀한 태스크 원장을 둔다(선택). **공용 진행 상태의 기준은 이 파일의 "상태" 절**이다.

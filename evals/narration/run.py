@@ -21,7 +21,11 @@ from pathlib import Path
 
 from silen_worker.narration.constants import FORBIDDEN_PHRASES
 from silen_worker.narration.gemini import GeminiNarrator
-from silen_worker.narration.service import NarrationInput, guardrail
+from silen_worker.narration.service import (
+    EMOTION_FORBIDDEN_PHRASES,
+    NarrationInput,
+    guardrail,
+)
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -34,10 +38,16 @@ FIXTURES_PATH = Path(__file__).parent / "fixtures.json"
 
 def _facts(case: dict) -> NarrationInput:
     return NarrationInput(
-        difference_id="eval", user_id="eval",
-        entity_name=case["entity_name"], entity_type=case["entity_type"],
-        detection_method=case["detection_method"], description=case["description"],
+        difference_id="eval",
+        user_id="eval",
+        entity_id=case["entity_id"],
+        entity_name=case["entity_name"],
+        entity_type=case["entity_type"],
+        detection_method=case["detection_method"],
+        description=case["description"],
         date_iso=case["date_iso"],
+        dimension=case["dimension"],
+        evidence_ids=tuple(case["evidence_ids"]),
     )
 
 
@@ -52,12 +62,18 @@ def run_case(case: dict, narrator: GeminiNarrator) -> tuple[bool, list[str]]:
     blob = f"{headline} {body} {evidence}"
 
     # 조언·인과·응원(모델 원시 출력 기준 — guardrail 사후 제거와 무관하게 모델을 잰다).
-    hit = [p for p in FORBIDDEN_PHRASES if p in blob]
+    forbidden = FORBIDDEN_PHRASES
+    if facts.dimension == "emotion":
+        forbidden += EMOTION_FORBIDDEN_PHRASES
+    hit = [p for p in forbidden if p in blob]
     if hit:
         failures.append(f"조언/인과/응원 표현 혼입: {hit}")
 
     # 엔티티명 정합.
-    if case.get("must_include_entity") and case["entity_name"] not in f"{headline} {body}":
+    if (
+        case.get("must_include_entity")
+        and case["entity_name"] not in f"{headline} {body}"
+    ):
         failures.append(f"엔티티명 누락: '{case['entity_name']}'")
 
     # 빈 필드.
