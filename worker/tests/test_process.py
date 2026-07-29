@@ -1,5 +1,6 @@
 import time
 import uuid
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -116,6 +117,8 @@ def test_스코프가_없으면_읽은_메시지를_모두_처리한다(monkeypa
             id=memory_id,
             user_id=user_id,
             raw_text=None,
+            effective_at=datetime(2026, 7, 29, tzinfo=timezone.utc),
+            timezone="Asia/Seoul",
         ),
     )
     monkeypatch.setattr(
@@ -128,6 +131,56 @@ def test_스코프가_없으면_읽은_메시지를_모두_처리한다(monkeypa
 
     assert processed == ["memory-a", "memory-b"]
     assert deleted == [1, 2]
+
+
+def test_재계산_실패가_메모_잡을_되돌리지_않는다(monkeypatch):
+    class _Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    deleted: list[int] = []
+    monkeypatch.setattr(process_task, "connect", _Connection)
+    monkeypatch.setattr(
+        process_task,
+        "read_messages",
+        lambda conn, queue, vt, qty: [
+            (9, 1, {"memory_id": "memory-a", "user_id": "user-a"})
+        ],
+    )
+    monkeypatch.setattr(
+        process_task,
+        "fetch_memory",
+        lambda conn, memory_id, user_id: SimpleNamespace(
+            id=memory_id,
+            user_id=user_id,
+            raw_text=None,
+            effective_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+            timezone="Asia/Seoul",
+        ),
+    )
+    monkeypatch.setattr(
+        process_task,
+        "recalculate_if_past",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("failed")),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        process_task,
+        "delete_message",
+        lambda conn, queue, msg_id: deleted.append(msg_id),
+    )
+
+    processed = process_pending(
+        limit=10,
+        embedder=_EMB,
+        extractor=_NoEntities(),
+    )
+
+    assert processed == ["memory-a"]
+    assert deleted == [9]
 
 
 def test_일기_생성_요청을_분기해_완료_처리한다(monkeypatch):

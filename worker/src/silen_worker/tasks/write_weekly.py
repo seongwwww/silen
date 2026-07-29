@@ -26,6 +26,7 @@ from silen_worker.weekly.service import (
     WeeklyMemory,
     WeeklySlot,
     build_weekly_report,
+    completed_week_containing,
     completed_week_start,
 )
 
@@ -169,3 +170,26 @@ def generate_weekly_report(
             highlights,
         )
     return report_id
+
+
+def regenerate_weekly_report_for_date(
+    conn: psycopg.Connection,
+    user_id: str,
+    target_date_iso: str,
+    as_of_date_iso: str,
+) -> str | None:
+    """Rebuild target's completed anchored block, leaving open blocks alone."""
+
+    target = date.fromisoformat(target_date_iso)
+    as_of = date.fromisoformat(as_of_date_iso)
+    anchor = fetch_weekly_anchor(conn, user_id)
+    if anchor is None:
+        return None
+    week_start = completed_week_containing(anchor, target, as_of)
+    if week_start is None:
+        return None
+    return generate_weekly_report(
+        conn,
+        user_id,
+        (week_start + timedelta(days=7)).isoformat(),
+    )

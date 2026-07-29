@@ -16,7 +16,7 @@ type SourceRow = {
 // 타입을 잃으면 supabase-js의 select 타입 추론이 깨져 row.diary_sections가
 // GenericStringError가 된다(tsc에서만 드러남).
 const DIARY_SELECT =
-  "id, date, status, generated_text, edited_text, tone_instruction, regenerate_requested_at, diary_sections(id, section_type, content), diary_sources(memories(id, raw_text, is_locked, deleted_at, assets(file_url, asset_type)))" as const;
+  "id, date, status, generated_text, edited_text, tone_instruction, regenerate_requested_at, regenerate_reason, diary_sections(id, section_type, content), diary_sources(memories(id, raw_text, is_locked, deleted_at, assets(file_url, asset_type)))" as const;
 
 const SIGNED_URL_TTL_SECONDS = 60 * 10;
 
@@ -56,6 +56,7 @@ function toDiaryView(row: {
   edited_text: unknown;
   tone_instruction: unknown;
   regenerate_requested_at: unknown;
+  regenerate_reason: unknown;
   diary_sections: unknown;
   diary_sources: unknown;
 }): DiaryView {
@@ -106,6 +107,7 @@ function toDiaryView(row: {
     })(),
     toneInstruction: (row.tone_instruction as string | null) ?? null,
     regenerateRequested: row.regenerate_requested_at != null,
+    regenerateReason: (row.regenerate_reason as string | null) ?? null,
   };
 }
 
@@ -263,6 +265,8 @@ export function createDiaryRepository(client: SupabaseClient) {
         .update({
           tone_instruction: toneInstruction,
           regenerate_requested_at: new Date().toISOString(),
+          // 사용자가 누른 요청이다. 늦은 기록 유입과 화면에서 다르게 말한다.
+          regenerate_reason: "user",
         })
         .eq("id", id)
         .select("id");

@@ -24,20 +24,31 @@ class Memory:
     id: str
     user_id: str
     raw_text: str | None
+    effective_at: datetime
+    timezone: str
 
 
 def fetch_memory(conn: psycopg.Connection, memory_id: str, user_id: str) -> Memory | None:
     """메모를 조회한다. user_id로도 필터해 교차 사용자 접근을 코드로 막는다.
     잠긴/삭제된 메모는 제외한다(is_locked·deleted_at)."""
     row = conn.execute(
-        "select id::text, user_id::text, raw_text "
-        "from public.memories "
-        "where id = %s and user_id = %s and deleted_at is null and is_locked = false",
+        "select m.id::text, m.user_id::text, m.raw_text, "
+        "m.effective_at, u.timezone "
+        "from public.memories m "
+        "join public.users u on u.id = m.user_id "
+        "where m.id = %s and m.user_id = %s "
+        "and m.deleted_at is null and m.is_locked = false",
         (memory_id, user_id),
     ).fetchone()
     if row is None:
         return None
-    return Memory(id=row[0], user_id=row[1], raw_text=row[2])
+    return Memory(
+        id=row[0],
+        user_id=row[1],
+        raw_text=row[2],
+        effective_at=row[3],
+        timezone=row[4],
+    )
 
 
 def upsert_entity(
@@ -643,9 +654,31 @@ def clear_regenerate_request(conn: psycopg.Connection, diary_id: str) -> None:
     """요청을 1회 소비한다. 자동 재생성이 아니므로 반드시 비운다."""
     conn.execute(
         "update public.diaries set tone_instruction = null, "
-        "regenerate_requested_at = null where id = %s",
+        "regenerate_requested_at = null, regenerate_reason = null "
+        "where id = %s",
         (diary_id,),
     )
+
+
+def request_late_diary_regeneration(
+    conn: psycopg.Connection,
+    user_id: str,
+    target_date: date,
+) -> bool:
+    """Mark an existing owner-scoped diary without changing its body."""
+
+    row = conn.execute(
+        """
+        update public.diaries
+           set regenerate_requested_at = now(),
+               regenerate_reason = 'late_record'
+         where user_id = %s
+           and date = %s
+        returning id
+        """,
+        (user_id, target_date),
+    ).fetchone()
+    return row is not None
 
 
 def upsert_diary(

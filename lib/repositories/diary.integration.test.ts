@@ -173,7 +173,8 @@ describe("diaryRepository", () => {
     const diaryId = await seedDiary(bob, { memo: "주문 조회용" });
     await db.query(
       "update public.diaries set tone_instruction = $1, " +
-        "regenerate_requested_at = now() where id = $2",
+        "regenerate_requested_at = now(), regenerate_reason = 'late_record' " +
+        "where id = $2",
       ["짧게", diaryId],
     );
     const repo = createDiaryRepository(
@@ -184,6 +185,24 @@ describe("diaryRepository", () => {
 
     expect(view?.toneInstruction).toBe("짧게");
     expect(view?.regenerateRequested).toBe(true);
+    expect(view?.regenerateReason).toBe("late_record");
+  });
+
+  it("화면에서 요청한 재생성은 user 사유를 저장한다", async () => {
+    await db.query("delete from public.diaries where user_id = $1", [bob]);
+    await db.query("delete from public.memories where user_id = $1", [bob]);
+    const diaryId = await seedDiary(bob, { memo: "사용자 요청용" });
+    const repo = createDiaryRepository(
+      await clientFor("diary-bob@example.com"),
+    );
+
+    expect(await repo.requestRegenerate(diaryId, "짧게")).toBe(true);
+
+    const row = await db.query(
+      "select regenerate_reason from public.diaries where id = $1",
+      [diaryId],
+    );
+    expect(row.rows[0].regenerate_reason).toBe("user");
   });
 
   it("일기 재료가 될 메모가 있는지 판정한다", async () => {

@@ -23,6 +23,8 @@ export interface DiaryView {
   toneInstruction: string | null;
   /** 재생성 요청이 저장돼 다음 워커 실행을 기다리는가. */
   regenerateRequested: boolean;
+  /** 재생성 요청 사유. 늦게 들어온 기록 때문이면 화면에서 다르게 말한다. */
+  regenerateReason?: string | null;
 }
 
 /** 근거 한 건. 사진만 있는 기록도 근거다 — 글이 없다고 빼지 않는다. */

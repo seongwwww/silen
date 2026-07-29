@@ -147,7 +147,8 @@ def test_재생성요청은_확정일기도_다시쓰고_요청을_비운다(con
         did = generate_diary(conn, user, _today_iso(), writer=StubWriter(_GOOD))
         conn.execute(
             "update public.diaries set status='confirmed', edited_text='내 손으로 고침', "
-            "tone_instruction='더 짧게', regenerate_requested_at=now() where id = %s",
+            "tone_instruction='더 짧게', regenerate_requested_at=now(), "
+            "regenerate_reason='user' where id = %s",
             (did,),
         )
         writer = RecordingWriter(
@@ -161,10 +162,18 @@ def test_재생성요청은_확정일기도_다시쓰고_요청을_비운다(con
         assert writer.facts.tone_instruction == "더 짧게"
         row = conn.execute(
             "select generated_text, edited_text, status, tone_instruction, "
-            "regenerate_requested_at from public.diaries where id = %s",
+            "regenerate_requested_at, regenerate_reason "
+            "from public.diaries where id = %s",
             (did,),
         ).fetchone()
-        assert row == ("새 본문 내용. 점심은 김밥.", None, "draft", None, None)
+        assert row == (
+            "새 본문 내용. 점심은 김밥.",
+            None,
+            "draft",
+            None,
+            None,
+            None,
+        )
     finally:
         delete_user(conn, user)
 
