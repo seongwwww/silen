@@ -79,3 +79,52 @@ def sync_photo_searchable(conn: psycopg.Connection, memory_id: str) -> None:
         """,
         (memory_id,),
     )
+
+
+def fetch_user_vocabulary(conn: psycopg.Connection, user_id: str) -> set[str]:
+    """사용자가 **텍스트로** 쓴 적 있는 엔티티 이름 집합.
+
+    사진 엔티티의 앵커다. 사진에서만 보이는 말은 여기에 없어 걸러진다.
+    """
+    rows = conn.execute(
+        """
+        select distinct e.normalized_name
+          from public.entities e
+          join public.memory_entities me on me.entity_id = e.id
+          join public.memories m on m.id = me.memory_id
+         where e.user_id = %s
+           and m.deleted_at is null
+           and m.raw_text is not null
+           and btrim(m.raw_text) <> ''
+        """,
+        (user_id,),
+    ).fetchall()
+    return {row[0] for row in rows}
+
+
+def save_caption(conn: psycopg.Connection, asset_id: str, caption: str) -> None:
+    """캡션은 assets.extracted_text에 둔다. memories.raw_text는 사용자 원본이라
+    절대 건드리지 않는다(원본 ↔ AI 생성물 분리)."""
+    conn.execute(
+        "update public.assets set extracted_text = %s where id = %s",
+        (caption, asset_id),
+    )
+
+
+def fetch_memory_photos(
+    conn: psycopg.Connection, memory_id: str, user_id: str
+) -> list[tuple[str, str, str]]:
+    """(asset_id, file_url, mime_type). user 스코프를 강제한다."""
+    rows = conn.execute(
+        """
+        select a.id::text, a.file_url, coalesce(a.mime_type, '')
+          from public.assets a
+          join public.memories m on m.id = a.memory_id
+         where a.memory_id = %s
+           and m.user_id = %s
+           and a.asset_type = 'photo'
+         order by a.id
+        """,
+        (memory_id, user_id),
+    ).fetchall()
+    return [(row[0], row[1], row[2]) for row in rows]

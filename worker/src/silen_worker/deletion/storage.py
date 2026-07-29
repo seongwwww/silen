@@ -33,6 +33,19 @@ class SupabaseStorageDeletion:
                 {"prefixes": paths[offset : offset + 1000]},
             )
 
+    def download(self, path: str) -> bytes | None:
+        """사진 원본을 읽는다. 없으면 None — 사진 처리를 건너뛴다."""
+        request = Request(
+            f"{self.url}/object/{self.bucket}/{path}",
+            headers={k: v for k, v in self.headers.items() if k != "content-type"},
+            method="GET",
+        )
+        try:
+            with urlopen(request, timeout=30) as response:
+                return response.read()
+        except Exception:
+            return None
+
     def has_user_objects(self, user_id: str) -> bool:
         return bool(self._list_paths(user_id))
 
