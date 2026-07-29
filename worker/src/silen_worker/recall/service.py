@@ -77,6 +77,54 @@ def merge_hybrid_candidates(
     return ordered[: max(0, limit)]
 
 
+PHOTO_EVIDENCE_LIMIT = 3
+PHOTO_ONLY_ANSWER = "글로 남긴 건 못 찾았고, 사진에서 비슷한 걸 찾았어요."
+
+
+def with_photo_evidence(
+    response: dict,
+    photos: list[RecallCandidate],
+    limit: int = PHOTO_EVIDENCE_LIMIT,
+) -> dict:
+    """사진 근거를 결정적으로 덧붙인다.
+
+    LLM에게 사진을 고르게 하지 않는다 — 인용 가드레일은 원문 대조를 요구하는데
+    사진만 있는 기록은 대조할 원문이 없어, LLM이 고르면 응답 전체가 폐기된다.
+    벡터 순위 그대로 붙이고 인용은 비운다. 지어낸 문장이 생길 여지가 없다.
+    """
+    if not photos:
+        return response
+
+    evidence = list(response.get("evidence") or [])
+    cited = {item["memoryId"] for item in evidence}
+    added = 0
+    for candidate in photos:
+        if added >= limit or candidate.memory_id in cited:
+            continue
+        if not candidate.photo_path:
+            continue
+        evidence.append(
+            {
+                "memoryId": candidate.memory_id,
+                "capturedAt": candidate.effective_at.isoformat(),
+                "quote": "",
+                "photoPath": candidate.photo_path,
+            }
+        )
+        cited.add(candidate.memory_id)
+        added += 1
+
+    if not added:
+        return response
+
+    answer = response.get("answer") or ""
+    return {
+        **response,
+        "answer": answer if evidence[0]["quote"] else PHOTO_ONLY_ANSWER,
+        "evidence": evidence,
+    }
+
+
 def empty_recall_response() -> dict:
     return {
         "answer": NO_RECALL_RESULT,

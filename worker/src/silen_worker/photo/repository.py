@@ -5,7 +5,11 @@
 
 import psycopg
 
-from silen_worker.photo.service import PHOTO_EMBEDDING_MODEL, validate_photo_vector
+from silen_worker.photo.service import (
+    PHOTO_EMBEDDING_MODEL,
+    PHOTO_MIN_SIMILARITY,
+    validate_photo_vector,
+)
 
 
 def upsert_photo_embedding(
@@ -48,11 +52,12 @@ def search_photo_candidates(
     user_id: str,
     query_vector: list[float],
     limit: int = 8,
-) -> list[tuple[str, str, str]]:
-    """(memory_id, raw_text, photo_path). user_id를 벡터 계산보다 먼저 적용한다."""
+) -> list[tuple[str, str, object, str]]:
+    """(memory_id, raw_text, effective_at, photo_path).
+    user_id를 벡터 계산보다 먼저 적용한다."""
     rows = conn.execute(
         """
-        select p.memory_id::text, coalesce(m.raw_text, ''), a.file_url
+        select p.memory_id::text, coalesce(m.raw_text, ''), m.effective_at, a.file_url
           from public.photo_embeddings p
           join public.memories m on m.id = p.memory_id
           join public.assets a on a.id = p.asset_id
@@ -60,12 +65,20 @@ def search_photo_candidates(
            and p.is_searchable
            and m.is_locked = false
            and m.deleted_at is null
+           -- <=> 는 코사인 거리다. 유사도 = 1 - 거리.
+           and (1 - (p.embedding <=> %s::vector)) >= %s
          order by p.embedding <=> %s::vector, p.memory_id
          limit %s
         """,
-        (user_id, validate_photo_vector(query_vector), limit),
+        (
+            user_id,
+            validate_photo_vector(query_vector),
+            PHOTO_MIN_SIMILARITY,
+            validate_photo_vector(query_vector),
+            limit,
+        ),
     ).fetchall()
-    return [(row[0], row[1], row[2]) for row in rows]
+    return [(row[0], row[1], row[2], row[3]) for row in rows]
 
 
 def sync_photo_searchable(conn: psycopg.Connection, memory_id: str) -> None:

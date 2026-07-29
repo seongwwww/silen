@@ -39,7 +39,7 @@ def test_사진_임베딩을_저장하고_찾는다(conn):
 
         found = search_photo_candidates(conn, alice, _vec(0.6))
         assert [row[0] for row in found] == [memory]
-        assert found[0][2] == f"{alice}/a.png"
+        assert found[0][3] == f"{alice}/a.png"
     finally:
         delete_user(conn, alice)
 

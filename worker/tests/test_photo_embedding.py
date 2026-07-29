@@ -41,3 +41,11 @@ def test_지원하지_않는_이미지_형식은_거부한다():
 def test_모델명을_고정한다():
     """모델이 바뀌면 벡터 공간이 달라져 기존 검색이 조용히 망가진다."""
     assert PHOTO_EMBEDDING_MODEL == "multimodalembedding@001"
+
+
+def test_유사도_임계는_실측_구간_사이에_있다():
+    """실측: 맞는 짝 +0.085~+0.107, 무관한 짝 +0.016~+0.046.
+    임계가 이 사이에 없으면 관련 없는 사진이 모든 답변에 붙는다."""
+    from silen_worker.photo.service import PHOTO_MIN_SIMILARITY
+
+    assert 0.046 < PHOTO_MIN_SIMILARITY < 0.085

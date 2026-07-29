@@ -10,6 +10,11 @@ from math import isfinite
 PHOTO_EMBEDDING_MODEL = "multimodalembedding@001"
 PHOTO_EMBEDDING_DIMENSION = 1408
 
+# 이 아래는 붙이지 않는다. 실측(코사인)에서 맞는 짝은 +0.085~+0.107,
+# 무관한 짝은 +0.016~+0.046이었다. 임계가 없으면 관련 없는 사진이 모든
+# 답변에 딸려 붙어 노이즈가 된다.
+PHOTO_MIN_SIMILARITY = 0.065
+
 # 모델이 읽을 수 있는 형식만. 나머지는 호출을 낭비한다.
 SUPPORTED_MIME = frozenset({"image/png", "image/jpeg", "image/webp", "image/gif"})
 
