@@ -14,6 +14,9 @@ dependencies = [
     # Vertex AI Gemini (ADC 인증, API 키 미사용). >=2.14.0에서 vertexai=True +
     # response_schema 구조화 출력 확인됨(Step 1/2 스모크).
     "google-genai>=2.14.0",
+    # multimodalembedding@001은 google-genai가 태우지 않아 Vertex predict를
+    # 직접 부른다(embed_content는 텍스트만 보낸다).
+    "requests",
 ]
 
 [project.scripts]

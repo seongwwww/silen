@@ -37,12 +37,38 @@ from silen_worker.queue import (
     reset_recall_for_retry,
 )
 from silen_worker.tasks.recall import answer_recall
+from silen_worker.photo.pipeline import process_memory_photos
 from silen_worker.tasks.recalculate import recalculate_if_past
 from silen_worker.tasks.write_diary import generate_diary
 
 VISIBILITY_TIMEOUT = 60  # 초. LLM 호출이 있어 A보다 넉넉히.
 MAX_READS = 5
 logger = logging.getLogger(__name__)
+
+
+def _default_captioner():
+    from silen_worker.photo.gemini import GeminiCaptioner
+
+    return GeminiCaptioner()
+
+
+def _default_photo_embedder():
+    from silen_worker.photo.vertex import MultimodalEmbedder
+
+    return MultimodalEmbedder()
+
+
+def _default_extractor():
+    from silen_worker.extraction.gemini import GeminiExtractor
+
+    return GeminiExtractor()
+
+
+def _default_read_image():
+    """Storage에서 원본을 읽는다. 자격증명이 없으면 사진 처리를 건너뛴다."""
+    from silen_worker.deletion.storage import SupabaseStorageDeletion
+
+    return SupabaseStorageDeletion().download
 
 
 def process_pending(
@@ -52,6 +78,9 @@ def process_pending(
     diary_writer: DiaryWriter | None = None,
     embedder: Embedder | None = None,
     recall_selector: RecallSelector | None = None,
+    photo_captioner=None,
+    photo_embedder=None,
+    read_image=None,
     narrator: Narrator | None = None,
     now: datetime | None = None,
 ) -> list[str]:
@@ -199,13 +228,37 @@ def process_pending(
                             conn, memory.user_id, ent.type, ent.name, ent.normalized_name
                         )
                         link_memory_entity(conn, memory.id, entity_id)
+
+                # 사진: 벡터·캡션·앵커 통과 엔티티. 실패해도 잡을 되돌리지
+                # 않는다 — 추출은 이미 끝났고 되돌리면 유료 작업이 반복된다.
+                search_text = memory.raw_text
+                try:
+                    search_text = process_memory_photos(
+                        conn,
+                        memory.id,
+                        memory.user_id,
+                        memory.raw_text,
+                        captioner=photo_captioner or _default_captioner(),
+                        embedder=photo_embedder or _default_photo_embedder(),
+                        extractor=resolved_extractor or _default_extractor(),
+                        read_image=read_image or _default_read_image(),
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "photo processing failed user_id=%s memory_id=%s error=%s",
+                        memory.user_id,
+                        memory.id,
+                        type(exc).__name__,
+                    )
+
+                if search_text:
                     if not has_current_embedding(conn, memory.id, memory.user_id):
                         if resolved_embedder is None:
                             from silen_worker.embedding.gemini import GeminiEmbedder
 
                             resolved_embedder = GeminiEmbedder()
                         vector = resolved_embedder.embed(
-                            memory.raw_text,
+                            search_text,
                             DOCUMENT_TASK_TYPE,
                         )
                         if not upsert_memory_embedding(
