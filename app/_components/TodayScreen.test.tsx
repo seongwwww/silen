@@ -87,7 +87,10 @@ describe("TodayScreen", () => {
       <TodayScreen
         view={view({
           memories: { count: 2, previews: ["첫 기록", "두 번째 기록"] },
-          diary: { state: "processing" },
+          diary: {
+            state: "processing",
+            message: "오늘 밤 9시에 묶어드릴게요",
+          },
           wrap: {
             state: "available",
             title: "오늘 기록으로 일기를 만들 수 있어요",
@@ -100,5 +103,6 @@ describe("TodayScreen", () => {
     expect(
       screen.getByRole("button", { name: "오늘 일기 만들기" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("오늘 밤 9시에 묶어드릴게요")).toBeInTheDocument();
   });
 });

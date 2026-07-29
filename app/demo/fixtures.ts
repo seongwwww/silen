@@ -23,7 +23,10 @@ const base: TodayView = {
       "저녁 공기가 조금 선선했다",
     ],
   },
-  diary: { state: "processing" },
+  diary: {
+    state: "processing",
+    message: "오늘 밤 9시에 묶어드릴게요",
+  },
   wrap: {
     state: "available",
     title: "오늘 기록으로 일기를 만들 수 있어요",

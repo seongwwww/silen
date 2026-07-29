@@ -12,15 +12,16 @@ import json
 import sys
 from datetime import date, datetime, timedelta, timezone
 
-from silen_worker.db import connect, fetch_active_users
+from silen_worker.db import connect, fetch_active_users, fetch_scheduled_users
 from silen_worker.stats.repository import fetch_stats
 from silen_worker.stats.service import format_stats
 from silen_worker.tasks.detect import detect_day
 from silen_worker.tasks.narrate import narrate_difference
 from silen_worker.tasks.process import process_pending
+from silen_worker.tasks.schedule import schedule_diary
 from silen_worker.tasks.write_diary import generate_diary
 from silen_worker.tasks.write_weekly import generate_weekly_report
-from silen_worker.time import local_date_for
+from silen_worker.time import local_date_for, local_hour_for
 
 
 def local_yesterday(tz: str, now: datetime) -> str:
@@ -62,6 +63,18 @@ def build_weekly_targets(
     ]
 
 
+def build_scheduled_targets(
+    users: list[tuple[str, str, int]],
+    now: datetime,
+) -> list[tuple[str, str]]:
+    """로컬 예약 시각이 지난 사용자와 오늘 날짜만 고른다."""
+    return [
+        (user_id, local_date_for(now, time_zone))
+        for user_id, time_zone, diary_hour in users
+        if local_hour_for(now, time_zone) >= diary_hour
+    ]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="silen-worker", description="실은 워커 파이프라인 실행"
@@ -78,6 +91,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="무한 루프 방지 상한",
     )
     sub.add_parser("stats", help="읽기 전용 MVP 운영 지표 출력")
+    sub.add_parser(
+        "run-scheduled",
+        help="사용자 로컬 예약 시각이 지난 일기 요청을 멱등하게 등록",
+    )
 
     for name, help_text in (
         ("run-daily", "차이 검출 → 서술"),
@@ -128,6 +145,17 @@ def resolve_weekly_targets(
         fetch_active_users(conn),
         user,
         date_iso,
+        now or datetime.now(timezone.utc),
+    )
+
+
+def resolve_scheduled_targets(
+    conn,
+    now: datetime | None = None,
+) -> list[tuple[str, str]]:
+    """DB 사용자 설정으로 지금 예약할 일기 날짜를 계산한다."""
+    return build_scheduled_targets(
+        fetch_scheduled_users(conn),
         now or datetime.now(timezone.utc),
     )
 
@@ -215,6 +243,40 @@ def run_diary(
     return ok, fail
 
 
+def run_scheduled(
+    conn,
+    targets: list[tuple[str, str]],
+) -> tuple[int, int, int]:
+    """예약 대상을 요청 원장과 기존 큐에 넣는다. (생성, 건너뜀, 실패)"""
+    created = skipped = failed = 0
+    for user_id, date_iso in targets:
+        try:
+            request_id = schedule_diary(conn, user_id, date_iso)
+            if request_id is None:
+                skipped += 1
+            else:
+                created += 1
+            _emit(
+                {
+                    "event": "run_scheduled.user",
+                    "user_id": user_id,
+                    "date": date_iso,
+                    "created": request_id is not None,
+                }
+            )
+        except Exception as exc:
+            failed += 1
+            _emit(
+                {
+                    "event": "run_scheduled.error",
+                    "user_id": user_id,
+                    "date": date_iso,
+                    "error": type(exc).__name__,
+                }
+            )
+    return created, skipped, failed
+
+
 def run_weekly(conn, targets: list[tuple[str, str]]) -> tuple[int, int]:
     """Generate eligible weekly reports, isolating failures per user."""
 
@@ -263,6 +325,19 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "stats":
             run_stats(conn)
             return 0
+
+        if args.command == "run-scheduled":
+            targets = resolve_scheduled_targets(conn)
+            created, skipped, failed = run_scheduled(conn, targets)
+            _emit(
+                {
+                    "event": "run-scheduled.done",
+                    "created": created,
+                    "skipped": skipped,
+                    "failed": failed,
+                }
+            )
+            return 1 if failed else 0
 
         targets = (
             resolve_weekly_targets(conn, args.user, args.date)

@@ -1,4 +1,5 @@
 import { localDateFor, utcRangeForLocalDate } from "@/lib/time/day";
+import { diaryScheduleMessage } from "@/lib/services/schedule";
 
 export type TodayMemory = {
   id: string;
@@ -42,7 +43,7 @@ export type TodayView = {
   };
   diary:
     | { state: "quiet" }
-    | { state: "processing" }
+    | { state: "processing"; message: string }
     | { state: "ready"; id: string; oneLine: string };
   wrap:
     | { state: "none" }
@@ -71,7 +72,7 @@ type BuildTodayViewInput = {
   memory: TodayMemoryPort;
   difference: TodayDifferencePort;
   diary: TodayDiaryPort;
-  diaryTime?: string;
+  diaryHour?: number;
 };
 
 function preview(text: string): string {
@@ -96,7 +97,7 @@ export async function buildTodayView({
   memory,
   difference,
   diary,
-  diaryTime = "22:00",
+  diaryHour = 21,
 }: BuildTodayViewInput): Promise<TodayView> {
   const dateIso = localDateFor(now, timeZone);
   const range = utcRangeForLocalDate(dateIso, timeZone);
@@ -156,7 +157,8 @@ export async function buildTodayView({
         }
           : memories.length === 0
             ? { state: "none" }
-            : localTimeFor(now, timeZone) >= diaryTime.slice(0, 5)
+            : localTimeFor(now, timeZone) >=
+                `${String(diaryHour).padStart(2, "0")}:00`
               ? {
                   state: "closing",
                   title: "오늘을 정리할 시간이에요",
@@ -190,7 +192,10 @@ export async function buildTodayView({
         }
       : memories.length === 0
         ? { state: "quiet" }
-        : { state: "processing" },
+        : {
+            state: "processing",
+            message: diaryScheduleMessage(diaryHour),
+          },
     wrap,
   };
 }

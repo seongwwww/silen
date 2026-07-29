@@ -945,6 +945,51 @@ def fetch_active_users(conn: psycopg.Connection) -> list[tuple[str, str]]:
     return [(r[0], r[1]) for r in rows]
 
 
+def fetch_scheduled_users(
+    conn: psycopg.Connection,
+) -> list[tuple[str, str, int]]:
+    """자동 일기 예약 계산에 필요한 최소 사용자 설정만 가져온다."""
+    rows = conn.execute(
+        "select id::text, timezone, diary_hour from public.users order by id"
+    ).fetchall()
+    return [(r[0], r[1], r[2]) for r in rows]
+
+
+def insert_scheduled_diary_request(
+    conn: psycopg.Connection,
+    user_id: str,
+    target_date_iso: str,
+) -> str | None:
+    """기록이 있고 일기가 없는 본인 날짜에 기존 요청 원장을 한 번만 만든다."""
+    row = conn.execute(
+        """
+        insert into public.diary_generation_requests (user_id, date)
+        select u.id, %s::date
+          from public.users u
+         where u.id = %s
+           and not exists (
+             select 1
+               from public.diaries d
+              where d.user_id = u.id
+                and d.date = %s::date
+           )
+           and exists (
+             select 1
+               from public.memories m
+              where m.user_id = u.id
+                and m.is_locked = false
+                and m.deleted_at is null
+                and nullif(btrim(m.raw_text), '') is not null
+                and (m.captured_at at time zone u.timezone)::date = %s::date
+           )
+        on conflict (user_id, date) do nothing
+        returning id::text
+        """,
+        (target_date_iso, user_id, target_date_iso, target_date_iso),
+    ).fetchone()
+    return row[0] if row is not None else None
+
+
 def fetch_narration_id(conn: psycopg.Connection, difference_id: str) -> str | None:
     """이 차이에 이미 서술이 있으면 그 id, 없으면 None.
     재실행 시 LLM 재호출(반복 과금)을 막는 판정에 쓴다."""

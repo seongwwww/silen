@@ -4,8 +4,20 @@ from typing import Any
 
 import psycopg
 from psycopg import sql
+from psycopg.types.json import Jsonb
 
 QUEUE = "memory_jobs"
+
+
+def send_message(
+    conn: psycopg.Connection, queue: str, message: dict[str, Any]
+) -> int:
+    """기존 pgmq 큐에 JSON 메시지 하나를 넣고 msg_id를 반환한다."""
+    row = conn.execute(
+        "select pgmq.send(%s, %s::jsonb)",
+        (queue, Jsonb(message)),
+    ).fetchone()
+    return int(row[0])
 
 
 def read_messages(
