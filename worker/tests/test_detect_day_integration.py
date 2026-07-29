@@ -2,6 +2,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from silen_worker.detection.emotion import bits_ceiling
 from silen_worker.tasks.detect import detect_day
 from tests.conftest import delete_user, seed_memory_at, seed_user
 
@@ -88,7 +89,7 @@ def test_기록_부재는_과거_언급과_오늘_활성_메모를_근거로_삼
         assert result.narration_ids == result.saved_ids
         difference = _diffs(conn, user)[0]
         assert difference[1] == "freq_shift"
-        assert "오늘 기록에는 언급 없음" in difference[2]
+        assert "오늘 기록에는 없음" in difference[2]
         assert difference[3] == pytest.approx(2.5849625)
         evidence = conn.execute(
             "select memory_id::text from public.difference_evidence "
@@ -147,7 +148,7 @@ def test_오랜만의_재등장은_활성일_기준_bits를_저장한다(conn):
         difference = _diffs(conn, user)[0]
         assert difference[1] == "freq_shift"
         assert difference[2] == (
-            "9일 만에 재등장(과거 활성일 14일 중 1일 기록됨)"
+            "9일 만에 재등장(기록을 남긴 14일 중 1일에 있었음)"
         )
         assert difference[3] == pytest.approx(3.3219281)
     finally:
@@ -313,7 +314,7 @@ def test_감정_전환은_엔티티_없이_멱등_저장하고_근거를_연결�
             "zscore",
             "감정전환",
         )
-        assert difference[5] == pytest.approx(8.0)
+        assert difference[5] == pytest.approx(bits_ceiling(5))
         evidence = conn.execute(
             "select memory_id::text from public.difference_evidence "
             "where difference_id = %s",
