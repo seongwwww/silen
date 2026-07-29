@@ -40,6 +40,7 @@ async function seedDiary(
     status?: string;
     memo?: string;
     locked?: boolean;
+    photoPath?: string;
   } = {},
 ): Promise<string> {
   const {
@@ -48,6 +49,7 @@ async function seedDiary(
     status = "draft",
     memo = "점심 김밥",
     locked = false,
+    photoPath,
   } = opts;
   const mem = (
     await db.query(
@@ -56,6 +58,13 @@ async function seedDiary(
       [user, memo, locked],
     )
   ).rows[0].id;
+  if (photoPath) {
+    await db.query(
+      "insert into public.assets (memory_id, asset_type, file_url, mime_type) " +
+        "values ($1,'photo',$2,'image/png')",
+      [mem, photoPath],
+    );
+  }
   const diary = (
     await db.query(
       "insert into public.diaries (user_id, date, status, generated_text, edited_text) " +
@@ -137,7 +146,11 @@ describe("diaryRepository", () => {
   it("잠긴 메모는 근거에서 빠진다", async () => {
     await db.query("delete from public.diaries where user_id = $1", [bob]);
     await db.query("delete from public.memories where user_id = $1", [bob]);
-    await seedDiary(bob, { memo: "비밀 기록", locked: true });
+    await seedDiary(bob, {
+      memo: "비밀 기록",
+      locked: true,
+      photoPath: `${bob}/locked.png`,
+    });
     const repo = createDiaryRepository(
       await clientFor("diary-bob@example.com"),
     );
