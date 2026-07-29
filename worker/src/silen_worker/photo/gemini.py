@@ -4,6 +4,7 @@
 사용자가 쓴 문장이 아니다.
 """
 
+from functools import lru_cache
 import os
 
 from google import genai
@@ -37,3 +38,9 @@ class GeminiCaptioner:
             ],
         )
         return (response.text or "").strip()
+
+
+@lru_cache(maxsize=1)
+def get_captioner() -> GeminiCaptioner:
+    """클라이언트를 재사용한다. 요청마다 새로 만들면 연결 설정에만 몇 초가 든다."""
+    return GeminiCaptioner()

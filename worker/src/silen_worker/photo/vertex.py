@@ -5,6 +5,7 @@ ADC로 인증한다(조직 정책이 API 키 금지). 본문·이미지는 로�
 """
 
 import base64
+from functools import lru_cache
 import os
 
 import google.auth
@@ -16,8 +17,9 @@ from silen_worker.photo.service import (
     validate_photo_vector,
 )
 
-# 이 모델은 global에서도 응답하지만 리전 엔드포인트가 기본이다.
-_DEFAULT_REGION = "us-central1"
+# 실측 지연: asia-northeast3 1.26초 · us-central1 1.65초 · asia-southeast1 1.65초.
+# gemini-3.5-flash와 달리 이 모델은 여러 리전에 있어 가까운 곳을 고를 수 있다.
+_DEFAULT_REGION = "asia-northeast3"
 _TIMEOUT_SECONDS = 60
 
 
@@ -62,3 +64,9 @@ class MultimodalEmbedder:
         if values is None:
             raise RuntimeError("multimodal embedding response had no vector")
         return validate_photo_vector(values)
+
+
+@lru_cache(maxsize=1)
+def get_multimodal_embedder() -> MultimodalEmbedder:
+    """클라이언트를 재사용한다. 요청마다 새로 만들면 연결 설정에만 몇 초가 든다."""
+    return MultimodalEmbedder()

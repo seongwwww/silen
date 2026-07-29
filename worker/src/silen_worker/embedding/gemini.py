@@ -1,5 +1,6 @@
 """Vertex AI 메모 임베더. 본문·질문은 처리만 하고 로그에 남기지 않는다."""
 
+from functools import lru_cache
 import os
 
 from google import genai
@@ -31,3 +32,9 @@ class GeminiEmbedder:
             raise RuntimeError("embedding_response_missing")
         return validate_embedding(list(response.embeddings[0].values))
 
+
+
+@lru_cache(maxsize=1)
+def get_embedder() -> GeminiEmbedder:
+    """클라이언트를 재사용한다. 요청마다 새로 만들면 연결 설정에만 몇 초가 든다."""
+    return GeminiEmbedder()
