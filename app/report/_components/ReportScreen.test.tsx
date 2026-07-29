@@ -60,6 +60,9 @@ describe("주간 리포트 화면", () => {
     expect(
       screen.getByText("이번 주 기록에서 찾은 모습이에요"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "공유 카드 만들기" }),
+    ).toBeInTheDocument();
   });
 
   it("비어 있는 슬롯은 사실을 만들지 않고 담담하게 표시한다", () => {

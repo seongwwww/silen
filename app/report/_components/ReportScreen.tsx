@@ -2,6 +2,7 @@ import type {
   WeeklyReportView,
   WeeklySlot,
 } from "@/lib/repositories/weeklyRepository";
+import { ShareCardPanel } from "./ShareCardPanel";
 
 const SLOT_LABELS: { slot: WeeklySlot; label: string }[] = [
   { slot: "가장많이한것", label: "가장 많이 기록한 것" },
@@ -32,7 +33,7 @@ export function ReportScreen({
   report: WeeklyReportView | null;
 }) {
   return (
-    <main className="mx-auto min-h-[calc(100svh-3.5rem)] w-full max-w-md px-5 py-10">
+    <main className="mx-auto min-h-[calc(100svh-3.5rem)] w-full max-w-md px-5 pt-10 pb-24">
       <header className="pt-4">
         <h1
           aria-label="당신이 몰랐던 이번 주"
@@ -156,6 +157,10 @@ export function ReportScreen({
           <p className="mt-6 rounded-2xl border bg-card px-5 py-5 text-center text-sm text-muted-foreground">
             이번 주 기록에서 찾은 모습이에요
           </p>
+          <ShareCardPanel
+            highlights={report.highlights}
+            weekStart={report.weekStart}
+          />
         </>
       )}
     </main>
