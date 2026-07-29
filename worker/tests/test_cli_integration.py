@@ -79,7 +79,7 @@ def _absence_materials(conn, user_id, name="김밥"):
             "values (%s, %s, 'mentioned')",
             (memory_id, ent),
         )
-    seed_memory(conn, user_id, "오늘의 다른 기록")
+    return seed_memory(conn, user_id, "오늘의 다른 기록")
 
 
 def _today():
@@ -118,6 +118,30 @@ def test_run_daily를_두번_돌려도_LLM은_한번만(conn):
 
         assert first_calls >= 1
         assert narrator.calls == first_calls
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
+def test_run_daily는_잠근_오늘_기록을_빼고_해제하면_다시_쓴다(conn):
+    user = seed_user(conn)
+    try:
+        today_memory = _absence_materials(conn, user)
+        narrator = CountingNarrator()
+        conn.execute(
+            "update public.memories set is_locked = true where id = %s",
+            (today_memory,),
+        )
+
+        run_daily(conn, [(user, _today())], narrator=narrator)
+        assert narrator.calls == 0
+
+        conn.execute(
+            "update public.memories set is_locked = false where id = %s",
+            (today_memory,),
+        )
+        run_daily(conn, [(user, _today())], narrator=narrator)
+        assert narrator.calls >= 1
     finally:
         delete_user(conn, user)
 

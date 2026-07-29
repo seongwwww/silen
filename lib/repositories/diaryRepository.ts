@@ -4,6 +4,7 @@ import type { DiaryStatus, DiaryView } from "@/lib/services/diary";
 type SectionRow = { id: string; section_type: string; content: string };
 type SourceRow = {
   memories: {
+    id: string;
     raw_text: string | null;
     is_locked: boolean;
     deleted_at: string | null;
@@ -15,7 +16,7 @@ type SourceRow = {
 // 타입을 잃으면 supabase-js의 select 타입 추론이 깨져 row.diary_sections가
 // GenericStringError가 된다(tsc에서만 드러남).
 const DIARY_SELECT =
-  "id, date, status, generated_text, edited_text, tone_instruction, regenerate_requested_at, diary_sections(id, section_type, content), diary_sources(memories(raw_text, is_locked, deleted_at, assets(file_url, asset_type)))" as const;
+  "id, date, status, generated_text, edited_text, tone_instruction, regenerate_requested_at, diary_sections(id, section_type, content), diary_sources(memories(id, raw_text, is_locked, deleted_at, assets(file_url, asset_type)))" as const;
 
 const SIGNED_URL_TTL_SECONDS = 60 * 10;
 
@@ -83,6 +84,7 @@ function toDiaryView(row: {
         (
           memory,
         ): memory is {
+          id: string;
           raw_text: string | null;
           is_locked: boolean;
           deleted_at: string | null;
@@ -90,6 +92,7 @@ function toDiaryView(row: {
         } => !!memory && !memory.is_locked && !memory.deleted_at,
       )
       .map((memory) => ({
+        memoryId: memory.id,
         text: memory.raw_text?.trim() ? memory.raw_text : null,
         photoPath:
           (memory.assets ?? []).find((asset) => asset.asset_type === "photo")

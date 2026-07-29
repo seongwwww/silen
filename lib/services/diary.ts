@@ -27,6 +27,7 @@ export interface DiaryView {
 
 /** 근거 한 건. 사진만 있는 기록도 근거다 — 글이 없다고 빼지 않는다. */
 export type DiaryEvidence = {
+  memoryId: string;
   text: string | null;
   /** Storage 경로. 화면에 쓰려면 서명 URL로 바꿔야 한다. */
   photoPath: string | null;

@@ -15,13 +15,24 @@ from tests.conftest import seed_user, seed_memory_at, delete_user
 def test_키워드_검색이_실제로_실행된다(conn):
     alice = seed_user(conn)
     try:
-        seed_memory_at(conn, alice, "2026-07-19T03:00:00+00", "그 카페에서 커피를 마셨다")
+        with_photo = seed_memory_at(
+            conn,
+            alice,
+            "2026-07-19T03:00:00+00",
+            "그 카페에서 커피를 마셨다",
+        )
+        conn.execute(
+            "insert into public.assets (memory_id, asset_type, file_url, mime_type) "
+            "values (%s, 'photo', %s, 'image/png')",
+            (with_photo, f"{alice}/cafe.png"),
+        )
         seed_memory_at(conn, alice, "2026-07-20T03:00:00+00", "회사에 갔다")
 
         found = search_keyword_candidates(conn, alice, "카페 언제 갔지")
 
         assert [c.memory_id for c in found] != []
         assert any("카페" in c.raw_text for c in found)
+        assert found[0].photo_path == f"{alice}/cafe.png"
     finally:
         delete_user(conn, alice)
 
@@ -50,6 +61,35 @@ def test_잠기거나_삭제된_기록은_빠진다(conn):
         conn.execute("update public.memories set deleted_at = now() where id = %s", (removed,))
 
         assert search_keyword_candidates(conn, alice, "카페") == []
+    finally:
+        delete_user(conn, alice)
+
+
+@pytest.mark.integration
+def test_잠금을_풀면_검색에_다시_들어온다(conn):
+    alice = seed_user(conn)
+    try:
+        memory = seed_memory_at(
+            conn,
+            alice,
+            "2026-07-19T03:00:00+00",
+            "다시 찾을 카페 기록",
+        )
+        conn.execute(
+            "update public.memories set is_locked = true where id = %s",
+            (memory,),
+        )
+        assert search_keyword_candidates(conn, alice, "카페") == []
+
+        conn.execute(
+            "update public.memories set is_locked = false where id = %s",
+            (memory,),
+        )
+        assert [item.memory_id for item in search_keyword_candidates(
+            conn,
+            alice,
+            "카페",
+        )] == [memory]
     finally:
         delete_user(conn, alice)
 

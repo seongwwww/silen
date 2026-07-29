@@ -59,6 +59,21 @@ def test_window_조회는_user_스코프와_잠금삭제를_제외한다(conn):
         assert m_lock not in mem_ids   # 잠금 제외
         assert m_del not in mem_ids    # 삭제 제외
         assert m_bob not in mem_ids    # 타 사용자 제외
+
+        conn.execute(
+            "update public.memories set is_locked = false where id = %s",
+            (m_lock,),
+        )
+        unlocked_ids = {
+            row.memory_id
+            for row in fetch_window_occurrences(
+                conn,
+                alice,
+                date(2026, 7, 23),
+                28,
+            )
+        }
+        assert m_lock in unlocked_ids  # 해제하면 다음 run-daily 입력에 복귀
     finally:
         delete_user(conn, alice)
         delete_user(conn, bob)
