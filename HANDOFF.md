@@ -9,21 +9,17 @@
 
 ## 현재 활성 작업 (Active Work Order)
 
-**목표:** `docs/superpowers/plans/2026-07-28-mvp-full-build.md`의 Phase 0~6을
-검증 게이트까지 닫고 `feat/mvp-shell`을 main 병합 가능한 상태로 만든다.
+**목표:** `docs/superpowers/plans/2026-07-29-beta-gate.md`의 P1~P6을
+짧은 브랜치와 사람 병합 게이트를 지키며 순서대로 완료한다.
 
-**성격:** Phase -1은 `main`의 `d9a18ff`에 병합됐다. `feat/mvp-shell`에서
-Phase 0~6과 실제 삭제·Vertex 검증에서 발견한 보강까지 구현·커밋·검증했다.
-마스터 계획의 구현 게이트는 모두 닫혔다.
-
-**왜:** 화면과 기능이 존재하는 것만으로 삭제 완전성·감정축 멱등성과 모델 품질이
-검증되지는 않는다. 코드 완료를 MVP 완료로 과장하지 않고 남은 게이트를 명시한다.
+**현재:** P1 자동 일기 스케줄을 `feat/schedule`에서 구현·검증·커밋했다.
+사람이 `main`에 병합하기 전에는 P2 브랜치를 만들거나 작업하지 않는다.
 
 ### 다음 시작점
 
-1. production 전 신규 마이그레이션 2건 staging dry-run
-2. 사용자 요청 시 main 위 rebase → `merge --no-ff` → push
-3. 별도 베타 운영 계획으로 야간 스케줄러·알림·PWA·계정 연결 진행
+1. 사람이 `feat/schedule`을 검토하고 `main`에 `merge --no-ff`
+2. 병합 확인 뒤 `main`에서 `fix/entity-stopwords` 생성
+3. P2 시드 검증: `run-daily` 재실행 후 `점심` 제외·`김밥` 유지
 
 ### v2 검토에서 바로잡은 결정
 
@@ -52,6 +48,30 @@ Phase 0~6과 실제 삭제·Vertex 검증에서 발견한 보강까지 구현·�
 ---
 
 ## 상태 (Status) — 멈출 때 여기를 갱신하고 커밋
+
+- **P1 구현 완료:** `diary_hour` up/down, 설정 UI/API, 홈 예약 문구,
+  `run-scheduled`, 기존 요청 원장·`memory_jobs` 재사용, 원장+큐 단일
+  트랜잭션을 구현했다(`7ac0035`).
+- **P1 멱등 검증:** 서로 다른 타임존 중 도래 사용자만 선택, 동일 날짜 2회
+  실행 시 요청·잡·실제 일기 각 1건, 기록 0건·기존 일기 건너뜀을 통과했다.
+- **브라우저 확인:** 375px에서 `/settings` 21시→20시 저장 후 홈에
+  `오늘 밤 8시에 묶어드릴게요`가 반영됐다. 예약 시각이 지난 자정 설정에서는
+  `오늘을 정리할 시간이에요`와 `오늘 일기 만들기`가 함께 보였다. 가로 스크롤
+  없고 최하단에서 기록 버튼이 탭바 위에 온다. 테스트 설정은 21시로 복원했다.
+- **브라우저에서 발견·수정:** 기존 사용자 설정 update에 WHERE가 없어 실제
+  PATCH가 500이었다. 인증 사용자 id를 명시하는 조건과 RLS 통합 테스트를
+  추가했다. 기존 탐지 통합 기대값 3건도 현재 문구·점수 상한에 맞췄다
+  (`0b63935`).
+- **검증:** `npm run check` 39 files/173 tests, production build 17 pages,
+  worker ruff, worker 단위 146, 프런트 통합 63, worker 통합 96 모두 통과.
+  eval과 실제 Vertex 호출은 지시대로 실행하지 않았다.
+- **로컬 DB:** `20260729093000_diary_hour.sql`만 시드를 보존한 채 적용했다.
+  staging·production은 접속하지 않았다.
+- **작업트리:** 제품 변경은 모두 커밋했다. `.claude/orchestration/`,
+  `.claude/settings.local.json`, `docs/overview/`는 사용자 소유 미추적 파일로
+  그대로 두었다.
+- **사람이 할 일:** `feat/schedule` 검토·병합. 작업 스케줄러 등록과
+  staging 마이그레이션은 이번 로컬 구현 범위 밖이며 사람이 실행한다.
 
 - **코드 완료:** Phase 0~6. 놀라움(bits)·기록 부재·감정축·top 3·기각학습,
   일기 opt-out·톤 주문, 7일 리포트, 키워드 회고, JSON 내보내기, 재개 가능한
