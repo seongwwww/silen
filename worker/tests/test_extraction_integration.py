@@ -1,8 +1,9 @@
 import pytest
 
 from silen_worker.tasks.process import process_pending
-from tests.conftest import seed_user, seed_memory, delete_user
+from tests.conftest import StubEmbedder, seed_user, seed_memory, delete_user
 
+_EMB = StubEmbedder()
 
 class StubExtractor:
     """고정 후보를 반환하는 스텁. 실 Gemini 없이 파이프라인을 검증한다."""
@@ -31,7 +32,7 @@ def test_추출_결과가_entities_memory_entities로_저장된다(conn):
         )
         processed = process_pending(
             limit=10,
-            extractor=stub,
+            embedder=_EMB, extractor=stub,
             only_user_id=user,
         )
 
@@ -55,7 +56,7 @@ def test_환각_후보는_저장되지_않는다(conn):
         stub = StubExtractor([{"type": "place", "name": "스타벅스"}])  # 원문에 없음
         process_pending(
             limit=10,
-            extractor=stub,
+            embedder=_EMB, extractor=stub,
             only_user_id=user,
         )
         assert _entities_of(conn, user) == []
@@ -76,7 +77,7 @@ def test_점심은_저장하지_않고_김밥은_저장한다(conn):
             ]
         )
 
-        process_pending(limit=10, extractor=stub, only_user_id=user)
+        process_pending(limit=10, embedder=_EMB, extractor=stub, only_user_id=user)
 
         assert _entities_of(conn, user) == [("thing", "김밥")]
     finally:
@@ -91,7 +92,7 @@ def test_재처리해도_중복이_생기지_않는다(conn):
         stub = StubExtractor([{"type": "person", "name": "민수"}])
         process_pending(
             limit=10,
-            extractor=stub,
+            embedder=_EMB, extractor=stub,
             only_user_id=user,
         )
         # 같은 메모를 다시 큐에 넣어 재처리
@@ -101,7 +102,7 @@ def test_재처리해도_중복이_생기지_않는다(conn):
         )
         process_pending(
             limit=10,
-            extractor=stub,
+            embedder=_EMB, extractor=stub,
             only_user_id=user,
         )
 
@@ -125,7 +126,7 @@ def test_메모_삭제시_고아_entity가_사라진다(conn):
         stub = StubExtractor([{"type": "person", "name": "민수"}])
         process_pending(
             limit=10,
-            extractor=stub,
+            embedder=_EMB, extractor=stub,
             only_user_id=user,
         )
         assert len(_entities_of(conn, user)) == 1

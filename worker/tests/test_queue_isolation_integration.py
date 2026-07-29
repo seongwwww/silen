@@ -3,8 +3,9 @@
 import pytest
 
 from silen_worker.tasks.process import process_pending
-from tests.conftest import delete_user, seed_memory, seed_user
+from tests.conftest import StubEmbedder, delete_user, seed_memory, seed_user
 
+_EMB = StubEmbedder()
 
 class _NoEntities:
     def extract(self, text):
@@ -34,7 +35,7 @@ def test_다른_사용자의_메시지는_소비되지_않는다(conn):
         stranger_state = _queue_delivery_state(conn, stranger_memory)
         processed = process_pending(
             limit=10,
-            extractor=_NoEntities(),
+            embedder=_EMB, extractor=_NoEntities(),
             only_user_id=owner,
         )
 

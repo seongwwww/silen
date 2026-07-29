@@ -1,22 +1,111 @@
-import type { RecallResult } from "@/lib/services/recall";
-import { RECALL_QUERY_MAX } from "@/lib/services/recall";
+"use client";
+
+import Link from "next/link";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  RECALL_QUERY_MAX,
+  type RecallAnswer,
+  type RecallPollResult,
+} from "@/lib/services/recall";
 import { localDateFor } from "@/lib/time/day";
+
+type ViewState =
+  | "empty"
+  | "processing"
+  | "done"
+  | "error"
+  | "offline"
+  | "no-session";
 
 function dateTag(iso: string, timeZone: string): string {
   const [, month, day] = localDateFor(new Date(iso), timeZone).split("-");
   return `${Number(month)}.${Number(day)}`;
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 export function RecallScreen({
-  query,
-  results,
   timeZone = "Asia/Seoul",
+  pollIntervalMs = 800,
 }: {
-  query: string;
-  results: RecallResult[];
   timeZone?: string;
+  pollIntervalMs?: number;
 }) {
-  const searched = query.trim().length > 0;
+  const [question, setQuestion] = useState("");
+  const [submittedQuestion, setSubmittedQuestion] = useState("");
+  const [answer, setAnswer] = useState<RecallAnswer | null>(null);
+  const [state, setState] = useState<ViewState>("empty");
+  const mounted = useRef(true);
+
+  // 마운트마다 다시 true로 돌린다. cleanup만 두면 StrictMode의 이중 실행
+  // (mount→cleanup→mount) 뒤 영영 false로 남아 폴링이 첫 응답에서 멈춘다.
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const ask = useCallback(
+    async (rawQuestion: string) => {
+      const trimmed = rawQuestion.trim();
+      if (!trimmed) return;
+      if (!navigator.onLine) {
+        setState("offline");
+        return;
+      }
+      setSubmittedQuestion(trimmed);
+      setAnswer(null);
+      setState("processing");
+      const requestId = crypto.randomUUID();
+      try {
+        const accepted = await fetch("/api/recall", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestId, question: trimmed }),
+        });
+        // 401은 "기록이 없다"가 아니라 "아직 세션이 없다"다. 다시 시도해도
+        // 영영 안 되므로 실패로 뭉뚱그리지 않는다.
+        if (accepted.status === 401) {
+          setState("no-session");
+          return;
+        }
+        if (!accepted.ok) throw new Error("recall_request_failed");
+
+        for (;;) {
+          const response = await fetch(
+            `/api/recall?requestId=${encodeURIComponent(requestId)}`,
+            { cache: "no-store" },
+          );
+          if (!response.ok) throw new Error("recall_poll_failed");
+          const result = (await response.json()) as RecallPollResult;
+          if (!mounted.current) return;
+          if (result.status === "done") {
+            setAnswer(result.response);
+            setState("done");
+            return;
+          }
+          if (result.status === "error" || result.status === "missing") {
+            setState("error");
+            return;
+          }
+          await delay(pollIntervalMs);
+        }
+      } catch {
+        if (mounted.current) {
+          setState(navigator.onLine ? "error" : "offline");
+        }
+      }
+    },
+    [pollIntervalMs],
+  );
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void ask(question);
+  }
 
   return (
     <main className="mx-auto min-h-[calc(100svh-3.5rem)] w-full max-w-md px-5 py-10">
@@ -27,58 +116,111 @@ export function RecallScreen({
         </p>
       </header>
 
-      <form
-        role="search"
-        className="mt-8 grid grid-cols-[minmax(0,1fr)_auto] gap-2"
-      >
-        <label className="sr-only" htmlFor="recall-query">
-          기록 검색
+      <section aria-live="polite" className="mt-8 min-h-56">
+        {state === "empty" && (
+          <p className="py-16 text-center text-[15px] text-muted-foreground">
+            찾고 싶은 일을 물어보세요
+          </p>
+        )}
+        {submittedQuestion && state !== "empty" && (
+          <p className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-foreground px-4 py-3 text-[15px] leading-6 text-background">
+            {submittedQuestion}
+          </p>
+        )}
+        {state === "processing" && (
+          <div
+            role="status"
+            className="mt-4 rounded-2xl border bg-card px-5 py-8 text-center text-[15px] text-muted-foreground"
+          >
+            기록에서 찾고 있어요
+          </div>
+        )}
+        {state === "offline" && (
+          <p className="mt-4 rounded-xl border bg-card px-4 py-3 text-center text-sm text-muted-foreground">
+            인터넷 연결을 확인해 주세요
+          </p>
+        )}
+        {state === "no-session" && (
+          <div className="mt-4 rounded-2xl border bg-card px-5 py-8 text-center">
+            <p className="text-[15px] text-muted-foreground">
+              아직 남긴 기록이 없어요
+            </p>
+            <Link
+              href="/record"
+              className="mt-3 inline-flex min-h-11 items-center px-3 text-sm font-medium underline"
+            >
+              기록 남기러 가기
+            </Link>
+          </div>
+        )}
+
+        {state === "error" && (
+          <div className="mt-4 rounded-2xl border bg-card px-5 py-8 text-center">
+            <p className="text-[15px] text-muted-foreground">
+              기록을 찾지 못했어요
+            </p>
+            <button
+              type="button"
+              onClick={() => void ask(submittedQuestion)}
+              className="mt-3 min-h-11 px-3 text-sm font-medium underline"
+            >
+              다시 시도
+            </button>
+          </div>
+        )}
+        {state === "done" && answer && (
+          <article className="mt-4 rounded-2xl border bg-card px-4 py-5">
+            <p className="text-[15px] leading-7">{answer.answer}</p>
+            {answer.evidence.length > 0 && (
+              <ul aria-label="근거 기록" className="mt-4 space-y-3">
+                {answer.evidence.map((evidence) => (
+                  <li
+                    key={evidence.memoryId}
+                    className="rounded-xl bg-accent/70 px-3.5 py-3"
+                  >
+                    <time
+                      dateTime={evidence.capturedAt}
+                      className="text-xs font-medium text-muted-foreground"
+                    >
+                      {dateTag(evidence.capturedAt, timeZone)}
+                    </time>
+                    <p className="mt-1.5 text-[15px] leading-6">
+                      {evidence.quote}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {answer.confirmation && (
+              <p className="mt-5 text-[15px] font-medium">
+                {answer.confirmation}
+              </p>
+            )}
+          </article>
+        )}
+      </section>
+
+      <form onSubmit={submit} className="mt-6 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <label className="sr-only" htmlFor="recall-question">
+          기록에게 질문
         </label>
         <input
-          id="recall-query"
-          name="q"
-          type="search"
-          defaultValue={query}
+          id="recall-question"
+          value={question}
+          onChange={(event) => setQuestion(event.target.value)}
           maxLength={RECALL_QUERY_MAX}
-          placeholder="기억나는 단어나 문장"
-          className="min-h-11 min-w-0 flex-1 rounded-xl border bg-card px-4 text-[15px] outline-none focus-visible:ring-2"
+          placeholder="예: 카페 언제 갔지"
+          className="min-h-11 min-w-0 rounded-xl border bg-card px-4 text-[15px] outline-none focus-visible:ring-2"
         />
         <button
           type="submit"
-          className="min-h-11 rounded-xl bg-foreground px-5 text-sm font-medium text-background"
+          disabled={!question.trim() || state === "processing"}
+          className="min-h-11 rounded-xl bg-foreground px-4 text-sm font-medium text-background disabled:opacity-40"
         >
-          찾기
+          물어보기
         </button>
       </form>
-
-      <section aria-live="polite" className="mt-8">
-        {!searched ? (
-          <p className="py-16 text-center text-[15px] text-muted-foreground">
-            찾고 싶은 말을 적어보세요
-          </p>
-        ) : results.length === 0 ? (
-          <p className="py-16 text-center text-[15px] text-muted-foreground">
-            그런 기록은 아직 없어요
-          </p>
-        ) : (
-          <ul aria-label="검색 결과" className="space-y-3">
-            {results.map((result) => (
-              <li
-                key={result.id}
-                className="rounded-2xl border bg-card px-4 py-4"
-              >
-                <time
-                  dateTime={result.capturedAt}
-                  className="inline-flex rounded-full bg-accent px-2.5 py-1 text-xs font-medium"
-                >
-                  {dateTag(result.capturedAt, timeZone)}
-                </time>
-                <p className="mt-3 text-[15px] leading-7">{result.excerpt}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </main>
   );
 }
+

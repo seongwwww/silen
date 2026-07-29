@@ -111,11 +111,19 @@ worker\.venv\Scripts\python.exe evals/diary/run.py
 
 ### 4. 파이프라인 실행
 
-워커 함수는 CLI로 구동한다. **주기 실행은 OS 스케줄러에 위임**한다(상주 데몬 없음).
+워커 함수는 CLI로 구동한다. **주기 실행은 OS 스케줄러에 위임**한다(배포되는 상주 서비스 없음).
+
+**예외는 회고다.** 회고 답변은 사람이 화면 앞에서 기다리므로 분 단위 스케줄로는
+늦다. `/recall`을 쓰는 동안에는 `run-pending --watch`를 개발 머신에 띄워 둔다 —
+배포 자산이 아니라 작업 중 켜 두는 루프다. 안 띄우면 화면은 계속 "찾고 있어요"에
+머문다.
 
 ```powershell
-# 큐 소비 → 엔티티 추출 (실 Vertex 호출·비용)
+# 큐 소비 → 엔티티 추출·임베딩 (실 Vertex 호출·비용)
 worker\.venv\Scripts\python.exe -m silen_worker run-pending
+
+# 큐를 계속 소비한다 — 회고를 쓰려면 이걸 띄워 둔다 (Ctrl+C로 종료)
+worker\.venv\Scripts\python.exe -m silen_worker run-pending --watch
 
 # 사용자 로컬 설정 시각이 지난 오늘 일기 요청을 기존 큐에 멱등 등록
 worker\.venv\Scripts\python.exe -m silen_worker run-scheduled

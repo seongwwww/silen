@@ -143,6 +143,10 @@ class PostgresDeletionRepository:
               + (select count(*) from public.consents where user_id = %s)
               + (select count(*) from public.memories where user_id = %s)
               + (
+                  select count(*) from public.memory_embeddings
+                  where user_id = %s
+                )
+              + (
                   select count(*) from pgmq.q_memory_jobs
                   where message->>'user_id' = %s
                 )
@@ -151,7 +155,7 @@ class PostgresDeletionRepository:
                   where message->>'user_id' = %s
                 )
             """,
-            (user_id,) * 11,
+            (user_id,) * 12,
         ).fetchone()[0]
         return counts > 0
 

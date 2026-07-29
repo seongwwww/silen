@@ -75,3 +75,12 @@ def delete_user(conn: psycopg.Connection, user_id: str) -> None:
 
     # auth.users 삭제가 CASCADE로 public.users·memories를 지운다.
     conn.execute("delete from auth.users where id = %s", (user_id,))
+
+
+class StubEmbedder:
+    """통합 테스트가 유료 임베딩 API를 부르지 않게 한다(testing.md).
+    실 모델은 eval에서만 쓴다. 텍스트마다 다른 결정적 벡터를 낸다."""
+
+    def embed(self, text: str, task_type: str) -> list[float]:
+        seed = sum(ord(ch) for ch in text) or 1
+        return [((seed * (i + 1)) % 997) / 997 for i in range(768)]
