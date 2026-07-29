@@ -169,3 +169,50 @@ describe("RecordForm", () => {
     expect(screen.getByText("지은은 어떤 사람이었어요?")).toBeInTheDocument();
   });
 });
+
+describe("사진 첨부", () => {
+  const jpeg = () =>
+    new File([new Uint8Array([1, 2, 3])], "a.jpg", { type: "image/jpeg" });
+
+  it("사진만 있어도 남길 수 있다", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<RecordForm uploadPhoto={async () => "u1/abc.jpg"} />);
+
+    await userEvent.upload(screen.getByLabelText("사진 첨부"), jpeg());
+    expect(sendButton()).toBeEnabled();
+    await userEvent.click(sendButton());
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.assetPaths).toEqual(["u1/abc.jpg"]);
+  });
+
+  it("업로드가 실패해도 쓴 글을 잃지 않는다", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <RecordForm
+        uploadPhoto={async () => {
+          throw new Error("storage_down");
+        }}
+      />,
+    );
+
+    await userEvent.type(input(), "지우면 안 되는 글");
+    await userEvent.upload(screen.getByLabelText("사진 첨부"), jpeg());
+    await userEvent.click(sendButton());
+
+    await waitFor(() => expect(input()).toHaveValue("지우면 안 되는 글"));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("첨부한 사진을 뗄 수 있다", async () => {
+    render(<RecordForm uploadPhoto={async () => "u1/abc.jpg"} />);
+
+    await userEvent.upload(screen.getByLabelText("사진 첨부"), jpeg());
+    await userEvent.click(screen.getByRole("button", { name: "사진 빼기" }));
+
+    expect(sendButton()).toBeDisabled();
+  });
+});

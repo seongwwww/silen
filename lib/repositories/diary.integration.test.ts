@@ -115,7 +115,7 @@ describe("diaryRepository", () => {
     expect(view!.oneLine).toBe("비슷한 하루.");
     expect(view!.body).toBe("특별할 것 없는 하루였다.");
     expect(view!.differences).toContain("평소보다 일찍 퇴근");
-    expect(view!.evidence).toContain("점심 김밥");
+    expect(view!.evidence.map((item) => item.text)).toContain("점심 김밥");
     expect(view!.isEdited).toBe(false);
   });
 
@@ -199,7 +199,7 @@ describe("diaryRepository", () => {
     const view = await repo.findByDate(today);
     expect(view).not.toBeNull();
     expect(view!.date).toBe(today);
-    expect(view!.evidence).toContain("날짜 조회용");
+    expect(view!.evidence.map((item) => item.text)).toContain("날짜 조회용");
   });
 
   it("일기가 없는 날짜는 null", async () => {

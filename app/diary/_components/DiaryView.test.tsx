@@ -12,7 +12,7 @@ const base: DiaryView = {
   oneLine: "비슷한 하루, 그래도 조금 일찍.",
   body: "특별할 것 없는 하루였다. 점심은 김밥.",
   differences: ["평소보다 일찍 퇴근"],
-  evidence: ["점심 김밥"],
+  evidence: [{ text: "점심 김밥", photoPath: null }],
   isEdited: false,
   question: null,
   toneInstruction: null,

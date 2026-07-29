@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { uploadPhotoInBrowser } from "@/lib/services/photoUploadClient";
 import { RecordForm } from "./RecordForm";
 
 export function RecordScreen({ question }: { question: string | null }) {
@@ -16,6 +17,7 @@ export function RecordScreen({ question }: { question: string | null }) {
       </header>
       <RecordForm
         question={question}
+        uploadPhoto={uploadPhotoInBrowser}
         onSaved={question ? undefined : () => router.push("/")}
       />
     </main>

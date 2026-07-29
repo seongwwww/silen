@@ -7,6 +7,7 @@ type SourceRow = {
     raw_text: string | null;
     is_locked: boolean;
     deleted_at: string | null;
+    assets: { file_url: string; asset_type: string }[] | null;
   } | null;
 };
 
@@ -14,7 +15,36 @@ type SourceRow = {
 // 타입을 잃으면 supabase-js의 select 타입 추론이 깨져 row.diary_sections가
 // GenericStringError가 된다(tsc에서만 드러남).
 const DIARY_SELECT =
-  "id, date, status, generated_text, edited_text, tone_instruction, regenerate_requested_at, diary_sections(id, section_type, content), diary_sources(memories(raw_text, is_locked, deleted_at))" as const;
+  "id, date, status, generated_text, edited_text, tone_instruction, regenerate_requested_at, diary_sections(id, section_type, content), diary_sources(memories(raw_text, is_locked, deleted_at, assets(file_url, asset_type)))" as const;
+
+const SIGNED_URL_TTL_SECONDS = 60 * 10;
+
+/** 근거 사진에 서명 URL을 붙인다. 버킷이 비공개라 경로만으로는 못 본다.
+ * 짧게 만료시켜 URL이 새어도 오래 쓰이지 않게 한다. */
+async function withPhotoUrls(
+  client: SupabaseClient,
+  view: DiaryView,
+): Promise<DiaryView> {
+  const paths = view.evidence
+    .map((item) => item.photoPath)
+    .filter((path): path is string => path !== null);
+  if (paths.length === 0) return view;
+
+  const { data } = await client.storage
+    .from("memories")
+    .createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
+  const urlByPath = new Map(
+    (data ?? []).map((entry) => [entry.path ?? "", entry.signedUrl]),
+  );
+
+  return {
+    ...view,
+    evidence: view.evidence.map((item) => ({
+      ...item,
+      photoUrl: item.photoPath ? (urlByPath.get(item.photoPath) ?? null) : null,
+    })),
+  };
+}
 
 /** 조회 행 하나를 표시용 뷰로 옮긴다. findLatest·findByDate가 공유한다. */
 function toDiaryView(row: {
@@ -45,24 +75,27 @@ function toDiaryView(row: {
     differences: sections
       .filter((section) => section.section_type === "다른점")
       .map((section) => section.content),
-    // 잠긴·삭제된·빈 메모는 노출하지 않는다(privacy.md).
+    // 잠긴·삭제된 메모는 노출하지 않는다(privacy.md).
+    // 사진만 있는 기록도 근거다 — 글이 없다고 빼지 않는다.
     evidence: sources
       .map((source) => source.memories)
       .filter(
         (
           memory,
         ): memory is {
-          raw_text: string;
+          raw_text: string | null;
           is_locked: boolean;
           deleted_at: string | null;
-        } =>
-          !!memory &&
-          !memory.is_locked &&
-          !memory.deleted_at &&
-          !!memory.raw_text &&
-          memory.raw_text.trim().length > 0,
+          assets: { file_url: string; asset_type: string }[] | null;
+        } => !!memory && !memory.is_locked && !memory.deleted_at,
       )
-      .map((memory) => memory.raw_text),
+      .map((memory) => ({
+        text: memory.raw_text?.trim() ? memory.raw_text : null,
+        photoPath:
+          (memory.assets ?? []).find((asset) => asset.asset_type === "photo")
+            ?.file_url ?? null,
+      }))
+      .filter((item) => item.text !== null || item.photoPath !== null),
     isEdited: (row.status as string) !== "draft",
     question: (() => {
       const found = sections.find((section) => section.section_type === "질문");
@@ -114,7 +147,7 @@ export function createDiaryRepository(client: SupabaseClient) {
         .limit(1);
       if (error) throw error;
       const row = data?.[0];
-      return row ? toDiaryView(row) : null;
+      return row ? withPhotoUrls(client, toDiaryView(row)) : null;
     },
 
     /** 그 날짜의 일기. 없으면 null(호출자가 404로 처리한다). */
@@ -126,7 +159,7 @@ export function createDiaryRepository(client: SupabaseClient) {
         .limit(1);
       if (error) throw error;
       const row = data?.[0];
-      return row ? toDiaryView(row) : null;
+      return row ? withPhotoUrls(client, toDiaryView(row)) : null;
     },
 
     /** 기준 날짜의 앞뒤로 **실제 일기가 있는** 날짜. 날짜-1이 아니라

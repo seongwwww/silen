@@ -14,7 +14,7 @@ export interface DiaryView {
   /** 일기에 녹아든 확정 차이 */
   differences: string[];
   /** 근거 메모 본문(잠금·삭제·공백 제외) */
-  evidence: string[];
+  evidence: DiaryEvidence[];
   /** 사용자가 손댄 일기인가(status !== 'draft') */
   isEdited: boolean;
   /** 꼬리 질문(없으면 null). id는 기록 화면 링크에 쓴다 — URL엔 id만 넣는다. */
@@ -24,6 +24,14 @@ export interface DiaryView {
   /** 재생성 요청이 저장돼 다음 워커 실행을 기다리는가. */
   regenerateRequested: boolean;
 }
+
+/** 근거 한 건. 사진만 있는 기록도 근거다 — 글이 없다고 빼지 않는다. */
+export type DiaryEvidence = {
+  text: string | null;
+  /** Storage 경로. 화면에 쓰려면 서명 URL로 바꿔야 한다. */
+  photoPath: string | null;
+  photoUrl?: string | null;
+};
 
 export type DiaryStatus = "draft" | "edited" | "confirmed";
 
