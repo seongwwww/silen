@@ -6,6 +6,8 @@ import {
   SUPABASE_URL,
   ANON_KEY,
 } from "./testSupport";
+import { createPhotoRepository } from "./photoRepository";
+import { uploadPhoto } from "@/lib/services/photoUpload";
 
 let admin: SupabaseClient;
 let alice: string;
@@ -50,6 +52,19 @@ afterAll(async () => {
 });
 
 describe("Storage RLS", () => {
+  it("사진 저장소도 본인 UUID 경로에만 업로드한다", async () => {
+    const client = await clientFor("alice-storage@example.com");
+    const file = new File([PNG], "휴가-원본.png", { type: "image/png" });
+
+    const path = await uploadPhoto(createPhotoRepository(client), file);
+
+    expect(path).toMatch(new RegExp(`^${alice}/[0-9a-f-]+\\.png$`));
+    expect(path).not.toContain("휴가-원본");
+    const { data, error } = await client.storage.from("memories").download(path);
+    expect(error).toBeNull();
+    expect(data).not.toBeNull();
+  });
+
   it("본인 폴더에는 업로드된다", async () => {
     const client = await clientFor("alice-storage@example.com");
     const { error } = await client.storage
@@ -76,5 +91,25 @@ describe("Storage RLS", () => {
     const { data, error } = await bobClient.storage.from("memories").download(`${alice}/secret.png`);
     // RLS로 막히면 error가 있거나 data가 비어 있다.
     expect(error ?? data === null).toBeTruthy();
+  });
+
+  it("짧게 발급한 서명 URL은 만료 뒤 열리지 않는다", async () => {
+    const client = await clientFor("alice-storage@example.com");
+    const path = `${alice}/expires.png`;
+    const { error: uploadError } = await client.storage
+      .from("memories")
+      .upload(path, PNG, { contentType: "image/png" });
+    expect(uploadError).toBeNull();
+
+    const { data, error } = await client.storage
+      .from("memories")
+      .createSignedUrl(path, 1);
+    expect(error).toBeNull();
+    expect(data?.signedUrl).toBeTruthy();
+    expect((await fetch(data!.signedUrl)).ok).toBe(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 2_100));
+
+    expect((await fetch(data!.signedUrl)).ok).toBe(false);
   });
 });

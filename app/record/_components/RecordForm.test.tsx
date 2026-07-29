@@ -215,4 +215,14 @@ describe("사진 첨부", () => {
 
     expect(sendButton()).toBeDisabled();
   });
+
+  it("사진을 고른 뒤 저장 전에 떠나면 업로드를 시작하지 않는다", async () => {
+    const uploadPhoto = vi.fn();
+    const { unmount } = render(<RecordForm uploadPhoto={uploadPhoto} />);
+
+    await userEvent.upload(screen.getByLabelText("사진 첨부"), jpeg());
+    unmount();
+
+    expect(uploadPhoto).not.toHaveBeenCalled();
+  });
 });

@@ -3,6 +3,35 @@
 import { useState } from "react";
 import type { DiaryEvidence } from "@/lib/services/diary";
 
+function EvidencePhoto({
+  url,
+  hasText,
+}: {
+  url: string;
+  hasText: boolean;
+}) {
+  const [expired, setExpired] = useState(false);
+
+  if (expired) {
+    return (
+      <p className={`text-xs text-muted-foreground ${hasText ? "mt-2" : ""}`}>
+        사진을 다시 보려면 화면을 새로고침해 주세요
+      </p>
+    );
+  }
+
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element --
+       서명 URL은 만료되는 임시 주소라 next/image 최적화 대상이 아니다. */
+    <img
+      src={url}
+      alt="이 기록에 붙인 사진"
+      onError={() => setExpired(true)}
+      className={`max-h-48 max-w-full rounded-md object-contain ${hasText ? "mt-2" : ""}`}
+    />
+  );
+}
+
 /** 일기가 무엇을 보고 쓰였는지 펼쳐 볼 수 있게 한다(추적성).
  * 펼친 내용은 사용자 원본이므로 AI 생성물과 시각·라벨로 구분한다(frontend.md). */
 export function EvidenceDisclosure({ items }: { items: DiaryEvidence[] }) {
@@ -29,13 +58,7 @@ export function EvidenceDisclosure({ items }: { items: DiaryEvidence[] }) {
                 <p className="text-[15px] whitespace-pre-wrap">{item.text}</p>
               )}
               {item.photoUrl && (
-                /* eslint-disable-next-line @next/next/no-img-element --
-                   서명 URL은 만료되는 임시 주소라 next/image 최적화 대상이 아니다. */
-                <img
-                  src={item.photoUrl}
-                  alt="이 기록에 붙인 사진"
-                  className={`max-h-48 w-auto rounded-md ${item.text ? "mt-2" : ""}`}
-                />
+                <EvidencePhoto url={item.photoUrl} hasText={!!item.text} />
               )}
             </div>
           ))}

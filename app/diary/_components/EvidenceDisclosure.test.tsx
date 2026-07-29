@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EvidenceDisclosure } from "./EvidenceDisclosure";
 
@@ -58,5 +58,21 @@ describe("사진 근거", () => {
 
     expect(screen.getByText("글만")).toBeInTheDocument();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("서명 URL이 만료되면 깨진 이미지를 숨기고 다시 불러오기 안내를 남긴다", async () => {
+    render(
+      <EvidenceDisclosure
+        items={[{ text: null, photoPath: "u1/a.png", photoUrl: "https://x/a.png" }]}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button"));
+
+    fireEvent.error(screen.getByRole("img", { name: "이 기록에 붙인 사진" }));
+
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("사진을 다시 보려면 화면을 새로고침해 주세요"),
+    ).toBeInTheDocument();
   });
 });
