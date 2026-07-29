@@ -1,6 +1,7 @@
 """Vertex AI 회고 근거 선택기. 자유 서술을 받지 않아 근거 밖 문장을 차단한다."""
 
 import json
+from functools import lru_cache
 import os
 
 from google import genai
@@ -58,9 +59,18 @@ class GeminiRecallSelector:
                 temperature=0,
                 response_mime_type="application/json",
                 response_schema=_RESPONSE_SCHEMA,
+                # 근거 고르기는 추론이 아니라 선택이다. 사고 과정을 켜두면
+                # 응답이 3배 느려진다(실측 1.1초 → 3.7초).
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
         )
         data = json.loads(response.text)
         selections = data.get("selections", [])
         return selections if isinstance(selections, list) else []
 
+
+
+@lru_cache(maxsize=1)
+def get_recall_selector() -> GeminiRecallSelector:
+    """클라이언트를 재사용한다. 요청마다 새로 만들면 연결 설정에만 몇 초가 든다."""
+    return GeminiRecallSelector()

@@ -12,6 +12,7 @@ gemini-2.0-flash 계열이 2026-06-01부로 폐기되어(discontinued) gemini-3.
 """
 
 import json
+from functools import lru_cache
 import os
 
 from google import genai
@@ -78,3 +79,9 @@ class GeminiExtractor:
         )
         data = json.loads(resp.text)
         return data.get("entities", [])
+
+
+@lru_cache(maxsize=1)
+def get_extractor() -> GeminiExtractor:
+    """클라이언트를 재사용한다. 요청마다 새로 만들면 연결 설정에만 몇 초가 든다."""
+    return GeminiExtractor()

@@ -47,21 +47,21 @@ logger = logging.getLogger(__name__)
 
 
 def _default_captioner():
-    from silen_worker.photo.gemini import GeminiCaptioner
+    from silen_worker.photo.gemini import get_captioner
 
-    return GeminiCaptioner()
+    return get_captioner()
 
 
 def _default_photo_embedder():
-    from silen_worker.photo.vertex import MultimodalEmbedder
+    from silen_worker.photo.vertex import get_multimodal_embedder
 
-    return MultimodalEmbedder()
+    return get_multimodal_embedder()
 
 
 def _default_extractor():
-    from silen_worker.extraction.gemini import GeminiExtractor
+    from silen_worker.extraction.gemini import get_extractor
 
-    return GeminiExtractor()
+    return get_extractor()
 
 
 def _default_read_image():
@@ -219,9 +219,9 @@ def process_pending(
                     continue
                 if memory.raw_text:
                     if resolved_extractor is None:
-                        from silen_worker.extraction.gemini import GeminiExtractor
+                        from silen_worker.extraction.gemini import get_extractor
 
-                        resolved_extractor = GeminiExtractor()
+                        resolved_extractor = get_extractor()
                     candidates = resolved_extractor.extract(memory.raw_text)
                     for ent in guardrail(candidates, memory.raw_text):
                         entity_id = upsert_entity(
@@ -254,9 +254,9 @@ def process_pending(
                 if search_text:
                     if not has_current_embedding(conn, memory.id, memory.user_id):
                         if resolved_embedder is None:
-                            from silen_worker.embedding.gemini import GeminiEmbedder
+                            from silen_worker.embedding.gemini import get_embedder
 
-                            resolved_embedder = GeminiEmbedder()
+                            resolved_embedder = get_embedder()
                         vector = resolved_embedder.embed(
                             search_text,
                             DOCUMENT_TASK_TYPE,

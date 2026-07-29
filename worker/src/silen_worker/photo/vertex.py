@@ -5,6 +5,7 @@ ADC로 인증한다(조직 정책이 API 키 금지). 본문·이미지는 로�
 """
 
 import base64
+from functools import lru_cache
 import os
 
 import google.auth
@@ -62,3 +63,9 @@ class MultimodalEmbedder:
         if values is None:
             raise RuntimeError("multimodal embedding response had no vector")
         return validate_photo_vector(values)
+
+
+@lru_cache(maxsize=1)
+def get_multimodal_embedder() -> MultimodalEmbedder:
+    """클라이언트를 재사용한다. 요청마다 새로 만들면 연결 설정에만 몇 초가 든다."""
+    return MultimodalEmbedder()

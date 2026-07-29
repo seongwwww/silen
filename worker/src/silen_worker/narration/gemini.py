@@ -7,6 +7,7 @@ env: GOOGLE_GENAI_USE_VERTEXAI=true, GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION
 """
 
 import json
+from functools import lru_cache
 import os
 
 from google import genai
@@ -50,3 +51,9 @@ class GeminiNarrator:
             ),
         )
         return json.loads(resp.text)
+
+
+@lru_cache(maxsize=1)
+def get_narrator() -> GeminiNarrator:
+    """클라이언트를 재사용한다. 요청마다 새로 만들면 연결 설정에만 몇 초가 든다."""
+    return GeminiNarrator()
