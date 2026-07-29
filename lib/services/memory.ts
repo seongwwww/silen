@@ -39,6 +39,27 @@ export class ForeignAssetPathError extends Error {
   }
 }
 
+/** 클라이언트 시계 어긋남만 흡수할 만큼만 둔다. */
+export const FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
+
+/** occurredAt이 미래일 때. 아직 오지 않은 날에 차이·일기가 생기면 안 된다. */
+export class FutureOccurrenceError extends Error {
+  constructor() {
+    super("occurredAt은 미래일 수 없다");
+    this.name = "FutureOccurrenceError";
+  }
+}
+
+export function assertNotFuture(
+  occurredAt: string | undefined,
+  now: Date = new Date(),
+): void {
+  if (!occurredAt) return;
+  if (Date.parse(occurredAt) > now.getTime() + FUTURE_TOLERANCE_MS) {
+    throw new FutureOccurrenceError();
+  }
+}
+
 const VALENCE: Record<EmotionChoice, number> = { good: 1, neutral: 0, bad: -1 };
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -59,6 +80,8 @@ export async function createMemory(
   repo: MemoryRepository,
   input: CreateMemoryInput,
 ): Promise<{ memoryId: string }> {
+  assertNotFuture(input.occurredAt);
+
   const trimmed = input.text?.trim() ?? "";
   const hasText = trimmed.length > 0;
   const paths = input.assetPaths ?? [];

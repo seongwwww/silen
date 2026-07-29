@@ -47,32 +47,32 @@ export function createMemoryRepository(
     async listBetween(start, end) {
       const { data, error } = await client
         .from("memories")
-        .select("id, raw_text, captured_at")
-        .gte("captured_at", start)
-        .lt("captured_at", end)
+        .select("id, raw_text, effective_at")
+        .gte("effective_at", start)
+        .lt("effective_at", end)
         .is("deleted_at", null)
         .eq("is_locked", false)
         .not("raw_text", "is", null)
         .neq("raw_text", "")
-        .order("captured_at", { ascending: false });
+        .order("effective_at", { ascending: false });
       if (error) throw error;
       return (data ?? []).map((row) => ({
         id: row.id as string,
         rawText: row.raw_text as string,
-        capturedAt: row.captured_at as string,
+        capturedAt: row.effective_at as string,
       }));
     },
 
     async listActiveCapturedAt() {
       const { data, error } = await client
         .from("memories")
-        .select("captured_at")
+        .select("effective_at")
         .is("deleted_at", null)
         .eq("is_locked", false)
         .not("raw_text", "is", null)
         .neq("raw_text", "");
       if (error) throw error;
-      return (data ?? []).map((row) => row.captured_at as string);
+      return (data ?? []).map((row) => row.effective_at as string);
     },
 
   };

@@ -11,7 +11,7 @@ def fetch_stats(conn: psycopg.Connection) -> StatsSnapshot:
           select
             m.user_id,
             count(
-              distinct (m.captured_at at time zone u.timezone)::date
+              distinct (m.effective_at at time zone u.timezone)::date
             )::int as day_count
           from public.memories m
           join public.users u on u.id = m.user_id

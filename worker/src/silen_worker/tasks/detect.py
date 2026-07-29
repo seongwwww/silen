@@ -65,7 +65,7 @@ def detect_day(
     active_by_date: dict[date, list[str]] = {}
     for row in active_rows:
         local = date.fromisoformat(
-            local_date_for(row.captured_at, row.timezone)
+            local_date_for(row.effective_at, row.timezone)
         )
         if history_start <= local <= target:
             active_by_date.setdefault(local, []).append(row.memory_id)
@@ -88,7 +88,7 @@ def detect_day(
     by_entity: dict[str, dict] = {}
     for row in occurrence_rows:
         local = date.fromisoformat(
-            local_date_for(row.captured_at, row.timezone)
+            local_date_for(row.effective_at, row.timezone)
         )
         if not history_start <= local <= target:
             continue
@@ -147,7 +147,7 @@ def detect_day(
         WINDOW_DAYS,
     ):
         local = date.fromisoformat(
-            local_date_for(row.captured_at, row.timezone)
+            local_date_for(row.effective_at, row.timezone)
         )
         if history_start <= local <= target:
             emotion_entries.append((local, row.valence))

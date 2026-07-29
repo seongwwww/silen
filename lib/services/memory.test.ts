@@ -4,6 +4,8 @@ import {
   EmptyMemoryError,
   ForeignAssetPathError,
   type MemoryRepository,
+  assertNotFuture,
+  FutureOccurrenceError,
 } from "./memory";
 
 function stubRepo(overrides: Partial<MemoryRepository> = {}): MemoryRepository {
@@ -94,5 +96,40 @@ describe("createMemory", () => {
       rawText: "메모",
       occurredAt: "2026-03-01T09:00:00Z",
     });
+  });
+});
+
+describe("사건 시각(occurredAt)", () => {
+  const now = new Date("2026-07-29T12:00:00Z");
+
+  it("과거는 받는다", () => {
+    expect(() =>
+      assertNotFuture("2026-07-15T09:00:00Z", now),
+    ).not.toThrow();
+  });
+
+  it("먼 미래는 거부한다", () => {
+    // 미래 기록을 받으면 '오늘'의 정의가 무너지고 아직 오지 않은 날에
+    // 차이와 일기가 생긴다.
+    expect(() => assertNotFuture("2026-07-30T00:00:00Z", now)).toThrow(
+      FutureOccurrenceError,
+    );
+  });
+
+  it("시계 어긋남만큼은 봐준다", () => {
+    // 클라이언트 시계가 몇 분 빠른 것까지 막으면 정상 기록이 실패한다.
+    expect(() =>
+      assertNotFuture("2026-07-29T12:04:00Z", now),
+    ).not.toThrow();
+  });
+
+  it("허용 오차를 넘으면 거부한다", () => {
+    expect(() => assertNotFuture("2026-07-29T12:06:00Z", now)).toThrow(
+      FutureOccurrenceError,
+    );
+  });
+
+  it("값이 없으면 통과한다", () => {
+    expect(() => assertNotFuture(undefined, now)).not.toThrow();
   });
 });

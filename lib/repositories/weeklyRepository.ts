@@ -131,10 +131,10 @@ export function createWeeklyRepository(client: SupabaseClient) {
             .order("rank", { ascending: true }),
           client
             .from("memories")
-            .select("captured_at")
+            .select("effective_at")
             .eq("user_id", userId)
-            .gte("captured_at", startInstant)
-            .lt("captured_at", endInstant)
+            .gte("effective_at", startInstant)
+            .lt("effective_at", endInstant)
             .is("deleted_at", null)
             .eq("is_locked", false),
           client
@@ -155,7 +155,7 @@ export function createWeeklyRepository(client: SupabaseClient) {
       const counts = new Map<string, number>();
       for (const row of memoryResult.data ?? []) {
         const date = localDateFor(
-          new Date(row.captured_at as string),
+          new Date(row.effective_at as string),
           timeZone,
         );
         counts.set(date, (counts.get(date) ?? 0) + 1);

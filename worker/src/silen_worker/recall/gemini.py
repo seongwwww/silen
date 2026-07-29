@@ -45,7 +45,7 @@ class GeminiRecallSelector:
             "candidates": [
                 {
                     "memory_id": candidate.memory_id,
-                    "captured_at": candidate.captured_at.isoformat(),
+                    "date": candidate.effective_at.isoformat(),
                     "raw_text": candidate.raw_text,
                 }
                 for candidate in candidates

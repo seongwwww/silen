@@ -18,7 +18,7 @@ def search_vector_candidates(
     rows = conn.execute(
         """
         with scoped as materialized (
-          select me.memory_id, me.embedding, m.raw_text, m.captured_at,
+          select me.memory_id, me.embedding, m.raw_text, m.effective_at,
                  (
                    select a.file_url
                      from public.assets a
@@ -40,9 +40,9 @@ def search_vector_candidates(
              and m.raw_text is not null
              and btrim(m.raw_text) <> ''
         )
-        select memory_id::text, raw_text, captured_at, photo_path
+        select memory_id::text, raw_text, effective_at, photo_path
           from scoped
-         order by embedding <=> %s::vector, captured_at desc, memory_id
+         order by embedding <=> %s::vector, effective_at desc, memory_id
          limit %s
         """,
         (user_id, EMBEDDING_MODEL, user_id, vector_literal(query_vector), limit),
@@ -65,7 +65,7 @@ def search_keyword_candidates(
     patterns = [f"%{term}%" for term in escaped]
     rows = conn.execute(
         """
-        select m.id::text, m.raw_text, m.captured_at,
+        select m.id::text, m.raw_text, m.effective_at,
                (
                  select a.file_url
                    from public.assets a
@@ -83,7 +83,7 @@ def search_keyword_candidates(
            -- ESCAPE 절은 LIKE 특수 구문에만 있다. ANY(배열)은 연산자 형식이라
            -- 붙일 수 없다. 기본 이스케이프 문자가 이미 백슬래시라 필요도 없다.
            and m.raw_text ilike any(%s)
-         order by m.captured_at desc, m.id
+         order by m.effective_at desc, m.id
          limit %s
         """,
         (user_id, patterns, limit),

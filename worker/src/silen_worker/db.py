@@ -74,21 +74,21 @@ class OccurrenceRow:
     entity_id: str
     entity_type: str
     memory_id: str
-    captured_at: datetime
+    effective_at: datetime
     timezone: str
 
 
 @dataclass
 class ActiveMemoryRow:
     memory_id: str
-    captured_at: datetime
+    effective_at: datetime
     timezone: str
 
 
 @dataclass
 class EmotionRow:
     memory_id: str
-    captured_at: datetime
+    effective_at: datetime
     timezone: str
     valence: float
 
@@ -115,15 +115,15 @@ def fetch_window_active_memories(
     )
     rows = conn.execute(
         """
-        select m.id::text, m.captured_at, u.timezone
+        select m.id::text, m.effective_at, u.timezone
         from public.memories m
         join public.users u on u.id = m.user_id
         where m.user_id = %s
           and m.deleted_at is null
           and m.is_locked = false
-          and m.captured_at >= %s
-          and m.captured_at < %s
-        order by m.captured_at
+          and m.effective_at >= %s
+          and m.effective_at < %s
+        order by m.effective_at
         """,
         (user_id, lower, upper),
     ).fetchall()
@@ -149,7 +149,7 @@ def fetch_window_emotions(
     )
     rows = conn.execute(
         """
-        select m.id::text, m.captured_at, u.timezone, e.valence
+        select m.id::text, m.effective_at, u.timezone, e.valence
         from public.emotions e
         join public.memories m on m.id = e.memory_id
         join public.users u on u.id = m.user_id
@@ -158,9 +158,9 @@ def fetch_window_emotions(
           and m.is_locked = false
           and e.confirmed_by_user = true
           and e.valence is not null
-          and m.captured_at >= %s
-          and m.captured_at < %s
-        order by m.captured_at
+          and m.effective_at >= %s
+          and m.effective_at < %s
+        order by m.effective_at
         """,
         (user_id, lower, upper),
     ).fetchall()
@@ -185,7 +185,7 @@ def fetch_window_occurrences(
     )
     rows = conn.execute(
         """
-        select me.entity_id::text, e.entity_type, m.id::text, m.captured_at, u.timezone
+        select me.entity_id::text, e.entity_type, m.id::text, m.effective_at, u.timezone
         from public.memory_entities me
         join public.memories m on m.id = me.memory_id
         join public.entities e on e.id = me.entity_id
@@ -193,8 +193,8 @@ def fetch_window_occurrences(
         where m.user_id = %s
           and m.deleted_at is null
           and m.is_locked = false
-          and m.captured_at >= %s
-          and m.captured_at < %s
+          and m.effective_at >= %s
+          and m.effective_at < %s
           and e.user_id = %s
           and e.normalized_name <> all(%s::text[])
         """,
@@ -221,7 +221,7 @@ def fetch_latest_prior_occurrences(
     rows = conn.execute(
         """
         select distinct on (me.entity_id)
-               me.entity_id::text, m.captured_at, u.timezone, m.id::text
+               me.entity_id::text, m.effective_at, u.timezone, m.id::text
         from public.memory_entities me
         join public.memories m on m.id = me.memory_id
         join public.users u on u.id = m.user_id
@@ -231,8 +231,8 @@ def fetch_latest_prior_occurrences(
           and m.deleted_at is null
           and m.is_locked = false
           and me.entity_id = any(%s::uuid[])
-          and (m.captured_at at time zone u.timezone)::date < %s
-        order by me.entity_id, m.captured_at desc
+          and (m.effective_at at time zone u.timezone)::date < %s
+        order by me.entity_id, m.effective_at desc
         """,
         (user_id, user_id, entity_ids, target_date),
     ).fetchall()
@@ -249,7 +249,7 @@ def fetch_earliest_occurrence(
     rows = conn.execute(
         """
         select distinct on (me.entity_id)
-               me.entity_id::text, m.captured_at, u.timezone
+               me.entity_id::text, m.effective_at, u.timezone
         from public.memory_entities me
         join public.memories m on m.id = me.memory_id
         join public.users u on u.id = m.user_id
@@ -257,7 +257,7 @@ def fetch_earliest_occurrence(
           and m.deleted_at is null
           and m.is_locked = false
           and me.entity_id = any(%s::uuid[])
-        order by me.entity_id, m.captured_at asc
+        order by me.entity_id, m.effective_at asc
         """,
         (user_id, entity_ids),
     ).fetchall()
@@ -549,7 +549,7 @@ def upsert_narration(
 @dataclass
 class DiaryMemoryRow:
     memory_id: str
-    captured_at: datetime
+    effective_at: datetime
     timezone: str
     raw_text: str
 
@@ -563,7 +563,7 @@ def fetch_diary_memories(
     upper = datetime.combine(target_date + timedelta(days=2), datetime.min.time(), timezone.utc)
     rows = conn.execute(
         """
-        select m.id::text, m.captured_at, u.timezone, m.raw_text
+        select m.id::text, m.effective_at, u.timezone, m.raw_text
         from public.memories m
         join public.users u on u.id = m.user_id
         where m.user_id = %s
@@ -571,9 +571,9 @@ def fetch_diary_memories(
           and m.is_locked = false
           and m.raw_text is not null
           and length(btrim(m.raw_text)) > 0
-          and m.captured_at >= %s
-          and m.captured_at < %s
-        order by m.captured_at
+          and m.effective_at >= %s
+          and m.effective_at < %s
+        order by m.effective_at
         """,
         (user_id, lower, upper),
     ).fetchall()
@@ -750,7 +750,7 @@ def fetch_weekly_anchor(conn: psycopg.Connection, user_id: str) -> date | None:
 
     row = conn.execute(
         """
-        select min((m.captured_at at time zone u.timezone)::date)
+        select min((m.effective_at at time zone u.timezone)::date)
         from public.memories m
         join public.users u on u.id = m.user_id
         where m.user_id = %s
@@ -770,14 +770,14 @@ def fetch_weekly_memories(
 ) -> list[WeeklyMemoryRow]:
     rows = conn.execute(
         """
-        select m.id::text, (m.captured_at at time zone u.timezone)::date
+        select m.id::text, (m.effective_at at time zone u.timezone)::date
         from public.memories m
         join public.users u on u.id = m.user_id
         where m.user_id = %s
           and m.deleted_at is null
           and m.is_locked = false
-          and (m.captured_at at time zone u.timezone)::date between %s and %s
-        order by (m.captured_at at time zone u.timezone)::date, m.id
+          and (m.effective_at at time zone u.timezone)::date between %s and %s
+        order by (m.effective_at at time zone u.timezone)::date, m.id
         """,
         (user_id, start_date, end_date),
     ).fetchall()
@@ -793,7 +793,7 @@ def fetch_weekly_occurrences(
     rows = conn.execute(
         """
         select e.id::text, e.entity_type, e.normalized_name, m.id::text,
-               (m.captured_at at time zone u.timezone)::date
+               (m.effective_at at time zone u.timezone)::date
         from public.memory_entities me
         join public.memories m on m.id = me.memory_id
         join public.entities e on e.id = me.entity_id
@@ -802,8 +802,8 @@ def fetch_weekly_occurrences(
           and e.user_id = %s
           and m.deleted_at is null
           and m.is_locked = false
-          and (m.captured_at at time zone u.timezone)::date between %s and %s
-        order by (m.captured_at at time zone u.timezone)::date, m.id, e.id
+          and (m.effective_at at time zone u.timezone)::date between %s and %s
+        order by (m.effective_at at time zone u.timezone)::date, m.id, e.id
         """,
         (user_id, user_id, start_date, end_date),
     ).fetchall()
@@ -842,7 +842,7 @@ def fetch_weekly_emotions(
 ) -> list[WeeklyEmotionRow]:
     rows = conn.execute(
         """
-        select m.id::text, (m.captured_at at time zone u.timezone)::date,
+        select m.id::text, (m.effective_at at time zone u.timezone)::date,
                e.valence
         from public.emotions e
         join public.memories m on m.id = e.memory_id
@@ -852,8 +852,8 @@ def fetch_weekly_emotions(
           and m.is_locked = false
           and e.confirmed_by_user = true
           and e.valence is not null
-          and (m.captured_at at time zone u.timezone)::date between %s and %s
-        order by (m.captured_at at time zone u.timezone)::date, m.id
+          and (m.effective_at at time zone u.timezone)::date between %s and %s
+        order by (m.effective_at at time zone u.timezone)::date, m.id
         """,
         (user_id, start_date, end_date),
     ).fetchall()
@@ -991,7 +991,7 @@ def insert_scheduled_diary_request(
                 and m.is_locked = false
                 and m.deleted_at is null
                 and nullif(btrim(m.raw_text), '') is not null
-                and (m.captured_at at time zone u.timezone)::date = %s::date
+                and (m.effective_at at time zone u.timezone)::date = %s::date
            )
         on conflict (user_id, date) do nothing
         returning id::text

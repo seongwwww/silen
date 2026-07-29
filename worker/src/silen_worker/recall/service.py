@@ -32,7 +32,7 @@ _QUESTION_STOPWORDS = frozenset(
 class RecallCandidate:
     memory_id: str
     raw_text: str
-    captured_at: datetime
+    effective_at: datetime
     photo_path: str | None = None
 
 
@@ -70,7 +70,7 @@ def merge_hybrid_candidates(
         candidates.values(),
         key=lambda item: (
             -scores[item.memory_id],
-            -item.captured_at.timestamp(),
+            -item.effective_at.timestamp(),
             item.memory_id,
         ),
     )
@@ -112,7 +112,7 @@ def build_grounded_response(
         evidence.append(
             {
                 "memoryId": memory_id,
-                "capturedAt": candidate.captured_at.isoformat(),
+                "capturedAt": candidate.effective_at.isoformat(),
                 "quote": normalized_quote,
                 "photoPath": candidate.photo_path,
             }

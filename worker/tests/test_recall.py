@@ -17,7 +17,7 @@ def _candidate(
     return RecallCandidate(
         memory_id=memory_id,
         raw_text=text,
-        captured_at=datetime(2026, 7, day, tzinfo=timezone.utc),
+        effective_at=datetime(2026, 7, day, tzinfo=timezone.utc),
         photo_path=photo_path,
     )
 

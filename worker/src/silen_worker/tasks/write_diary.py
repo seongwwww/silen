@@ -54,7 +54,7 @@ def generate_diary(
     memories = [
         DiaryMemory(r.memory_id, r.raw_text)
         for r in mem_rows
-        if local_date_for(r.captured_at, r.timezone) == target_date_iso
+        if local_date_for(r.effective_at, r.timezone) == target_date_iso
     ]
     if not memories:
         return None  # 빈 날 — 억지 생성 안 함

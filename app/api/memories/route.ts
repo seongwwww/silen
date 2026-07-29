@@ -2,7 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { createServerSupabase } from "@/lib/repositories/supabase";
 import { createMemoryRepository } from "@/lib/repositories/memoryRepository";
-import { createMemory, EmptyMemoryError, ForeignAssetPathError } from "@/lib/services/memory";
+import {
+  createMemory,
+  EmptyMemoryError,
+  ForeignAssetPathError,
+  FutureOccurrenceError,
+} from "@/lib/services/memory";
 
 const bodySchema = z.object({
   text: z.string().optional(),
@@ -59,6 +64,12 @@ export async function POST(request: NextRequest) {
     if (err instanceof EmptyMemoryError) {
       return NextResponse.json(
         { error: { code: "empty_memory", message: "내용이나 사진이 필요합니다" } },
+        { status: 400 },
+      );
+    }
+    if (err instanceof FutureOccurrenceError) {
+      return NextResponse.json(
+        { error: { code: "future_occurrence", message: "아직 오지 않은 시각입니다" } },
         { status: 400 },
       );
     }
