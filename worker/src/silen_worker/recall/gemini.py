@@ -9,7 +9,10 @@ from google.genai import types
 
 from silen_worker.recall.service import RecallCandidate
 
-_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
+# 근거 고르기는 문장을 짓는 일이 아니라 고르는 일이다. 같은 골든 케이스에서
+# lite도 4/4로 맞히면서 2.4배 빠르다(실측 2.60초 → 1.07초).
+# 서술·일기는 문장을 짓는 일이라 그대로 flash를 쓴다.
+_MODEL = os.environ.get("RECALL_MODEL", "gemini-3.5-flash-lite")
 _PROMPT = (
     "질문과 가장 관련 있는 기록만 고른다. memory_id는 후보에 있는 값을 그대로 복사하고, "
     "quote는 해당 기록 원문의 연속된 부분 문자열을 그대로 복사한다. "
