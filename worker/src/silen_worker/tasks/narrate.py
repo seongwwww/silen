@@ -2,6 +2,8 @@
 스케줄/lazy 트리거 배선은 범위 밖 — 호출 가능한 함수. 탐지=통계, 서술=번역.
 """
 
+from datetime import datetime, timezone
+
 import psycopg
 
 from silen_worker.db import (
@@ -9,6 +11,7 @@ from silen_worker.db import (
     fetch_narration_id,
     upsert_narration,
 )
+from silen_worker.time import local_date_for
 from silen_worker.narration.service import Narrator, NarrationInput, guardrail
 
 
@@ -49,6 +52,10 @@ def narrate_difference(
         description=facts_row.description,
         date_iso=facts_row.date_iso,
         evidence_ids=facts_row.evidence_ids,
+        # 주간 리포트가 지난 날을 서술할 때 "오늘"이라 부르지 않게 한다.
+        is_today=facts_row.date_iso == local_date_for(
+            datetime.now(timezone.utc), facts_row.timezone
+        ),
     )
     raw = narrator.narrate(facts)
     narration = guardrail(raw, facts)

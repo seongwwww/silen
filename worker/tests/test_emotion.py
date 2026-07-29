@@ -29,7 +29,7 @@ def test_오늘만_급락하면_높은_bits의_감정전환이다():
     assert result.confidence == pytest.approx(bits_ceiling(5))
     assert result.z_score == pytest.approx(-7.0)
     # valence 수치가 아니라 사용자가 누른 라벨로만 말한다.
-    assert result.description == "최근 감정을 남긴 5일은 좋음 5일, 오늘은 '별로'"
+    assert result.description == "최근 감정을 남긴 5일은 좋음 5일, 이 날은 '별로'"
 
 
 def test_과거_감정_활성일이_4일이면_계산하지_않는다():

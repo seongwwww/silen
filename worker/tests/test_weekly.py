@@ -281,3 +281,32 @@ def test_second_block_excludes_first_block_occurrences():
         if slot.slot == "\uac00\uc7a5\ub9ce\uc774\ud55c\uac83"
     )
     assert most.evidence_ids == ("m7", "m8")
+
+
+def test_감정_슬롯은_내부_수치를_노출하지_않는다():
+    """valence 평균과 z점수는 사용자가 누른 적 없는 내부 표현이다.
+    일별 서술에서 이미 라벨로 바꿨는데 주간 경로에만 남아 있었다."""
+    anchor = ANCHOR
+    observations = [
+        EmotionObservation(f"em{day}", anchor + timedelta(days=day), 0.0)
+        for day in range(6)
+    ]
+    observations.append(EmotionObservation("em6", anchor + timedelta(days=6), 1.0))
+
+    report = build_weekly_report(
+        anchor,
+        anchor + timedelta(days=7),
+        [_memory(0)],
+        [],
+        [],
+        observations,
+        [],
+    )
+
+    assert report is not None
+    emotion = next(
+        slot for slot in report.slots if slot.slot == "감정순간"
+    )
+    for leaked in ("z=", "평균 0.", "1.00", "0.29"):
+        assert leaked not in emotion.description
+    assert any(label in emotion.description for label in ("좋음", "그냥", "별로"))

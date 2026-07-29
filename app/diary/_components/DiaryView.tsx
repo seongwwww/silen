@@ -42,7 +42,11 @@ export function DiaryArticle({ diary }: { diary: DiaryView }) {
 
       {diary.differences.length > 0 && (
         <section className="mt-4">
-          <h3 className="mb-1 text-xs text-muted-foreground">오늘 처음</h3>
+          {/* 이 목록은 첫 등장만이 아니라 부재·오랜만·감정까지 담는다.
+              "오늘 처음"이라 부르면 제목과 내용이 어긋난다. */}
+          <h3 className="mb-1 text-xs text-muted-foreground">
+            함께 찾은 것
+          </h3>
           <ul className="list-disc space-y-1 pl-5">
             {diary.differences.map((d, i) => (
               <li key={i} className="text-[15px] text-muted-foreground">

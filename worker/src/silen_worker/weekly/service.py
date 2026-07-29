@@ -8,6 +8,7 @@ from statistics import NormalDist, fmean, pstdev
 from typing import Iterable
 
 from silen_worker.detection.emotion import (
+    emotion_label,
     bits_ceiling,
     MIN_BASELINE_DAYS,
     P_FLOOR,
@@ -264,10 +265,12 @@ def _emotion_slot(
         local_date=local_date,
         detection_method="zscore",
         category="\uac10\uc815\uc804\ud658",
+        # valence 수치와 z점수는 사용자가 누른 적 없는 내부 표현이다.
+        # 사용자가 고른 라벨(좋음·그냥·별로)로만 말한다.
         description=(
-            f"\ucd5c\uadfc {score.baseline_days}\uc77c \ud3c9\uade0 "
-            f"{score.mean:.2f}, \ud574\ub2f9 \ub0a0 {score.value:.2f} "
-            f"(z={score.z:.1f})"
+            f"최근 감정을 남긴 {score.baseline_days}일은 "
+            f"주로 '{emotion_label(score.mean)}'이었고, "
+            f"이 날은 '{emotion_label(score.value)}'"
         ),
         confidence=score.bits,
         evidence_ids=evidence_ids,

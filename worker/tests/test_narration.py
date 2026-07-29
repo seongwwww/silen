@@ -189,3 +189,25 @@ def test_감정_출력에_description에_없는_수치를_만들면_폐기한다
     )
 
     assert guardrail(raw, _emotion_facts()) is None
+
+
+def test_지난_날짜를_오늘이라_부르면_폐기한다():
+    """주간 리포트는 지난 날의 감정을 서술한다. 그걸 '오늘'이라 부르면
+    사실이 틀린다 — 실제로 7월 22일 기록이 '오늘'로 나왔다."""
+    facts = _facts(
+        dimension="emotion",
+        entity_id=None,
+        entity_name=None,
+        entity_type=None,
+        description="최근 감정을 남긴 7일은 주로 '그냥'이었고, 이 날은 '좋음'",
+        is_today=False,
+    )
+    out = guardrail(
+        _raw(
+            headline="그날의 감정",
+            body="오늘은 감정을 좋음으로 기록했습니다.",
+            evidence_text="감정 기록이 달라 찾았어요.",
+        ),
+        facts,
+    )
+    assert out is None

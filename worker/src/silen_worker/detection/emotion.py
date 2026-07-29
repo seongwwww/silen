@@ -23,7 +23,7 @@ LABEL_THRESHOLD = 1 / 3
 GOOD, NEUTRAL, BAD = "좋음", "그냥", "별로"
 
 
-def _label(value: float) -> str:
+def emotion_label(value: float) -> str:
     if value > LABEL_THRESHOLD:
         return GOOD
     if value < -LABEL_THRESHOLD:
@@ -141,7 +141,7 @@ def detect_emotion_difference(
     if score is None or _same_direction_continuation(daily, target_date, score):
         return None
 
-    counts = Counter(_label(value) for value in baseline)
+    counts = Counter(emotion_label(value) for value in baseline)
     tally = "·".join(
         f"{label} {counts[label]}일"
         for label in (GOOD, NEUTRAL, BAD)
@@ -154,8 +154,10 @@ def detect_emotion_difference(
         # 서술자에게 넘어가는 문장이다. valence 수치를 넣으면 사용자가 누른 적
         # 없는 "-1.00" 같은 값이 화면에 그대로 나온다. 라벨로만 말한다.
         description=(
+            # 이 설명은 과거 날짜로도 다시 계산된다. "오늘"이라 쓰면 주간
+            # 리포트가 지난 날을 오늘이라 부르게 된다.
             f"최근 감정을 남긴 {score.days}일은 {tally}, "
-            f"오늘은 '{_label(score.value)}'"
+            f"이 날은 '{emotion_label(score.value)}'"
         ),
         confidence=score.bits,
         z_score=score.z,

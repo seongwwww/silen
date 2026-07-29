@@ -143,3 +143,44 @@ def test_어제_마감을_놓쳤으면_따라잡는다(monkeypatch):
 
     assert ("2026-07-28", True) in closed
     assert ("2026-07-29", False) in closed
+
+
+def test_요청이_없으면_일기를_만들지_않는다(monkeypatch):
+    """run_regenerations는 사용자가 남긴 요청만 소비한다.
+
+    요청 유무를 안 보면 매 주기마다 일기를 만들어, 마감 탐지가 끝나기도 전에
+    차이 0건짜리 일기가 굳는다 — 탐지 성공을 일기 예약의 조건으로 둔 의미가
+    사라진다."""
+    import silen_worker.cli as cli
+
+    generated: list[str] = []
+    monkeypatch.setattr(cli, "fetch_regenerate_requests", lambda conn: [])
+    monkeypatch.setattr(
+        cli, "generate_diary", lambda *a, **k: generated.append(1) or "d1"
+    )
+
+    assert cli.run_regenerations(_NullConn(), [("seoul", "2026-07-29")]) == (0, 0)
+    assert generated == []
+
+
+def test_요청이_있으면_그_사용자만_다시_만든다(monkeypatch):
+    import silen_worker.cli as cli
+
+    generated: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        cli,
+        "fetch_regenerate_requests",
+        lambda conn: [("seoul", "2026-07-29")],
+    )
+    monkeypatch.setattr(
+        cli,
+        "generate_diary",
+        lambda conn, u, d, **k: generated.append((u, d)) or "d1",
+    )
+
+    ok, _ = cli.run_regenerations(
+        _NullConn(), [("seoul", "2026-07-29"), ("newyork", "2026-07-29")]
+    )
+
+    assert ok == 1
+    assert generated == [("seoul", "2026-07-29")]
