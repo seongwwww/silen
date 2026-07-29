@@ -37,6 +37,7 @@ export function DiaryArticle({ diary }: { diary: DiaryView }) {
         status={diary.status}
         initialToneInstruction={diary.toneInstruction}
         initialRequested={diary.regenerateRequested}
+        initialReason={diary.regenerateReason}
       />
 
       {diary.differences.length > 0 && (

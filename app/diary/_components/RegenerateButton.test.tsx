@@ -145,6 +145,24 @@ describe("RegenerateButton", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("늦은 기록 때문에 생긴 요청은 그 이유를 그대로 알린다", () => {
+    render(
+      <RegenerateButton
+        id="d1"
+        status="draft"
+        initialRequested
+        initialReason="late_record"
+      />,
+    );
+
+    expect(
+      screen.getByText("늦게 추가된 기록이 있어요"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("다음 일기를 만들 때 반영돼요."),
+    ).not.toBeInTheDocument();
+  });
+
   it("연속 클릭에도 요청은 한 번만 보낸다", async () => {
     let resolveRequest!: (response: { ok: boolean }) => void;
     const pending = new Promise<{ ok: boolean }>((resolve) => {

@@ -19,7 +19,11 @@ from silen_worker.embedding.repository import (
 )
 from silen_worker.embedding.service import DOCUMENT_TASK_TYPE, Embedder
 from silen_worker.extraction.service import LLMExtractor, guardrail
+from datetime import datetime
+import logging
+
 from silen_worker.diary.service import DiaryWriter
+from silen_worker.narration.service import Narrator
 from silen_worker.recall.service import RecallSelector
 from silen_worker.queue import (
     QUEUE,
@@ -33,10 +37,12 @@ from silen_worker.queue import (
     reset_recall_for_retry,
 )
 from silen_worker.tasks.recall import answer_recall
+from silen_worker.tasks.recalculate import recalculate_if_past
 from silen_worker.tasks.write_diary import generate_diary
 
 VISIBILITY_TIMEOUT = 60  # 초. LLM 호출이 있어 A보다 넉넉히.
 MAX_READS = 5
+logger = logging.getLogger(__name__)
 
 
 def process_pending(
@@ -46,6 +52,8 @@ def process_pending(
     diary_writer: DiaryWriter | None = None,
     embedder: Embedder | None = None,
     recall_selector: RecallSelector | None = None,
+    narrator: Narrator | None = None,
+    now: datetime | None = None,
 ) -> list[str]:
     """큐에서 최대 limit개 처리하고 처리한 memory_id를 반환한다.
     extractor는 LLMExtractor 포트. 테스트는 스텁, 프로덕션은 Gemini를 주입한다.
@@ -208,6 +216,22 @@ def process_pending(
                         ):
                             delete_message(conn, QUEUE, msg_id)
                             continue
+                try:
+                    recalculate_if_past(
+                        conn,
+                        memory,
+                        now=now,
+                        narrator=narrator,
+                    )
+                except Exception as exc:
+                    # Extraction and embedding already succeeded. Retrying the
+                    # queue message would repeat paid work and can loop forever.
+                    logger.warning(
+                        "late recalculation failed user_id=%s memory_id=%s error=%s",
+                        memory.user_id,
+                        memory.id,
+                        type(exc).__name__,
+                    )
                 processed.append(memory.id)
                 delete_message(conn, QUEUE, msg_id)
             except Exception:

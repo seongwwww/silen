@@ -11,6 +11,7 @@ from silen_worker.weekly.service import (
     FirstOccurrence,
     WeeklyMemory,
     build_weekly_report,
+    completed_week_containing,
     completed_week_start,
 )
 
@@ -49,6 +50,36 @@ def test_first_block_completes_on_day_seven():
 def test_second_boundary_returns_second_block():
     assert completed_week_start(ANCHOR, ANCHOR + timedelta(days=14)) == (
         ANCHOR + timedelta(days=7)
+    )
+
+
+def test_completed_week_containing_finds_an_arbitrary_past_date():
+    assert completed_week_containing(
+        ANCHOR,
+        ANCHOR + timedelta(days=9),
+        ANCHOR + timedelta(days=20),
+    ) == ANCHOR + timedelta(days=7)
+
+
+def test_completed_week_containing_skips_the_open_block():
+    assert (
+        completed_week_containing(
+            ANCHOR,
+            ANCHOR + timedelta(days=9),
+            ANCHOR + timedelta(days=12),
+        )
+        is None
+    )
+
+
+def test_completed_week_containing_rejects_a_date_before_anchor():
+    assert (
+        completed_week_containing(
+            ANCHOR,
+            ANCHOR - timedelta(days=1),
+            ANCHOR + timedelta(days=20),
+        )
+        is None
     )
 
 

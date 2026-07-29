@@ -95,6 +95,20 @@ def completed_week_start(anchor: date, as_of: date) -> date | None:
     return as_of - timedelta(days=7)
 
 
+def completed_week_containing(
+    anchor: date,
+    target: date,
+    as_of: date,
+) -> date | None:
+    """Return target's anchored block only after that block has completed."""
+
+    elapsed = (target - anchor).days
+    if elapsed < 0:
+        return None
+    week_start = anchor + timedelta(days=(elapsed // 7) * 7)
+    return week_start if week_start + timedelta(days=7) <= as_of else None
+
+
 def _in_block(local_date: date, start: date, end: date) -> bool:
     return start <= local_date <= end
 

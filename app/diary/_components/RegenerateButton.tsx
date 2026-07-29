@@ -18,11 +18,14 @@ export function RegenerateButton({
   status,
   initialToneInstruction = null,
   initialRequested = false,
+  initialReason = null,
 }: {
   id: string;
   status: DiaryStatus;
   initialToneInstruction?: string | null;
   initialRequested?: boolean;
+  /** 요청이 왜 생겼는지. 사용자가 누른 것과 늦은 기록 유입은 다르게 알린다. */
+  initialReason?: string | null;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [requested, setRequested] = useState(initialRequested);
@@ -71,7 +74,11 @@ export function RegenerateButton({
         role="status"
         className="mt-3 rounded-xl border bg-accent px-4 py-3"
       >
-        <p className="text-[15px]">다음 일기를 만들 때 반영돼요.</p>
+        <p className="text-[15px]">
+          {initialReason === "late_record"
+            ? "늦게 추가된 기록이 있어요"
+            : "다음 일기를 만들 때 반영돼요."}
+        </p>
         {initialRequested && initialToneInstruction && (
           <p className="mt-1 text-xs text-muted-foreground">
             주문: {initialToneInstruction}

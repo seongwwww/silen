@@ -17,6 +17,7 @@ const base: DiaryView = {
   question: null,
   toneInstruction: null,
   regenerateRequested: false,
+  regenerateReason: null,
 };
 
 describe("DiaryArticle", () => {
@@ -86,5 +87,19 @@ describe("DiaryArticle", () => {
       screen.getByText("다음 일기를 만들 때 반영돼요."),
     ).toBeInTheDocument();
     expect(screen.getByText("주문: 짧게")).toBeInTheDocument();
+  });
+
+  it("늦게 추가된 기록 표시를 재생성 UI에 전달한다", () => {
+    render(
+      <DiaryArticle
+        diary={{
+          ...base,
+          regenerateRequested: true,
+          regenerateReason: "late_record",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("늦게 추가된 기록이 있어요")).toBeInTheDocument();
   });
 });
