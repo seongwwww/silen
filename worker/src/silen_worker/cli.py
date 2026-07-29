@@ -10,6 +10,7 @@
 import argparse
 import json
 import sys
+import time
 from datetime import date, datetime, timedelta, timezone
 
 from silen_worker.db import connect, fetch_active_users, fetch_scheduled_users
@@ -90,6 +91,17 @@ def build_parser() -> argparse.ArgumentParser:
         default=50,
         help="무한 루프 방지 상한",
     )
+    p_pending.add_argument(
+        "--watch",
+        action="store_true",
+        help="큐를 계속 소비한다(회고 답변처럼 기다리는 잡용). Ctrl+C로 종료",
+    )
+    p_pending.add_argument(
+        "--interval",
+        type=float,
+        default=1.0,
+        help="--watch일 때 큐가 비면 쉬는 초",
+    )
     sub.add_parser("stats", help="읽기 전용 MVP 운영 지표 출력")
     sub.add_parser(
         "run-scheduled",
@@ -160,8 +172,8 @@ def resolve_scheduled_targets(
     )
 
 
-def run_pending(extractor=None, limit: int = 10, max_batches: int = 50) -> int:
-    """큐가 빌 때까지(또는 상한까지) 소비하고 처리한 memory 개수를 반환한다.
+def _drain_pending(extractor=None, limit: int = 10, max_batches: int = 50) -> int:
+    """큐가 빌 때까지(또는 상한까지) 소비하고 처리한 개수를 반환한다.
     process_pending은 conn을 받지 않고 자체 접속한다(기존 인터페이스 유지)."""
     total = 0
     for _ in range(max_batches):
@@ -169,7 +181,48 @@ def run_pending(extractor=None, limit: int = 10, max_batches: int = 50) -> int:
         total += len(processed)
         if len(processed) < limit:
             break
+    return total
+
+
+def run_pending(extractor=None, limit: int = 10, max_batches: int = 50) -> int:
+    total = _drain_pending(extractor=extractor, limit=limit, max_batches=max_batches)
     _emit({"event": "run_pending.done", "processed": total})
+    return total
+
+
+def watch_pending(
+    extractor=None,
+    limit: int = 10,
+    max_batches: int = 50,
+    interval: float = 1.0,
+    sleep=time.sleep,
+    rounds: int | None = None,
+) -> int:
+    """큐를 반복 소비한다. Ctrl+C로 멈춘다.
+
+    회고 답변처럼 사람이 화면 앞에서 기다리는 잡은 스케줄러 주기(분)로는 늦다.
+    배포 자산을 늘리는 상주 서비스가 아니라 개발 머신에서 띄워 두는 루프다.
+
+    rounds는 테스트용 상한이다. None이면 멈출 때까지 돈다.
+    """
+    _emit({"event": "watch_pending.start", "interval": interval})
+    total = 0
+    done = 0
+    try:
+        while rounds is None or done < rounds:
+            processed = _drain_pending(
+                extractor=extractor, limit=limit, max_batches=max_batches
+            )
+            total += processed
+            done += 1
+            if processed:
+                _emit({"event": "watch_pending.batch", "processed": processed})
+            else:
+                # 빈 큐일 때만 잠든다. 일이 밀려 있는데 자면 응답이 그만큼 늦는다.
+                sleep(interval)
+    except KeyboardInterrupt:
+        pass
+    _emit({"event": "watch_pending.stopped", "processed": total})
     return total
 
 
@@ -318,7 +371,14 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.command == "run-pending":
-        run_pending(limit=args.limit, max_batches=args.max_batches)
+        if args.watch:
+            watch_pending(
+                limit=args.limit,
+                max_batches=args.max_batches,
+                interval=args.interval,
+            )
+        else:
+            run_pending(limit=args.limit, max_batches=args.max_batches)
         return 0
 
     with connect() as conn:
