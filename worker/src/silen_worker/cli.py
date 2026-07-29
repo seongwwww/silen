@@ -401,6 +401,35 @@ def run_weekly(conn, targets: list[tuple[str, str]]) -> tuple[int, int]:
     return ok, fail
 
 
+def run_regenerations(conn, targets: list[tuple[str, str]]) -> tuple[int, int]:
+    """사용자가 화면에서 남긴 '다시 만들기' 요청을 소비한다.
+
+    이걸 안 돌리면 요청이 영원히 대기한다 — 사용자는 눌렀는데 아무 일도
+    일어나지 않는다."""
+    ok = fail = 0
+    for user_id, date_iso in targets:
+        try:
+            if generate_diary(conn, user_id, date_iso) is not None:
+                ok += 1
+                _emit(
+                    {
+                        "event": "run_regenerations.user",
+                        "user_id": user_id,
+                        "date": date_iso,
+                    }
+                )
+        except Exception as exc:
+            fail += 1
+            _emit(
+                {
+                    "event": "run_regenerations.error",
+                    "user_id": user_id,
+                    "error": type(exc).__name__,
+                }
+            )
+    return ok, fail
+
+
 def sweep(conn, now: datetime | None = None, narrator=None) -> None:
     """주기 점검. 사용자가 아무것도 누르지 않아도 여기서 다 일어난다.
 
@@ -410,12 +439,33 @@ def sweep(conn, now: datetime | None = None, narrator=None) -> None:
     """
     moment = now or datetime.now(timezone.utc)
     plan = build_sweep_plan(fetch_scheduled_users(conn), moment)
-    if not plan:
-        return
 
     for user_id, date_iso, closing in plan:
-        run_daily(conn, [(user_id, date_iso)], narrator=narrator, closing=closing)
-        if closing:
+        # 사용자가 남긴 재생성 요청을 먼저 소비한다. 늦은 메모를 반영하려는
+        # 명시적 의사표시라 주기 작업보다 우선한다.
+        run_regenerations(conn, [(user_id, date_iso)])
+
+        if not closing:
+            # 워커가 자정을 넘겨 재시작하면 전날은 영영 마감되지 않는다.
+            # 오늘이 아직 중간이면 어제를 먼저 닫는다(멱등이라 반복해도 안전).
+            yesterday = (
+                date.fromisoformat(date_iso) - timedelta(days=1)
+            ).isoformat()
+            if run_daily(
+                conn, [(user_id, yesterday)], narrator=narrator, closing=True
+            ) == (1, 0):
+                run_scheduled(conn, [(user_id, yesterday)])
+                run_weekly(conn, [(user_id, yesterday)])
+
+        ok, _ = run_daily(
+            conn, [(user_id, date_iso)], narrator=narrator, closing=closing
+        )
+        if not closing:
+            continue
+
+        # 탐지가 실패했는데 일기를 만들면 "평범한 하루"로 굳는다. 한 번 만든
+        # 일기는 자동 재생성하지 않으므로 되돌릴 수 없다.
+        if ok:
             run_scheduled(conn, [(user_id, date_iso)])
             run_weekly(conn, [(user_id, date_iso)])
 

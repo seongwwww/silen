@@ -88,3 +88,58 @@ class _NullConn:
 
     def __exit__(self, *_):
         return False
+
+
+def test_탐지가_실패하면_일기를_예약하지_않는다(monkeypatch):
+    """차이를 못 찾은 채 일기를 만들면 '평범한 하루'로 굳어버린다.
+    한 번 만든 일기는 자동 재생성하지 않으므로 되돌릴 수 없다."""
+    import silen_worker.cli as cli
+
+    scheduled: list[str] = []
+    monkeypatch.setattr(cli, "fetch_scheduled_users", lambda conn: _USERS[:1])
+    monkeypatch.setattr(cli, "run_daily", lambda *a, **k: (0, 1))  # 실패 1
+    monkeypatch.setattr(cli, "run_scheduled", lambda conn, t: scheduled.append(t))
+    monkeypatch.setattr(cli, "run_weekly", lambda conn, t: (0, 0))
+    monkeypatch.setattr(cli, "run_regenerations", lambda conn, t: (0, 0))
+
+    cli.sweep(_NullConn(), now=_at(13))
+
+    assert scheduled == []
+
+
+def test_탐지가_성공하면_일기를_예약한다(monkeypatch):
+    import silen_worker.cli as cli
+
+    scheduled: list[str] = []
+    monkeypatch.setattr(cli, "fetch_scheduled_users", lambda conn: _USERS[:1])
+    monkeypatch.setattr(cli, "run_daily", lambda *a, **k: (1, 0))
+    monkeypatch.setattr(cli, "run_scheduled", lambda conn, t: scheduled.append(t))
+    monkeypatch.setattr(cli, "run_weekly", lambda conn, t: (0, 0))
+    monkeypatch.setattr(cli, "run_regenerations", lambda conn, t: (0, 0))
+
+    cli.sweep(_NullConn(), now=_at(13))
+
+    assert scheduled == [[("seoul", "2026-07-29")]]
+
+
+def test_어제_마감을_놓쳤으면_따라잡는다(monkeypatch):
+    """워커가 자정을 넘겨 재시작하면 전날은 영영 마감되지 않는다."""
+    import silen_worker.cli as cli
+
+    closed: list[tuple[str, bool]] = []
+    monkeypatch.setattr(cli, "fetch_scheduled_users", lambda conn: _USERS[:1])
+    monkeypatch.setattr(
+        cli,
+        "run_daily",
+        lambda conn, targets, narrator=None, closing=True: (
+            closed.append((targets[0][1], closing)) or (1, 0)
+        ),
+    )
+    monkeypatch.setattr(cli, "run_scheduled", lambda conn, t: (1, 0, 0))
+    monkeypatch.setattr(cli, "run_weekly", lambda conn, t: (0, 0))
+    monkeypatch.setattr(cli, "run_regenerations", lambda conn, t: (0, 0))
+
+    cli.sweep(_NullConn(), now=_at(3))  # 서울 정오 — 오늘은 아직 중간
+
+    assert ("2026-07-28", True) in closed
+    assert ("2026-07-29", False) in closed

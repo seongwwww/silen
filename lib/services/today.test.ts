@@ -4,6 +4,7 @@ import {
   type TodayDiaryPort,
   type TodayDifferencePort,
   type TodayMemoryPort,
+  previewOf,
 } from "./today";
 
 const NOW = new Date("2026-07-22T03:00:00.000Z");
@@ -246,5 +247,18 @@ describe("buildTodayView", () => {
       title: "일기 만들기를 요청했어요",
       body: "완성되면 이 화면에서 바로 보여드릴게요.",
     });
+  });
+});
+
+describe("사진만 남긴 기록", () => {
+  it("빈 줄 대신 사진이 있다고 알려준다", () => {
+    // 사진만 남기면 rawText가 비어 미리보기가 빈 줄이 된다.
+    // 남긴 것이 화면에서 사라진 것처럼 보인다.
+    expect(previewOf("")).toBe("사진 한 장");
+    expect(previewOf("   ")).toBe("사진 한 장");
+  });
+
+  it("글이 있으면 글을 보여준다", () => {
+    expect(previewOf("퇴근길에 카페")).toBe("퇴근길에 카페");
   });
 });

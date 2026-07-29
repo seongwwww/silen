@@ -75,8 +75,12 @@ type BuildTodayViewInput = {
   diaryHour?: number;
 };
 
-function preview(text: string): string {
-  return Array.from(text.replace(/\s+/g, " ").trim()).slice(0, 20).join("");
+/** 사진만 남긴 기록은 rawText가 비어 미리보기가 빈 줄이 된다.
+ * 남긴 것이 화면에서 사라진 것처럼 보이므로 무엇이 있는지 말해 준다. */
+export function previewOf(text: string): string {
+  const trimmed = text.replace(/\s+/g, " ").trim();
+  if (!trimmed) return "사진 한 장";
+  return Array.from(trimmed).slice(0, 20).join("");
 }
 
 function localTimeFor(instant: Date, timeZone: string): string {
@@ -182,7 +186,7 @@ export async function buildTodayView({
     differences: visibleDifferences,
     memories: {
       count: memories.length,
-      previews: memories.slice(0, 3).map((item) => preview(item.rawText)),
+      previews: memories.slice(0, 3).map((item) => previewOf(item.rawText)),
     },
     diary: todayDiary
       ? {

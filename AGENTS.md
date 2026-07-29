@@ -51,6 +51,23 @@ Claude 세션은 이 절차를 **Superpowers 스킬**로 자동 수행한다(`br
 - **상태의 단일 출처는 git이다.** 추적되지 않은 로컬 파일은 다른 세션·머신·에이전트에서 보이지 않는다 — 이어받게 하려면 반드시 커밋한다.
 - 검증 기준: "다음 AI가 대화 기록 없이 위 문서들만 읽고 이어서 작업할 수 있는가?" 아니라면 부족한 걸 채운다.
 
+## 로컬 실행 (읽지 않으면 반드시 실패한다)
+
+```powershell
+# ★ 환경변수와 워커를 같은 터미널에서 실행한다.
+#   PowerShell 환경변수는 다른 터미널로 전달되지 않는다.
+$env:GOOGLE_GENAI_USE_VERTEXAI="true"
+$env:GOOGLE_CLOUD_PROJECT="project-58561b19-fb35-4c01-bb2"
+$env:GOOGLE_CLOUD_LOCATION="global"
+worker\.venv\Scripts\python.exe -m silen_worker run
+```
+
+- `run` 하나가 큐 소비와 주기 점검(탐지·서술·일기·주간)을 함께 돈다.
+- **env 없이 워커를 띄우면** 추출·임베딩이 조용히 실패하고 5회 뒤 잡이 보관된다.
+  **보관된 잡은 자동 복구되지 않는다** — 화면은 계속 "평소를 익히는 중이에요"에
+  머물고, 원인은 로그에 안 보인다. 이 증상을 보면 env부터 확인해라.
+- `npx`는 실행 정책에 막힌다. **`npx.cmd`** 를 써라.
+
 ## 안전 가드 (AI 자동 실행 금지 — 사람이 실행)
 
 - 데이터 삭제 · DB 마이그레이션 적용 · 배포 · production DB 접근은 AI가 자동 실행하지 않는다.
