@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RecallScreen } from "./RecallScreen";
 
@@ -82,6 +83,59 @@ describe("회고 채팅 화면", () => {
     expect(screen.getByText("그 카페에서 오래 이야기했다.")).toBeInTheDocument();
     expect(screen.getByText("7.14")).toBeInTheDocument();
     expect(screen.getByText("이거 맞으세요?")).toBeInTheDocument();
+  });
+
+  it("StrictMode로 두 번 마운트돼도 폴링이 멈추지 않는다", async () => {
+    // cleanup만 두고 마운트에서 되돌리지 않으면 mounted 플래그가 false로 남아
+    // 첫 폴링 응답에서 조용히 중단된다. 화면은 영원히 "찾고 있어요"가 된다.
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ requestId: "00000000-0000-4000-8000-000000000003" }), {
+          status: 202,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            status: "done",
+            response: { answer: "찾았어요.", confirmation: null, evidence: [] },
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        ),
+      );
+
+    render(
+      <StrictMode>
+        <RecallScreen pollIntervalMs={1} />
+      </StrictMode>,
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "기록에게 질문" }), {
+      target: { value: "카페" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "물어보기" }));
+
+    expect(await screen.findByText("찾았어요.")).toBeInTheDocument();
+  });
+
+  it("세션이 없으면 기록이 없다고 단정하지 않는다", async () => {
+    // 401을 "기록을 찾지 못했어요"로 뭉뚱그리면 다시 시도해도 영영 안 된다.
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { code: "authentication_required" } }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    render(<RecallScreen />);
+    fireEvent.change(screen.getByRole("textbox", { name: "기록에게 질문" }), {
+      target: { value: "카페" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "물어보기" }));
+
+    expect(await screen.findByText("아직 남긴 기록이 없어요")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "기록 남기러 가기" })).toBeInTheDocument();
+    expect(screen.queryByText("다시 시도")).not.toBeInTheDocument();
   });
 
   it("근거가 없으면 정확한 빈 결과 문구를 보여준다", async () => {

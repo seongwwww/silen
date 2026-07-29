@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   RECALL_QUERY_MAX,
@@ -8,7 +9,13 @@ import {
 } from "@/lib/services/recall";
 import { localDateFor } from "@/lib/time/day";
 
-type ViewState = "empty" | "processing" | "done" | "error" | "offline";
+type ViewState =
+  | "empty"
+  | "processing"
+  | "done"
+  | "error"
+  | "offline"
+  | "no-session";
 
 function dateTag(iso: string, timeZone: string): string {
   const [, month, day] = localDateFor(new Date(iso), timeZone).split("-");
@@ -32,12 +39,14 @@ export function RecallScreen({
   const [state, setState] = useState<ViewState>("empty");
   const mounted = useRef(true);
 
-  useEffect(
-    () => () => {
+  // 마운트마다 다시 true로 돌린다. cleanup만 두면 StrictMode의 이중 실행
+  // (mount→cleanup→mount) 뒤 영영 false로 남아 폴링이 첫 응답에서 멈춘다.
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
       mounted.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   const ask = useCallback(
     async (rawQuestion: string) => {
@@ -57,6 +66,12 @@ export function RecallScreen({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ requestId, question: trimmed }),
         });
+        // 401은 "기록이 없다"가 아니라 "아직 세션이 없다"다. 다시 시도해도
+        // 영영 안 되므로 실패로 뭉뚱그리지 않는다.
+        if (accepted.status === 401) {
+          setState("no-session");
+          return;
+        }
         if (!accepted.ok) throw new Error("recall_request_failed");
 
         for (;;) {
@@ -125,6 +140,20 @@ export function RecallScreen({
             인터넷 연결을 확인해 주세요
           </p>
         )}
+        {state === "no-session" && (
+          <div className="mt-4 rounded-2xl border bg-card px-5 py-8 text-center">
+            <p className="text-[15px] text-muted-foreground">
+              아직 남긴 기록이 없어요
+            </p>
+            <Link
+              href="/record"
+              className="mt-3 inline-flex min-h-11 items-center px-3 text-sm font-medium underline"
+            >
+              기록 남기러 가기
+            </Link>
+          </div>
+        )}
+
         {state === "error" && (
           <div className="mt-4 rounded-2xl border bg-card px-5 py-8 text-center">
             <p className="text-[15px] text-muted-foreground">

@@ -132,8 +132,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _emit(event: dict) -> None:
-    """구조화 로그 한 줄. 본문·일기 텍스트를 절대 싣지 않는다."""
-    print(json.dumps(event, ensure_ascii=False))
+    """구조화 로그 한 줄. 본문·일기 텍스트를 절대 싣지 않는다.
+
+    flush가 없으면 파이프로 넘길 때 블록 버퍼링에 걸려 --watch 같은 장기 실행이
+    아무것도 안 찍는다 — 살아 있는지조차 알 수 없다."""
+    print(json.dumps(event, ensure_ascii=False), flush=True)
 
 
 def resolve_targets(
