@@ -16,7 +16,7 @@ export function DiaryScreen({
   neighbors: { prev: string | null; next: string | null };
 }) {
   return (
-    <main className="mx-auto max-w-md p-4">
+    <main className="mx-auto max-w-md px-4 pt-4 pb-24">
       <header className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-lg font-medium">일기</h1>
         <Link

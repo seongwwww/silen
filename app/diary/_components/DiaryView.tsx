@@ -1,4 +1,7 @@
+"use client";
+
 import type { DiaryView } from "@/lib/services/diary";
+import { updateMemoryLockInBrowser } from "@/lib/services/memoryLockClient";
 import { EvidenceDisclosure } from "./EvidenceDisclosure";
 import { FollowUpCard } from "./FollowUpCard";
 import { DiaryEditor } from "./DiaryEditor";
@@ -56,7 +59,10 @@ export function DiaryArticle({ diary }: { diary: DiaryView }) {
         />
       )}
 
-      <EvidenceDisclosure items={diary.evidence} />
+      <EvidenceDisclosure
+        items={diary.evidence}
+        updateLock={updateMemoryLockInBrowser}
+      />
     </article>
   );
 }

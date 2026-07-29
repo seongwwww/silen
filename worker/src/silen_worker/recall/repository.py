@@ -18,7 +18,15 @@ def search_vector_candidates(
     rows = conn.execute(
         """
         with scoped as materialized (
-          select me.memory_id, me.embedding, m.raw_text, m.captured_at
+          select me.memory_id, me.embedding, m.raw_text, m.captured_at,
+                 (
+                   select a.file_url
+                     from public.assets a
+                    where a.memory_id = m.id
+                      and a.asset_type = 'photo'
+                    order by a.id
+                    limit 1
+                 ) as photo_path
             from public.memory_embeddings me
             join public.memories m
               on m.id = me.memory_id
@@ -32,14 +40,14 @@ def search_vector_candidates(
              and m.raw_text is not null
              and btrim(m.raw_text) <> ''
         )
-        select memory_id::text, raw_text, captured_at
+        select memory_id::text, raw_text, captured_at, photo_path
           from scoped
          order by embedding <=> %s::vector, captured_at desc, memory_id
          limit %s
         """,
         (user_id, EMBEDDING_MODEL, user_id, vector_literal(query_vector), limit),
     ).fetchall()
-    return [RecallCandidate(row[0], row[1], row[2]) for row in rows]
+    return [RecallCandidate(row[0], row[1], row[2], row[3]) for row in rows]
 
 
 def search_keyword_candidates(
@@ -57,7 +65,15 @@ def search_keyword_candidates(
     patterns = [f"%{term}%" for term in escaped]
     rows = conn.execute(
         """
-        select m.id::text, m.raw_text, m.captured_at
+        select m.id::text, m.raw_text, m.captured_at,
+               (
+                 select a.file_url
+                   from public.assets a
+                  where a.memory_id = m.id
+                    and a.asset_type = 'photo'
+                  order by a.id
+                  limit 1
+               ) as photo_path
           from public.memories m
          where m.user_id = %s
            and m.is_locked = false
@@ -72,4 +88,4 @@ def search_keyword_candidates(
         """,
         (user_id, patterns, limit),
     ).fetchall()
-    return [RecallCandidate(row[0], row[1], row[2]) for row in rows]
+    return [RecallCandidate(row[0], row[1], row[2], row[3]) for row in rows]

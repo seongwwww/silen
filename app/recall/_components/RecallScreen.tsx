@@ -7,7 +7,10 @@ import {
   type RecallAnswer,
   type RecallPollResult,
 } from "@/lib/services/recall";
+import { updateMemoryLockInBrowser } from "@/lib/services/memoryLockClient";
 import { localDateFor } from "@/lib/time/day";
+import { MemoryLockControl } from "@/components/common/MemoryLockControl";
+import { EvidencePhoto } from "@/components/common/EvidencePhoto";
 
 type ViewState =
   | "empty"
@@ -108,7 +111,7 @@ export function RecallScreen({
   }
 
   return (
-    <main className="mx-auto min-h-[calc(100svh-3.5rem)] w-full max-w-md px-5 py-10">
+    <main className="mx-auto min-h-[calc(100svh-3.5rem)] w-full max-w-md px-5 pt-10 pb-24">
       <header className="pt-4">
         <h1 className="text-3xl font-semibold tracking-tight">그거 뭐였지</h1>
         <p className="mt-2 text-[15px] text-muted-foreground">
@@ -174,19 +177,28 @@ export function RecallScreen({
             {answer.evidence.length > 0 && (
               <ul aria-label="근거 기록" className="mt-4 space-y-3">
                 {answer.evidence.map((evidence) => (
-                  <li
-                    key={evidence.memoryId}
-                    className="rounded-xl bg-accent/70 px-3.5 py-3"
-                  >
-                    <time
-                      dateTime={evidence.capturedAt}
-                      className="text-xs font-medium text-muted-foreground"
+                  <li key={evidence.memoryId}>
+                    <MemoryLockControl
+                      memoryId={evidence.memoryId}
+                      updateLock={updateMemoryLockInBrowser}
+                      className="rounded-xl border border-transparent bg-accent/70 px-3.5 py-3"
                     >
-                      {dateTag(evidence.capturedAt, timeZone)}
-                    </time>
-                    <p className="mt-1.5 text-[15px] leading-6">
-                      {evidence.quote}
-                    </p>
+                      <time
+                        dateTime={evidence.capturedAt}
+                        className="text-xs font-medium text-muted-foreground"
+                      >
+                        {dateTag(evidence.capturedAt, timeZone)}
+                      </time>
+                      <p className="mt-1.5 text-[15px] leading-6">
+                        {evidence.quote}
+                      </p>
+                      {evidence.photoUrl && (
+                        <EvidencePhoto
+                          src={evidence.photoUrl}
+                          className="mt-2"
+                        />
+                      )}
+                    </MemoryLockControl>
                   </li>
                 ))}
               </ul>

@@ -60,6 +60,7 @@ describe("회고 채팅 화면", () => {
                   memoryId: "m1",
                   capturedAt: "2026-07-14T12:00:00Z",
                   quote: "그 카페에서 오래 이야기했다.",
+                  photoUrl: "https://example.test/photo.png",
                 },
               ],
             },
@@ -82,6 +83,13 @@ describe("회고 채팅 화면", () => {
     expect(screen.getByText("기록에서 이런 내용을 찾았어요.")).toBeInTheDocument();
     expect(screen.getByText("그 카페에서 오래 이야기했다.")).toBeInTheDocument();
     expect(screen.getByText("7.14")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "이 기록에 붙인 사진" })).toHaveAttribute(
+      "src",
+      "https://example.test/photo.png",
+    );
+    expect(
+      screen.getByRole("button", { name: "기억 잠그기" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("이거 맞으세요?")).toBeInTheDocument();
   });
 

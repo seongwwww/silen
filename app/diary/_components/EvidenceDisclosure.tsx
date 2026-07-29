@@ -1,11 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { MemoryLockControl } from "@/components/common/MemoryLockControl";
+import { EvidencePhoto } from "@/components/common/EvidencePhoto";
 import type { DiaryEvidence } from "@/lib/services/diary";
+import type { UpdateMemoryLock } from "@/lib/services/memoryLockClient";
 
 /** 일기가 무엇을 보고 쓰였는지 펼쳐 볼 수 있게 한다(추적성).
  * 펼친 내용은 사용자 원본이므로 AI 생성물과 시각·라벨로 구분한다(frontend.md). */
-export function EvidenceDisclosure({ items }: { items: DiaryEvidence[] }) {
+export function EvidenceDisclosure({
+  items,
+  updateLock,
+}: {
+  items: DiaryEvidence[];
+  updateLock: UpdateMemoryLock;
+}) {
   const [open, setOpen] = useState(false);
   if (items.length === 0) return null;
 
@@ -23,21 +32,23 @@ export function EvidenceDisclosure({ items }: { items: DiaryEvidence[] }) {
       {open && (
         <div className="mt-2 space-y-2">
           <p className="text-xs text-muted-foreground">내가 남긴 기록</p>
-          {items.map((item, index) => (
-            <div key={index} className="rounded-lg bg-muted px-3 py-2">
+          {items.map((item) => (
+            <MemoryLockControl
+              key={item.memoryId}
+              memoryId={item.memoryId}
+              updateLock={updateLock}
+              className="rounded-lg border border-transparent bg-muted px-3 py-2"
+            >
               {item.text && (
                 <p className="text-[15px] whitespace-pre-wrap">{item.text}</p>
               )}
               {item.photoUrl && (
-                /* eslint-disable-next-line @next/next/no-img-element --
-                   서명 URL은 만료되는 임시 주소라 next/image 최적화 대상이 아니다. */
-                <img
+                <EvidencePhoto
                   src={item.photoUrl}
-                  alt="이 기록에 붙인 사진"
-                  className={`max-h-48 w-auto rounded-md ${item.text ? "mt-2" : ""}`}
+                  className={item.text ? "mt-2" : ""}
                 />
               )}
-            </div>
+            </MemoryLockControl>
           ))}
         </div>
       )}

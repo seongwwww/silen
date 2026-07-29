@@ -8,11 +8,17 @@ from silen_worker.recall.service import (
 )
 
 
-def _candidate(memory_id: str, text: str, day: int) -> RecallCandidate:
+def _candidate(
+    memory_id: str,
+    text: str,
+    day: int,
+    photo_path: str | None = None,
+) -> RecallCandidate:
     return RecallCandidate(
         memory_id=memory_id,
         raw_text=text,
         captured_at=datetime(2026, 7, day, tzinfo=timezone.utc),
+        photo_path=photo_path,
     )
 
 
@@ -41,7 +47,14 @@ def test_벡터와_키워드_후보를_중복_없이_결정적으로_합친다()
 
 
 def test_회고_응답은_실제_후보의_원문_인용만_허용한다():
-    candidates = [_candidate("m1", "그 카페에서 오래 이야기했다.", 14)]
+    candidates = [
+        _candidate(
+            "m1",
+            "그 카페에서 오래 이야기했다.",
+            14,
+            "user-1/photo.png",
+        )
+    ]
 
     response = build_grounded_response(
         candidates,
@@ -55,6 +68,7 @@ def test_회고_응답은_실제_후보의_원문_인용만_허용한다():
             "memoryId": "m1",
             "capturedAt": "2026-07-14T00:00:00+00:00",
             "quote": "카페에서 오래 이야기했다",
+            "photoPath": "user-1/photo.png",
         }
     ]
 
@@ -85,4 +99,3 @@ def test_후보가_없으면_LLM_결과와_상관없이_정확한_빈_문구를_
         "confirmation": None,
         "evidence": [],
     }
-

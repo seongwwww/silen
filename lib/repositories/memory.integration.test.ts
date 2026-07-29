@@ -8,6 +8,7 @@ import {
   ANON_KEY,
 } from "./testSupport";
 import { createMemoryRepository } from "./memoryRepository";
+import { createMemoryLockRepository } from "./memoryLockRepository";
 import { createMemory } from "@/lib/services/memory";
 
 const CONNECTION_STRING =
@@ -109,5 +110,77 @@ describe("메모 생성", () => {
     await expect(
       repo.insertMemory({ userId: bob, rawText: "위조", occurredAt: null }),
     ).rejects.toBeTruthy();
+  });
+});
+
+describe("기억 잠금", () => {
+  it("본인 기억은 기대값이 맞을 때 잠그고 다시 풀 수 있다", async () => {
+    const client = await clientFor("alice-mem@example.com");
+    const memory = (
+      await db.query(
+        "insert into public.memories (user_id, raw_text, source_type, memory_type) " +
+          "values ($1, '잠금 왕복 검증', 'manual', 'moment') returning id",
+        [alice],
+      )
+    ).rows[0].id as string;
+    await db.query(
+      "insert into public.memory_embeddings " +
+        "(memory_id, user_id, embedding, model, is_searchable) " +
+        "values ($1, $2, array_fill(0::real, array[768])::vector, " +
+        "'gemini-embedding-001', true)",
+      [memory, alice],
+    );
+    const repo = createMemoryLockRepository(client);
+
+    expect(await repo.updateLock(memory, true, false)).toBe(true);
+    expect(
+      (
+        await db.query(
+          "select is_searchable from public.memory_embeddings where memory_id = $1",
+          [memory],
+        )
+      ).rows[0].is_searchable,
+    ).toBe(false);
+    expect(await repo.updateLock(memory, false, true)).toBe(true);
+
+    const row = await db.query(
+      "select is_locked from public.memories where id = $1",
+      [memory],
+    );
+    expect(row.rows[0].is_locked).toBe(false);
+    expect(
+      (
+        await db.query(
+          "select is_searchable from public.memory_embeddings where memory_id = $1",
+          [memory],
+        )
+      ).rows[0].is_searchable,
+    ).toBe(true);
+  });
+
+  it("오래된 기대값과 남의 기억은 0행으로 막힌다", async () => {
+    const memory = (
+      await db.query(
+        "insert into public.memories (user_id, raw_text, source_type, memory_type) " +
+          "values ($1, '경계 검증', 'manual', 'moment') returning id",
+        [alice],
+      )
+    ).rows[0].id as string;
+    const aliceRepo = createMemoryLockRepository(
+      await clientFor("alice-mem@example.com"),
+    );
+    const bobRepo = createMemoryLockRepository(
+      await clientFor("bob-mem@example.com"),
+    );
+
+    expect(await aliceRepo.updateLock(memory, true, false)).toBe(true);
+    expect(await aliceRepo.updateLock(memory, false, false)).toBe(false);
+    expect(await bobRepo.updateLock(memory, false, true)).toBe(false);
+
+    const row = await db.query(
+      "select is_locked from public.memories where id = $1",
+      [memory],
+    );
+    expect(row.rows[0].is_locked).toBe(true);
   });
 });

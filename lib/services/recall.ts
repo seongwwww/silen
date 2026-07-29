@@ -4,6 +4,8 @@ export interface RecallEvidence {
   memoryId: string;
   capturedAt: string;
   quote: string;
+  /** 서버가 Storage 경로를 짧은 서명 URL로 바꾼 뒤에만 내려준다. */
+  photoUrl?: string | null;
 }
 
 export interface RecallAnswer {
@@ -37,4 +39,3 @@ export function validateRecallQuery(rawQuery: string): string {
   }
   return query;
 }
-

@@ -33,6 +33,7 @@ class RecallCandidate:
     memory_id: str
     raw_text: str
     captured_at: datetime
+    photo_path: str | None = None
 
 
 class RecallSelector(Protocol):
@@ -113,6 +114,7 @@ def build_grounded_response(
                 "memoryId": memory_id,
                 "capturedAt": candidate.captured_at.isoformat(),
                 "quote": normalized_quote,
+                "photoPath": candidate.photo_path,
             }
         )
     return {
@@ -120,4 +122,3 @@ def build_grounded_response(
         "confirmation": RECALL_CONFIRMATION,
         "evidence": evidence,
     }
-
