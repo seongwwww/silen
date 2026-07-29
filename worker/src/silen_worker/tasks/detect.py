@@ -44,7 +44,15 @@ def detect_day(
     conn: psycopg.Connection,
     user_id: str,
     target_date_iso: str,
+    *,
+    closing: bool = True,
 ) -> DetectDayResult:
+    """closing=False는 하루 중간 실행이다.
+
+    아직 끝나지 않은 하루에 대해 부재("오늘 운동이 없네요")나 감정 이탈을
+    말하면 사실이 아니라 단정이 된다. 중간 실행은 오늘 등장한 것에서 나오는
+    차이(재등장 등)만 만들고, 이미 저장된 마감 결과를 정리하지도 않는다.
+    """
     target = date.fromisoformat(target_date_iso)
     history_start = target - timedelta(days=WINDOW_DAYS)
 
@@ -127,6 +135,7 @@ def detect_day(
         windows,
         active_history_dates=active_history_dates,
         today_is_active=True,
+        include_absence=closing,
     )
 
     emotion_entries: list[tuple[date, float]] = []
@@ -143,9 +152,8 @@ def detect_day(
         if history_start <= local <= target:
             emotion_entries.append((local, row.valence))
             emotion_memory_ids.append(row.memory_id)
-    emotion_candidate = detect_emotion_difference(
-        emotion_entries,
-        target,
+    emotion_candidate = (
+        detect_emotion_difference(emotion_entries, target) if closing else None
     )
 
     first_occurrences = [
@@ -216,7 +224,10 @@ def detect_day(
         saved_ids.append(difference_id)
         narration_ids.append(difference_id)
 
-    reconcile_daily_differences(conn, user_id, target, saved_ids)
+    # 중간 실행은 정리하지 않는다. 마감 때 만든 부재 차이를 늦은 메모 하나가
+    # 지워버리면 안 된다.
+    if closing:
+        reconcile_daily_differences(conn, user_id, target, saved_ids)
     return DetectDayResult(saved_ids, narration_ids)
 
 

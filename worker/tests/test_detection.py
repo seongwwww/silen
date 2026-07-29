@@ -188,3 +188,58 @@ def test_first_occurrence는_랭킹에_들어가지_않는다():
     )
 
     assert out == []
+
+
+def test_하루가_끝나기_전에는_부재를_말하지_않는다():
+    """오전 10시에 '오늘 운동이 없네요'는 거짓이다. 하루가 끝나야 성립한다."""
+    target = date(2026, 7, 29)
+    history = frozenset(target - timedelta(days=n) for n in range(1, 11))
+    windows = [
+        EntityWindow(
+            entity_id="e1",
+            entity_type="activity",
+            dates=history,
+            occurred_before=True,
+            last_prior_date=target - timedelta(days=1),
+        )
+    ]
+
+    closing = detect_differences(
+        target, windows, active_history_dates=history, today_is_active=True
+    )
+    midday = detect_differences(
+        target,
+        windows,
+        active_history_dates=history,
+        today_is_active=True,
+        include_absence=False,
+    )
+
+    assert [d.method for d in closing] == ["freq_shift"]
+    assert midday == []
+
+
+def test_재등장은_하루_중에도_말한다():
+    """오랜만에 다시 나온 것은 그 자리에서 알려줄 가치가 있다."""
+    target = date(2026, 7, 29)
+    history = frozenset(target - timedelta(days=n) for n in range(1, 11))
+    windows = [
+        EntityWindow(
+            entity_id="cafe",
+            entity_type="place",
+            dates=history | {target},
+            occurred_before=True,
+            last_prior_date=target - timedelta(days=10),
+        )
+    ]
+
+    found = detect_differences(
+        target,
+        windows,
+        active_history_dates=history,
+        today_is_active=True,
+        include_absence=False,
+    )
+
+    assert [d.method for d in found] == ["freq_shift"]
+    assert "재등장" in found[0].description

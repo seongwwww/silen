@@ -55,6 +55,7 @@ def detect_differences(
     *,
     active_history_dates: frozenset[date],
     today_is_active: bool,
+    include_absence: bool = True,
 ) -> list[DetectedDifference]:
     """활성 기록일을 분모로 부재와 오랜만의 재등장을 찾는다.
 
@@ -94,6 +95,10 @@ def detect_differences(
             last_prior = max(history_dates)
 
         if not present_today:
+            # 하루가 끝나기 전에는 부재를 말하지 않는다. 오전에 "오늘 운동이
+            # 없네요"는 사실이 아니라 아직 오지 않은 일에 대한 단정이다.
+            if not include_absence:
+                continue
             if seen_days < 2 or last_prior is None:
                 continue
             gap = (target_date - last_prior).days

@@ -76,6 +76,25 @@ def build_scheduled_targets(
     ]
 
 
+def build_sweep_plan(
+    users: list[tuple[str, str, int]],
+    now: datetime,
+) -> list[tuple[str, str, bool]]:
+    """주기 점검에서 사용자별로 (날짜, 마감 여부)를 정한다.
+
+    마감(closing)은 사용자 로컬 예약 시각이 지났다는 뜻이다. 그 전에는 아직
+    끝나지 않은 하루라 부재·감정 이탈을 말하지 않는다.
+    """
+    return [
+        (
+            user_id,
+            local_date_for(now, time_zone),
+            local_hour_for(now, time_zone) >= diary_hour,
+        )
+        for user_id, time_zone, diary_hour in users
+    ]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="silen-worker", description="실은 워커 파이프라인 실행"
@@ -101,6 +120,21 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         help="--watch일 때 큐가 비면 쉬는 초",
+    )
+    p_run = sub.add_parser(
+        "run",
+        help="큐 소비 + 주기 점검을 함께 돈다(평소엔 이것만 켜두면 된다)",
+    )
+    p_run.add_argument("--limit", type=int, default=10, help="한 배치 크기")
+    p_run.add_argument(
+        "--interval", type=float, default=1.0, help="큐가 비면 쉬는 초"
+    )
+    p_run.add_argument(
+        "--sweep-seconds",
+        dest="sweep_seconds",
+        type=float,
+        default=60.0,
+        help="탐지·일기·리포트 점검 주기(초)",
     )
     sub.add_parser("stats", help="읽기 전용 MVP 운영 지표 출력")
     sub.add_parser(
@@ -229,13 +263,18 @@ def watch_pending(
     return total
 
 
-def run_daily(conn, targets: list[tuple[str, str]], narrator=None) -> tuple[int, int]:
+def run_daily(
+    conn,
+    targets: list[tuple[str, str]],
+    narrator=None,
+    closing: bool = True,
+) -> tuple[int, int]:
     """사용자별로 차이를 검출하고 서술한다. (성공 수, 실패 수) 반환.
     한 사용자의 실패가 나머지를 막지 않는다."""
     ok = fail = 0
     for user_id, date_iso in targets:
         try:
-            result = detect_day(conn, user_id, date_iso)
+            result = detect_day(conn, user_id, date_iso, closing=closing)
             narrated = 0
             for difference_id in result.narration_ids:
                 if (
@@ -362,6 +401,64 @@ def run_weekly(conn, targets: list[tuple[str, str]]) -> tuple[int, int]:
     return ok, fail
 
 
+def sweep(conn, now: datetime | None = None, narrator=None) -> None:
+    """주기 점검. 사용자가 아무것도 누르지 않아도 여기서 다 일어난다.
+
+    멱등은 자연키가 보장한다 — differences는 (user,date,entity,method),
+    일기 요청은 (user,date), 주간 리포트는 (user,week). 반복 실행이 중복을
+    만들지 않으므로 이 루프는 상태를 따로 기억하지 않는다.
+    """
+    moment = now or datetime.now(timezone.utc)
+    plan = build_sweep_plan(fetch_scheduled_users(conn), moment)
+    if not plan:
+        return
+
+    for user_id, date_iso, closing in plan:
+        run_daily(conn, [(user_id, date_iso)], narrator=narrator, closing=closing)
+        if closing:
+            run_scheduled(conn, [(user_id, date_iso)])
+            run_weekly(conn, [(user_id, date_iso)])
+
+
+def run(
+    extractor=None,
+    limit: int = 10,
+    max_batches: int = 50,
+    interval: float = 1.0,
+    sweep_seconds: float = 60.0,
+    sleep=time.sleep,
+    clock=time.monotonic,
+    rounds: int | None = None,
+) -> None:
+    """이 명령 하나면 된다 — 큐 소비와 주기 점검을 함께 돈다. Ctrl+C로 멈춘다.
+
+    rounds는 테스트용 상한이다. None이면 멈출 때까지 돈다.
+    """
+    _emit({"event": "run.start", "sweep_seconds": sweep_seconds})
+    done = 0
+    last_sweep = None
+    try:
+        while rounds is None or done < rounds:
+            processed = _drain_pending(
+                extractor=extractor, limit=limit, max_batches=max_batches
+            )
+            if processed:
+                _emit({"event": "run.batch", "processed": processed})
+
+            tick = clock()
+            if last_sweep is None or tick - last_sweep >= sweep_seconds:
+                with connect() as conn:
+                    sweep(conn)
+                last_sweep = tick
+
+            done += 1
+            if not processed:
+                sleep(interval)
+    except KeyboardInterrupt:
+        pass
+    _emit({"event": "run.stopped"})
+
+
 def run_stats(conn) -> list[str]:
     """쓰기 없이 네 MVP 운영 지표와 해석 주의를 출력한다."""
     lines = format_stats(fetch_stats(conn))
@@ -372,6 +469,14 @@ def run_stats(conn) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.command == "run":
+        run(
+            limit=args.limit,
+            interval=args.interval,
+            sweep_seconds=args.sweep_seconds,
+        )
+        return 0
 
     if args.command == "run-pending":
         if args.watch:
