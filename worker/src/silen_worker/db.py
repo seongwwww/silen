@@ -168,7 +168,11 @@ def fetch_window_emotions(
 
 
 def fetch_window_occurrences(
-    conn: psycopg.Connection, user_id: str, target_date: date, window_days: int
+    conn: psycopg.Connection,
+    user_id: str,
+    target_date: date,
+    window_days: int,
+    excluded_normalized_names: frozenset[str] = frozenset(),
 ) -> list[OccurrenceRow]:
     """창을 넉넉히 덮는 UTC 범위의 활성 엔티티 언급을 반환한다. 로컬 날짜 버킷팅은
     호출자가 time.local_date_for로 정밀하게 한다(하루 경계 단일 출처). user_id 강제,
@@ -192,8 +196,15 @@ def fetch_window_occurrences(
           and m.captured_at >= %s
           and m.captured_at < %s
           and e.user_id = %s
+          and e.normalized_name <> all(%s::text[])
         """,
-        (user_id, lower, upper, user_id),
+        (
+            user_id,
+            lower,
+            upper,
+            user_id,
+            sorted(excluded_normalized_names),
+        ),
     ).fetchall()
     return [OccurrenceRow(r[0], r[1], r[2], r[3], r[4]) for r in rows]
 

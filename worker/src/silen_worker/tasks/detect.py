@@ -5,6 +5,7 @@ from datetime import date, timedelta
 
 import psycopg
 
+from silen_worker.extraction.constants import ENTITY_STOPWORDS
 from silen_worker.db import (
     fetch_dismiss_counts,
     fetch_latest_prior_occurrences,
@@ -74,6 +75,7 @@ def detect_day(
         user_id,
         target,
         WINDOW_DAYS,
+        ENTITY_STOPWORDS,
     )
     by_entity: dict[str, dict] = {}
     for row in occurrence_rows:

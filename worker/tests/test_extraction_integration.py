@@ -64,6 +64,26 @@ def test_환각_후보는_저장되지_않는다(conn):
 
 
 @pytest.mark.integration
+def test_점심은_저장하지_않고_김밥은_저장한다(conn):
+    user = seed_user(conn)
+    try:
+        seed_memory(conn, user, "오늘 점심 김밥 먹음")
+        stub = StubExtractor(
+            [
+                {"type": "thing", "name": "오늘"},
+                {"type": "thing", "name": "점심"},
+                {"type": "thing", "name": "김밥"},
+            ]
+        )
+
+        process_pending(limit=10, extractor=stub, only_user_id=user)
+
+        assert _entities_of(conn, user) == [("thing", "김밥")]
+    finally:
+        delete_user(conn, user)
+
+
+@pytest.mark.integration
 def test_재처리해도_중복이_생기지_않는다(conn):
     user = seed_user(conn)
     try:
