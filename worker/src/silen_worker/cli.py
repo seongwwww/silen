@@ -478,6 +478,18 @@ def sweep(conn, now: datetime | None = None, narrator=None) -> None:
             run_weekly(conn, [(user_id, date_iso)])
 
 
+def _warm_clients() -> None:
+    """LLM 클라이언트를 미리 만든다. 첫 요청에서 만들면 연결 설정에만 몇 초가
+    들어, 사용자가 처음 물었을 때만 유독 느리다."""
+    for factory in ("embedding.gemini:get_embedder", "recall.gemini:get_recall_selector"):
+        module, name = factory.split(":")
+        try:
+            __import__(f"silen_worker.{module}", fromlist=[name])
+            getattr(sys.modules[f"silen_worker.{module}"], name)()
+        except Exception as exc:
+            _emit({"event": "run.warm_skipped", "error": type(exc).__name__})
+
+
 def run(
     extractor=None,
     limit: int = 10,
@@ -493,6 +505,7 @@ def run(
     rounds는 테스트용 상한이다. None이면 멈출 때까지 돈다.
     """
     _emit({"event": "run.start", "sweep_seconds": sweep_seconds})
+    _warm_clients()
     done = 0
     last_sweep = None
     try:

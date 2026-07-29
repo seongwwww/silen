@@ -7,7 +7,9 @@ from typing import Protocol
 NO_RECALL_RESULT = "그런 기록은 찾지 못했어요"
 RECALL_ANSWER = "기록에서 이런 내용을 찾았어요."
 RECALL_CONFIRMATION = "이거 맞으세요?"
-RECALL_LIMIT = 8
+# LLM에 넘기는 후보 수. 늘리면 입력과 생성이 함께 늘어 응답이 느려지고,
+# 사용자가 읽어야 할 근거 카드도 많아진다.
+RECALL_LIMIT = 5
 RRF_K = 60
 
 _QUESTION_STOPWORDS = frozenset(
