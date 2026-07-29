@@ -28,6 +28,8 @@ class NarrationInput:
     date_iso: str
     dimension: str
     evidence_ids: tuple[str, ...]
+    # 이 차이의 날짜가 사용자 로컬 오늘인가. 주간 리포트는 지난 날을 서술한다.
+    is_today: bool = True
 
 
 @dataclass(frozen=True)
@@ -141,6 +143,10 @@ def guardrail(raw: dict, facts: NarrationInput) -> Narration | None:
 
     if facts.dimension == "emotion":
         if any(p in blob for p in EMOTION_FORBIDDEN_PHRASES):
+            return None
+        # 주간 리포트는 지난 날의 감정을 서술한다. 그날을 "오늘"이라 부르면
+        # 사실이 틀린다. 오늘 것을 서술할 때만 "오늘"을 허용한다.
+        if "오늘" in blob and not facts.is_today:
             return None
         allowed_numbers = _numbers(
             f"{facts.description} {facts.date_iso}"

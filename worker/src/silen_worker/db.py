@@ -484,6 +484,7 @@ class DifferenceFacts:
     description: str
     date_iso: str
     evidence_ids: tuple[str, ...]
+    timezone: str = "Asia/Seoul"
 
 
 def fetch_difference_for_narration(
@@ -504,10 +505,12 @@ def fetch_difference_for_narration(
                    and m.deleted_at is null
                    and m.is_locked = false
                  order by de.memory_id
-               )
+               ),
+               u.timezone
         from public.differences d
         left join public.entities e
           on e.id = d.entity_id and e.user_id = d.user_id
+        join public.users u on u.id = d.user_id
         where d.id = %s
           and d.evidence_state = 'intact'
           and d.status = 'candidate'
@@ -549,6 +552,7 @@ def fetch_difference_for_narration(
         row[7],
         row[8],
         tuple(row[9]),
+        row[10],
     )
 
 
