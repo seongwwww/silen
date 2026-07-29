@@ -13,7 +13,12 @@ import sys
 import time
 from datetime import date, datetime, timedelta, timezone
 
-from silen_worker.db import connect, fetch_active_users, fetch_scheduled_users
+from silen_worker.db import (
+    connect,
+    fetch_active_users,
+    fetch_regenerate_requests,
+    fetch_scheduled_users,
+)
 from silen_worker.stats.repository import fetch_stats
 from silen_worker.stats.service import format_stats
 from silen_worker.tasks.detect import detect_day
@@ -406,8 +411,11 @@ def run_regenerations(conn, targets: list[tuple[str, str]]) -> tuple[int, int]:
 
     이걸 안 돌리면 요청이 영원히 대기한다 — 사용자는 눌렀는데 아무 일도
     일어나지 않는다."""
+    pending = set(fetch_regenerate_requests(conn))
     ok = fail = 0
     for user_id, date_iso in targets:
+        if (user_id, date_iso) not in pending:
+            continue
         try:
             if generate_diary(conn, user_id, date_iso) is not None:
                 ok += 1

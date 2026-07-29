@@ -317,6 +317,28 @@ def upsert_difference(
     return row[0]
 
 
+def refresh_difference_description(
+    conn: psycopg.Connection,
+    difference_id: str,
+    user_id: str,
+    description: str,
+    confidence: float,
+) -> None:
+    """이미 있는 차이의 통계 근거를 최신 규칙으로 다시 쓴다.
+
+    사용자의 확인·기각(status)은 건드리지 않는다 — 판단은 사용자 것이다."""
+    conn.execute(
+        """
+        update public.differences
+           set description = %s,
+               confidence = %s
+         where id = %s
+           and user_id = %s
+        """,
+        (description, confidence, difference_id, user_id),
+    )
+
+
 def upsert_dimension_difference(
     conn: psycopg.Connection,
     user_id: str,
@@ -658,6 +680,23 @@ def clear_regenerate_request(conn: psycopg.Connection, diary_id: str) -> None:
         "where id = %s",
         (diary_id,),
     )
+
+
+def fetch_regenerate_requests(
+    conn: psycopg.Connection,
+) -> list[tuple[str, str]]:
+    """다시 만들기 요청이 대기 중인 (user_id, date)만 반환한다.
+
+    요청 유무를 보지 않으면 매 주기가 일기를 새로 만들어, 마감 탐지가 끝나기
+    전에 차이 0건짜리 일기가 굳는다."""
+    rows = conn.execute(
+        """
+        select user_id::text, date::text
+          from public.diaries
+         where regenerate_requested_at is not null
+        """
+    ).fetchall()
+    return [(row[0], row[1]) for row in rows]
 
 
 def request_late_diary_regeneration(

@@ -53,9 +53,10 @@ describe("DiaryArticle", () => {
     ).toBeInTheDocument();
   });
 
-  it("오늘 처음 제목을 보여준다", () => {
+  it("함께 찾은 것 제목을 보여준다", () => {
     render(<DiaryArticle diary={base} />);
-    expect(screen.getByText("오늘 처음")).toBeInTheDocument();
+    // 목록에 부재·오랜만·감정이 함께 들어가므로 "처음"이라 부르지 않는다.
+    expect(screen.getByText("함께 찾은 것")).toBeInTheDocument();
   });
 
   it("질문이 있으면 카드를 보여준다", () => {

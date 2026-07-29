@@ -14,6 +14,7 @@ from silen_worker.db import (
     replace_difference_evidence,
     replace_weekly_highlights,
     upsert_difference,
+    refresh_difference_description,
     upsert_dimension_difference,
     upsert_weekly_report,
 )
@@ -37,6 +38,15 @@ def _persist_slot(
     slot: WeeklySlot,
 ) -> str:
     if slot.difference_id is not None:
+        # 이미 있는 차이를 그대로 두면 옛 설명이 영원히 남는다. 서술 규칙을
+        # 고쳐도 화면이 안 바뀌어, 실제로 valence 수치가 리포트에 계속 노출됐다.
+        refresh_difference_description(
+            conn,
+            slot.difference_id,
+            user_id,
+            slot.description,
+            slot.confidence,
+        )
         return slot.difference_id
     if slot.local_date is None:
         raise ValueError("a new weekly difference requires a local date")
