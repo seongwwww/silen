@@ -1,45 +1,40 @@
 export const RECALL_QUERY_MAX = 100;
-export const RECALL_RESULT_LIMIT = 20;
-export const RECALL_EXCERPT_MAX = 160;
 
-export interface RecallMemoryRow {
-  id: string;
-  rawText: string;
+export interface RecallEvidence {
+  memoryId: string;
   capturedAt: string;
+  quote: string;
 }
 
-export interface RecallSearchPort {
-  search(userId: string, query: string): Promise<RecallMemoryRow[]>;
+export interface RecallAnswer {
+  answer: string;
+  confirmation: string | null;
+  evidence: RecallEvidence[];
 }
 
-export interface RecallResult {
-  id: string;
-  capturedAt: string;
-  excerpt: string;
+export type RecallPollResult =
+  | { status: "queued" | "processing" }
+  | { status: "done"; response: RecallAnswer }
+  | { status: "error"; errorCode?: string }
+  | { status: "missing" };
+
+export interface RecallQueuePort {
+  enqueue(requestId: string, question: string): Promise<void>;
+  poll(requestId: string): Promise<RecallPollResult>;
 }
 
 export class InvalidRecallQueryError extends Error {
   constructor() {
-    super(`검색어는 ${RECALL_QUERY_MAX}자 이하여야 한다`);
+    super(`질문은 1자 이상 ${RECALL_QUERY_MAX}자 이하여야 한다`);
     this.name = "InvalidRecallQueryError";
   }
 }
 
-export async function searchRecall(
-  repo: RecallSearchPort,
-  userId: string,
-  rawQuery: string,
-): Promise<RecallResult[]> {
+export function validateRecallQuery(rawQuery: string): string {
   const query = rawQuery.trim();
-  if (!query) return [];
-  if (query.length > RECALL_QUERY_MAX) {
+  if (!query || query.length > RECALL_QUERY_MAX) {
     throw new InvalidRecallQueryError();
   }
-
-  const rows = await repo.search(userId, query);
-  return rows.map((row) => ({
-    id: row.id,
-    capturedAt: row.capturedAt,
-    excerpt: row.rawText.trim().slice(0, RECALL_EXCERPT_MAX),
-  }));
+  return query;
 }
+

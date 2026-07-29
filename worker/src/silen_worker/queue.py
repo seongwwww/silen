@@ -74,3 +74,99 @@ def delete_message(conn: psycopg.Connection, queue: str, msg_id: int) -> None:
 
 def archive_message(conn: psycopg.Connection, queue: str, msg_id: int) -> None:
     conn.execute("select pgmq.archive(%s, %s)", (queue, msg_id))
+
+
+def mark_recall_processing(
+    conn: psycopg.Connection,
+    msg_id: int,
+    user_id: str,
+    request_id: str,
+) -> bool:
+    row = conn.execute(
+        """
+        update pgmq.q_memory_jobs
+           set message = jsonb_set(message, '{status}', '"processing"'::jsonb)
+         where msg_id = %s
+           and message->>'job_type' = 'recall'
+           and message->>'user_id' = %s
+           and message->>'request_id' = %s
+           and message->>'status' in ('queued', 'processing')
+        returning msg_id
+        """,
+        (msg_id, user_id, request_id),
+    ).fetchone()
+    return row is not None
+
+
+def reset_recall_for_retry(
+    conn: psycopg.Connection,
+    msg_id: int,
+    user_id: str,
+    request_id: str,
+) -> None:
+    conn.execute(
+        """
+        update pgmq.q_memory_jobs
+           set message = jsonb_set(message, '{status}', '"queued"'::jsonb)
+         where msg_id = %s
+           and message->>'user_id' = %s
+           and message->>'request_id' = %s
+        """,
+        (msg_id, user_id, request_id),
+    )
+
+
+def complete_recall_message(
+    conn: psycopg.Connection,
+    msg_id: int,
+    user_id: str,
+    request_id: str,
+    response: dict[str, Any],
+) -> None:
+    """원 질문을 제거한 완료 payload로 교체하고 잠시 뒤 정리 대상으로 만든다."""
+    payload = {
+        "job_type": "recall_result",
+        "request_id": request_id,
+        "user_id": user_id,
+        "status": "done",
+        "response": response,
+    }
+    conn.execute(
+        """
+        update pgmq.q_memory_jobs
+           set message = %s::jsonb,
+               vt = clock_timestamp() + interval '10 minutes'
+         where msg_id = %s
+           and message->>'user_id' = %s
+           and message->>'request_id' = %s
+        """,
+        (Jsonb(payload), msg_id, user_id, request_id),
+    )
+
+
+def fail_recall_message(
+    conn: psycopg.Connection,
+    msg_id: int,
+    user_id: str,
+    request_id: str,
+    error_code: str,
+) -> None:
+    """본문·질문·예외 메시지 없이 고정 오류 코드만 잠시 보존한다."""
+    payload = {
+        "job_type": "recall_result",
+        "request_id": request_id,
+        "user_id": user_id,
+        "status": "error",
+        "error_code": error_code,
+    }
+    conn.execute(
+        """
+        update pgmq.q_memory_jobs
+           set message = %s::jsonb,
+               vt = clock_timestamp() + interval '10 minutes'
+         where msg_id = %s
+           and message->>'user_id' = %s
+           and message->>'request_id' = %s
+        """,
+        (Jsonb(payload), msg_id, user_id, request_id),
+    )
