@@ -103,8 +103,8 @@ def detect_differences(
                     window.entity_type,
                     "freq_shift",
                     (
-                        f"과거 활성일 {active_days}일 중 {seen_days}일 기록됨, "
-                        f"오늘 기록에는 언급 없음, 마지막 {gap}일 전"
+                        f"기록을 남긴 {active_days}일 중 {seen_days}일에 있었음, "
+                        f"오늘 기록에는 없음, 마지막은 {gap}일 전"
                     ),
                     surprisal_bits(active_days, seen_days, False),
                 )
@@ -124,7 +124,7 @@ def detect_differences(
                     "freq_shift",
                     (
                         f"{gap}일 만에 재등장"
-                        f"(과거 활성일 {active_days}일 중 {seen_days}일 기록됨)"
+                        f"(기록을 남긴 {active_days}일 중 {seen_days}일에 있었음)"
                     ),
                     surprisal_bits(active_days, seen_days, True),
                 )

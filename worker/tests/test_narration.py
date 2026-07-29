@@ -36,8 +36,8 @@ def _emotion_facts(**kw):
 
 def _raw(
     headline="김밥 언급의 변화",
-    body="최근 활성 기록에 자주 있던 김밥이 오늘 기록에는 없었어요.",
-    evidence_text="최근 활성일 4일 중 3일에 기록돼 있어 찾았어요.",
+    body="최근 기록에 자주 있던 김밥이 오늘 기록에는 없었어요.",
+    evidence_text="최근 4일 중 3일에 기록돼 있어 찾았어요.",
 ):
     return {"headline": headline, "body": body, "evidence_text": evidence_text}
 
@@ -46,6 +46,20 @@ def test_정상_출력은_통과한다():
     out = guardrail(_raw(), _facts())
     assert out is not None
     assert out.headline == "김밥 언급의 변화"
+
+
+def test_사용자_기록을_일기라_부르면_폐기한다():
+    # 사용자가 남긴 것은 '기록'이다. 일기는 앱이 만든 산물이라 섞으면 안 된다.
+    out = guardrail(_raw(body="어제 일기에 있던 김밥이 오늘은 없었어요."), _facts())
+    assert out is None
+
+
+def test_내부_용어가_새면_폐기한다():
+    out = guardrail(
+        _raw(evidence_text="활성일 4일 중 3일이라 찾았어요."),
+        _facts(),
+    )
+    assert out is None
 
 
 def test_엔티티명_없는_출력은_폐기한다():

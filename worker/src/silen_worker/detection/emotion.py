@@ -4,7 +4,7 @@ DB·LLM을 모르는 순수 함수다. 호출자가 넘긴 창 안에서 target 
 baseline으로 삼고, 같은 날짜의 여러 감정은 먼저 평균한다.
 """
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
 from math import isclose, isfinite, log2
@@ -14,10 +14,31 @@ from typing import Iterable
 
 MIN_BASELINE_DAYS = 5
 SD_FLOOR = 0.25
-MAX_BITS = 8.0
 P_FLOOR = 2**-8
 CONTINUATION_BITS_MIN = 2.0
 ZERO_ABS_TOLERANCE = 1e-12
+
+# 사용자가 실제로 누른 라벨. valence는 내부 표현이므로 서술로 새어나가면 안 된다.
+LABEL_THRESHOLD = 1 / 3
+GOOD, NEUTRAL, BAD = "좋음", "그냥", "별로"
+
+
+def _label(value: float) -> str:
+    if value > LABEL_THRESHOLD:
+        return GOOD
+    if value < -LABEL_THRESHOLD:
+        return BAD
+    return NEUTRAL
+
+
+def bits_ceiling(days: int) -> float:
+    """엔티티 축과 같은 상한. 두 축을 같은 자로 재기 위한 것이다.
+
+    엔티티 축의 최대 놀라움은 Jeffreys 평활 때문에 log2(2*(n+1))로 묶여 있다.
+    정규분포 꼬리는 상한이 없어 그대로 두면 감정이 늘 1위를 차지하고 하루 상한
+    3개를 잠식한다. 데이터가 뒷받침하는 것 이상을 주장하지 않게 같은 천장을 씌운다.
+    """
+    return log2(2 * (days + 1))
 
 
 @dataclass(frozen=True)
@@ -54,7 +75,7 @@ def _score(value: float, baseline: list[float]) -> _Score | None:
         return None
 
     p = 2 * (1 - NormalDist().cdf(abs(z)))
-    bits = min(MAX_BITS, -log2(max(p, P_FLOOR)))
+    bits = min(bits_ceiling(len(baseline)), -log2(max(p, P_FLOOR)))
     return _Score(mean=mean, value=value, z=z, bits=bits, days=len(baseline))
 
 
@@ -120,12 +141,21 @@ def detect_emotion_difference(
     if score is None or _same_direction_continuation(daily, target_date, score):
         return None
 
+    counts = Counter(_label(value) for value in baseline)
+    tally = "·".join(
+        f"{label} {counts[label]}일"
+        for label in (GOOD, NEUTRAL, BAD)
+        if counts[label]
+    )
+
     return EmotionDifference(
         method="zscore",
         category="감정전환",
+        # 서술자에게 넘어가는 문장이다. valence 수치를 넣으면 사용자가 누른 적
+        # 없는 "-1.00" 같은 값이 화면에 그대로 나온다. 라벨로만 말한다.
         description=(
-            f"최근 {score.days}일 평균 {score.mean:.2f}, "
-            f"오늘 {score.value:.2f} (z={score.z:.1f})"
+            f"최근 감정을 남긴 {score.days}일은 {tally}, "
+            f"오늘은 '{_label(score.value)}'"
         ),
         confidence=score.bits,
         z_score=score.z,

@@ -58,7 +58,7 @@ def test_자주_기록된_엔티티가_오늘_기록에_없으면_부재_차이�
     assert len(out) == 1
     assert out[0].method == "freq_shift"
     assert out[0].description == (
-        "과거 활성일 2일 중 2일 기록됨, 오늘 기록에는 언급 없음, 마지막 1일 전"
+        "기록을 남긴 2일 중 2일에 있었음, 오늘 기록에는 없음, 마지막은 1일 전"
     )
     assert out[0].confidence == pytest.approx(2.5849625)
 
@@ -104,7 +104,7 @@ def test_오랜만의_재등장은_등장_놀라움으로_계산한다():
     )
 
     assert len(out) == 1
-    assert out[0].description == "9일 만에 재등장(과거 활성일 14일 중 1일 기록됨)"
+    assert out[0].description == "9일 만에 재등장(기록을 남긴 14일 중 1일에 있었음)"
     assert out[0].confidence == pytest.approx(3.3219281)
 
 

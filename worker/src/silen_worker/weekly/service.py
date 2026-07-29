@@ -8,7 +8,7 @@ from statistics import NormalDist, fmean, pstdev
 from typing import Iterable
 
 from silen_worker.detection.emotion import (
-    MAX_BITS,
+    bits_ceiling,
     MIN_BASELINE_DAYS,
     P_FLOOR,
     SD_FLOOR,
@@ -186,7 +186,7 @@ def _emotion_score(value: float, baseline: list[float]) -> _EmotionScore | None:
     if isclose(z, 0.0, abs_tol=ZERO_ABS_TOLERANCE):
         return None
     p = 2 * (1 - NormalDist().cdf(abs(z)))
-    bits = min(MAX_BITS, -log2(max(p, P_FLOOR)))
+    bits = min(bits_ceiling(len(baseline)), -log2(max(p, P_FLOOR)))
     return _EmotionScore(
         z=z,
         bits=bits,

@@ -2,6 +2,8 @@ from datetime import date, timedelta
 
 import pytest
 
+from silen_worker.detection.emotion import bits_ceiling
+
 from silen_worker.weekly.service import (
     EmotionObservation,
     EntityOccurrence,
@@ -193,7 +195,7 @@ def test_emotion_slot_selects_largest_absolute_z_score():
     assert emotion.local_date == ANCHOR + timedelta(days=5)
     assert emotion.detection_method == "zscore"
     assert emotion.category == "\uac10\uc815\uc804\ud658"
-    assert emotion.confidence == pytest.approx(8.0)
+    assert emotion.confidence == pytest.approx(bits_ceiling(5))
     assert emotion.evidence_ids == tuple(f"em{day}" for day in range(6))
 
 

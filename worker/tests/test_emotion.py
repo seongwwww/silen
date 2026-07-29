@@ -2,7 +2,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from silen_worker.detection.emotion import detect_emotion_difference
+from silen_worker.detection.emotion import bits_ceiling, detect_emotion_difference
 
 
 TARGET = date(2026, 7, 28)
@@ -26,9 +26,10 @@ def test_오늘만_급락하면_높은_bits의_감정전환이다():
     assert result is not None
     assert result.method == "zscore"
     assert result.category == "감정전환"
-    assert result.confidence == pytest.approx(8.0)
+    assert result.confidence == pytest.approx(bits_ceiling(5))
     assert result.z_score == pytest.approx(-7.0)
-    assert result.description == "최근 5일 평균 0.75, 오늘 -1.00 (z=-7.0)"
+    # valence 수치가 아니라 사용자가 누른 라벨로만 말한다.
+    assert result.description == "최근 감정을 남긴 5일은 좋음 5일, 오늘은 '별로'"
 
 
 def test_과거_감정_활성일이_4일이면_계산하지_않는다():
@@ -43,7 +44,7 @@ def test_표준편차가_0이어도_실제_변화를_탐지한다():
 
     assert result is not None
     assert result.z_score == pytest.approx(-2.0)
-    assert result.confidence == pytest.approx(4.457981, rel=1e-6)
+    assert result.confidence == pytest.approx(bits_ceiling(5))
 
 
 def test_같은_날_여러_감정은_일별_평균으로_계산한다():
@@ -61,11 +62,12 @@ def test_오늘_감정이_없으면_결과가_없다():
     assert detect_emotion_difference(_entries([0.0] * 5), TARGET) is None
 
 
-def test_bits는_8을_넘지_않는다():
+def test_bits는_활성일이_뒷받침하는_상한을_넘지_않는다():
     result = detect_emotion_difference(_entries([1.0] * 5, [-1.0]), TARGET)
 
     assert result is not None
-    assert result.confidence == 8.0
+    # 엔티티 축과 같은 천장. 감정이 늘 1위를 먹고 하루 상한을 잠식하지 않게 한다.
+    assert result.confidence == pytest.approx(bits_ceiling(5))
 
 
 def test_같은_크기의_상승과_하락은_양측_p로_같은_bits다():
