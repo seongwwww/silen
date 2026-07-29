@@ -7,7 +7,7 @@ import { EvidenceDisclosure } from "./EvidenceDisclosure";
 
 describe("EvidenceDisclosure", () => {
   it("기본은 닫혀 있고 원본을 보여주지 않는다", () => {
-    render(<EvidenceDisclosure items={["점심 김밥"]} />);
+    render(<EvidenceDisclosure items={[{ text: "점심 김밥", photoPath: null }]} />);
     expect(screen.getByRole("button")).toHaveAttribute(
       "aria-expanded",
       "false",
@@ -16,7 +16,7 @@ describe("EvidenceDisclosure", () => {
   });
 
   it("펼치면 원본과 원본 표식을 함께 보여준다", async () => {
-    render(<EvidenceDisclosure items={["점심 김밥"]} />);
+    render(<EvidenceDisclosure items={[{ text: "점심 김밥", photoPath: null }]} />);
     await userEvent.click(screen.getByRole("button"));
     expect(screen.getByRole("button")).toHaveAttribute(
       "aria-expanded",
@@ -32,7 +32,31 @@ describe("EvidenceDisclosure", () => {
   });
 
   it("토글 버튼이 44px 터치 타깃을 만족한다", () => {
-    render(<EvidenceDisclosure items={["점심 김밥"]} />);
+    render(<EvidenceDisclosure items={[{ text: "점심 김밥", photoPath: null }]} />);
     expect(screen.getByRole("button").className).toContain("min-h-11");
+  });
+});
+
+describe("사진 근거", () => {
+  it("사진만 있는 기록도 근거로 보여준다", async () => {
+    render(
+      <EvidenceDisclosure
+        items={[{ text: null, photoPath: "u1/a.png", photoUrl: "https://x/a.png" }]}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button"));
+
+    expect(screen.getByRole("img", { name: "이 기록에 붙인 사진" })).toHaveAttribute(
+      "src",
+      "https://x/a.png",
+    );
+  });
+
+  it("서명 URL이 없으면 이미지를 그리지 않는다", async () => {
+    render(<EvidenceDisclosure items={[{ text: "글만", photoPath: "u1/a.png" }]} />);
+    await userEvent.click(screen.getByRole("button"));
+
+    expect(screen.getByText("글만")).toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 });
