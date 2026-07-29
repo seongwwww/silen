@@ -16,10 +16,10 @@
 | P1 | 스케줄링 — `diary_hour` · `run-scheduled` | ✅ `main` |
 | P2 | 탐지 품질 — 일반명사 억제 | ✅ `main` |
 | P3 | 회고 벡터 RAG 채팅 · `run-pending --watch` | ✅ `main` (`9230f0b`) |
-| P4 | 사진 첨부 + 근거 썸네일 | ✅ `main` (`b6e7440`) |
+| P4 | 사진 첨부 + 근거 썸네일 + 경로 검증 | ✅ `main` (`e2b4f7c`) |
 | P4+ | 사진 경로·만료·잠금 근거 보강 | ✅ 커밋, 병합 대기 (`fix/photo-hardening` · `db0f92a`) |
-| P5 | 기억 잠금 UI + 회고 사진 | ✅ 커밋, 병합 대기 (`feat/memory-lock` · `83c27bb`) |
-| P6 | 공유 카드 | ✅ 커밋, 병합 대기 (`feat/share-card` · `c16148d`) |
+| P5 | 기억 잠금 UI | ✅ `main` (`535832f`) |
+| P6 | 공유 카드 | ✅ `main` (`c2c2e10`) |
 
 **임베딩 결정:** `docs/decisions/ADR-0004-embeddings.md`
 모델 `gemini-embedding-001` · **768차원**(기본 3072은 HNSW 상한 2000 초과) · cosine · HNSW.
